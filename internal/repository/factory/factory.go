@@ -9,6 +9,9 @@ import (
 	"yunt/internal/config"
 	"yunt/internal/domain"
 	"yunt/internal/repository"
+	"yunt/internal/repository/mongodb"
+	"yunt/internal/repository/mysql"
+	"yunt/internal/repository/postgres"
 	"yunt/internal/repository/sqlite"
 )
 
@@ -54,11 +57,11 @@ func (f *Factory) Create() (repository.Repository, error) {
 	case domain.DatabaseDriverSQLite:
 		return f.createSQLite()
 	case domain.DatabaseDriverPostgres:
-		return nil, fmt.Errorf("database driver %q is not yet implemented", driver)
+		return f.createPostgres()
 	case domain.DatabaseDriverMySQL:
-		return nil, fmt.Errorf("database driver %q is not yet implemented", driver)
+		return f.createMySQL()
 	case domain.DatabaseDriverMongoDB:
-		return nil, fmt.Errorf("database driver %q is not yet implemented", driver)
+		return f.createMongoDB()
 	default:
 		return nil, fmt.Errorf("unsupported database driver: %q. Supported drivers are: sqlite, postgres, mysql, mongodb", f.config.Driver)
 	}
@@ -77,6 +80,65 @@ func (f *Factory) createSQLite() (repository.Repository, error) {
 	if err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("failed to create SQLite repository: %w", err)
+	}
+
+	return repo, nil
+}
+
+// createPostgres creates a PostgreSQL repository instance.
+func (f *Factory) createPostgres() (repository.Repository, error) {
+	connConfig := postgres.NewConnectionConfig(f.config)
+
+	pool, err := postgres.NewConnectionPool(connConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create PostgreSQL connection pool: %w", err)
+	}
+
+	// NewWithOptions allows controlling auto-migrate and auto-seed
+	// We use the config's AutoMigrate setting for migrations
+	autoMigrate := f.config.AutoMigrate
+	autoSeed := autoMigrate // Only seed if auto-migrate is enabled
+
+	repo, err := postgres.NewWithOptions(pool, autoMigrate, autoSeed)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to create PostgreSQL repository: %w", err)
+	}
+
+	return repo, nil
+}
+
+// createMySQL creates a MySQL repository instance.
+func (f *Factory) createMySQL() (repository.Repository, error) {
+	connConfig := mysql.NewConnectionConfig(f.config)
+
+	pool, err := mysql.NewConnectionPool(connConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MySQL connection pool: %w", err)
+	}
+
+	repo, err := mysql.New(pool)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to create MySQL repository: %w", err)
+	}
+
+	return repo, nil
+}
+
+// createMongoDB creates a MongoDB repository instance.
+func (f *Factory) createMongoDB() (repository.Repository, error) {
+	connConfig := mongodb.NewConnectionConfig(f.config)
+
+	pool, err := mongodb.NewConnectionPool(connConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MongoDB connection pool: %w", err)
+	}
+
+	repo, err := mongodb.New(pool)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to create MongoDB repository: %w", err)
 	}
 
 	return repo, nil
@@ -153,6 +215,9 @@ func IsDriverSupported(driver string) bool {
 func ImplementedDrivers() []domain.DatabaseDriver {
 	return []domain.DatabaseDriver{
 		domain.DatabaseDriverSQLite,
+		domain.DatabaseDriverPostgres,
+		domain.DatabaseDriverMySQL,
+		domain.DatabaseDriverMongoDB,
 	}
 }
 

@@ -1,0 +1,149 @@
+# Yunt Mail Server - MySQL Configuration
+#
+# This configuration file demonstrates MySQL database setup.
+# Copy this file to yunt.yaml and modify according to your needs.
+#
+# Docker Compose example for MySQL:
+#
+#   version: '3.8'
+#   services:
+#     mysql:
+#       image: mysql:8.0
+#       environment:
+#         MYSQL_ROOT_PASSWORD: root_secret
+#         MYSQL_DATABASE: yunt
+#         MYSQL_USER: yunt
+#         MYSQL_PASSWORD: yunt_secret
+#       ports:
+#         - "3306:3306"
+#       volumes:
+#         - mysql_data:/var/lib/mysql
+#       command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+#       healthcheck:
+#         test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+#         interval: 10s
+#         timeout: 5s
+#         retries: 5
+#
+#     yunt:
+#       image: yunt:latest
+#       depends_on:
+#         mysql:
+#           condition: service_healthy
+#       environment:
+#         YUNT_DATABASE_DRIVER: mysql
+#         YUNT_DATABASE_HOST: mysql
+#         YUNT_DATABASE_PORT: 3306
+#         YUNT_DATABASE_NAME: yunt
+#         YUNT_DATABASE_USERNAME: yunt
+#         YUNT_DATABASE_PASSWORD: yunt_secret
+#       ports:
+#         - "1025:1025"
+#         - "1143:1143"
+#         - "8025:8025"
+#
+#   volumes:
+#     mysql_data:
+
+# Server Settings
+server:
+  name: mail.example.com
+  domain: example.com
+  gracefulTimeout: 30s
+
+# SMTP Server Configuration
+smtp:
+  enabled: true
+  host: 0.0.0.0
+  port: 1025
+  tls:
+    enabled: false
+    startTLS: true
+  maxMessageSize: 10485760
+  maxRecipients: 100
+  readTimeout: 60s
+  writeTimeout: 60s
+  authRequired: false
+  allowRelay: false
+
+# IMAP Server Configuration
+imap:
+  enabled: true
+  host: 0.0.0.0
+  port: 1143
+  tls:
+    enabled: false
+    startTLS: true
+  readTimeout: 60s
+  writeTimeout: 60s
+  idleTimeout: 30m
+
+# REST API and Web UI Configuration
+api:
+  enabled: true
+  host: 0.0.0.0
+  port: 8025
+  tls:
+    enabled: false
+  readTimeout: 30s
+  writeTimeout: 30s
+  corsAllowedOrigins:
+    - "*"
+  rateLimit: 100
+  enableSwagger: true
+
+# Database Configuration - MySQL
+database:
+  # Use MySQL driver
+  driver: mysql
+  
+  # Option 1: Use DSN string (takes precedence over individual settings)
+  # DSN format: user:password@tcp(host:port)/dbname?params
+  # dsn: "yunt:yunt_secret@tcp(localhost:3306)/yunt?charset=utf8mb4&parseTime=true&loc=UTC"
+  
+  # Option 2: Use individual connection settings
+  host: localhost
+  port: 3306
+  name: yunt
+  username: yunt
+  password: yunt_secret
+  
+  # Connection pool settings
+  # MySQL can handle many concurrent connections
+  maxOpenConns: 25
+  maxIdleConns: 10
+  connMaxLifetime: 5m
+  connMaxIdleTime: 5m
+  
+  # Automatically run database migrations on startup
+  autoMigrate: true
+
+# Authentication Settings
+auth:
+  jwtSecret: "change-this-in-production"
+  jwtExpiration: 24h
+  refreshExpiration: 168h
+  bcryptCost: 10
+  sessionTimeout: 24h
+  maxLoginAttempts: 5
+  lockoutDuration: 15m
+
+# Logging Configuration
+logging:
+  level: info
+  format: text
+  output: stdout
+  includeCaller: false
+
+# Default Admin User Settings
+admin:
+  username: admin
+  password: "change-this-in-production"
+  email: admin@example.com
+  createOnStartup: true
+
+# Mail Storage Settings
+storage:
+  type: database
+  maxMailboxSize: 0
+  retentionDays: 0

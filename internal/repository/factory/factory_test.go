@@ -208,33 +208,9 @@ func TestFactoryCreate(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		{
-			name: "postgres not implemented",
-			config: &config.DatabaseConfig{
-				Driver: "postgres",
-				DSN:    "postgres://localhost/test",
-			},
-			wantErr: true,
-			errMsg:  "not yet implemented",
-		},
-		{
-			name: "mysql not implemented",
-			config: &config.DatabaseConfig{
-				Driver: "mysql",
-				DSN:    "user:pass@tcp(localhost)/test",
-			},
-			wantErr: true,
-			errMsg:  "not yet implemented",
-		},
-		{
-			name: "mongodb not implemented",
-			config: &config.DatabaseConfig{
-				Driver: "mongodb",
-				DSN:    "mongodb://localhost:27017",
-			},
-			wantErr: true,
-			errMsg:  "not yet implemented",
-		},
+		// Note: postgres, mysql, mongodb factory methods are implemented,
+		// but creating actual connections requires running database instances.
+		// Testing actual connections should be done in integration tests.
 	}
 
 	for _, tt := range tests {
@@ -416,13 +392,29 @@ func TestIsDriverSupported(t *testing.T) {
 func TestImplementedDrivers(t *testing.T) {
 	drivers := ImplementedDrivers()
 
-	// Currently only SQLite is implemented
-	if len(drivers) != 1 {
-		t.Errorf("ImplementedDrivers() returned %d drivers, want 1", len(drivers))
+	// All four drivers are now implemented
+	expectedDrivers := []domain.DatabaseDriver{
+		domain.DatabaseDriverSQLite,
+		domain.DatabaseDriverPostgres,
+		domain.DatabaseDriverMySQL,
+		domain.DatabaseDriverMongoDB,
 	}
 
-	if drivers[0] != domain.DatabaseDriverSQLite {
-		t.Errorf("ImplementedDrivers()[0] = %v, want %v", drivers[0], domain.DatabaseDriverSQLite)
+	if len(drivers) != len(expectedDrivers) {
+		t.Errorf("ImplementedDrivers() returned %d drivers, want %d", len(drivers), len(expectedDrivers))
+	}
+
+	for _, expected := range expectedDrivers {
+		found := false
+		for _, driver := range drivers {
+			if driver == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("ImplementedDrivers() missing expected driver: %v", expected)
+		}
 	}
 }
 
@@ -433,9 +425,9 @@ func TestIsDriverImplemented(t *testing.T) {
 		want   bool
 	}{
 		{"sqlite", true},
-		{"postgres", false},
-		{"mysql", false},
-		{"mongodb", false},
+		{"postgres", true},
+		{"mysql", true},
+		{"mongodb", true},
 		{"oracle", false},
 		{"", false},
 	}

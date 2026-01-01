@@ -1,0 +1,177 @@
+# Yunt Mail Server - MongoDB Configuration
+#
+# This configuration file demonstrates MongoDB database setup.
+# Copy this file to yunt.yaml and modify according to your needs.
+#
+# Docker Compose example for MongoDB:
+#
+#   version: '3.8'
+#   services:
+#     mongodb:
+#       image: mongo:7.0
+#       environment:
+#         MONGO_INITDB_ROOT_USERNAME: root
+#         MONGO_INITDB_ROOT_PASSWORD: root_secret
+#         MONGO_INITDB_DATABASE: yunt
+#       ports:
+#         - "27017:27017"
+#       volumes:
+#         - mongodb_data:/data/db
+#       healthcheck:
+#         test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+#         interval: 10s
+#         timeout: 5s
+#         retries: 5
+#
+#     yunt:
+#       image: yunt:latest
+#       depends_on:
+#         mongodb:
+#           condition: service_healthy
+#       environment:
+#         YUNT_DATABASE_DRIVER: mongodb
+#         YUNT_DATABASE_DSN: "mongodb://root:root_secret@mongodb:27017/yunt?authSource=admin"
+#       ports:
+#         - "1025:1025"
+#         - "1143:1143"
+#         - "8025:8025"
+#
+#   volumes:
+#     mongodb_data:
+#
+# MongoDB Replica Set (for transaction support):
+#
+#   version: '3.8'
+#   services:
+#     mongodb:
+#       image: mongo:7.0
+#       command: ["--replSet", "rs0", "--bind_ip_all"]
+#       environment:
+#         MONGO_INITDB_ROOT_USERNAME: root
+#         MONGO_INITDB_ROOT_PASSWORD: root_secret
+#       ports:
+#         - "27017:27017"
+#       volumes:
+#         - mongodb_data:/data/db
+#       healthcheck:
+#         test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+#         interval: 10s
+#         timeout: 5s
+#         retries: 5
+#
+#     mongodb-init:
+#       image: mongo:7.0
+#       depends_on:
+#         mongodb:
+#           condition: service_healthy
+#       command: >
+#         mongosh --host mongodb -u root -p root_secret --authenticationDatabase admin --eval '
+#         rs.initiate({_id: "rs0", members: [{_id: 0, host: "mongodb:27017"}]});
+#         '
+#       restart: "no"
+
+# Server Settings
+server:
+  name: mail.example.com
+  domain: example.com
+  gracefulTimeout: 30s
+
+# SMTP Server Configuration
+smtp:
+  enabled: true
+  host: 0.0.0.0
+  port: 1025
+  tls:
+    enabled: false
+    startTLS: true
+  maxMessageSize: 10485760
+  maxRecipients: 100
+  readTimeout: 60s
+  writeTimeout: 60s
+  authRequired: false
+  allowRelay: false
+
+# IMAP Server Configuration
+imap:
+  enabled: true
+  host: 0.0.0.0
+  port: 1143
+  tls:
+    enabled: false
+    startTLS: true
+  readTimeout: 60s
+  writeTimeout: 60s
+  idleTimeout: 30m
+
+# REST API and Web UI Configuration
+api:
+  enabled: true
+  host: 0.0.0.0
+  port: 8025
+  tls:
+    enabled: false
+  readTimeout: 30s
+  writeTimeout: 30s
+  corsAllowedOrigins:
+    - "*"
+  rateLimit: 100
+  enableSwagger: true
+
+# Database Configuration - MongoDB
+database:
+  # Use MongoDB driver
+  driver: mongodb
+  
+  # MongoDB connection URI
+  # Format: mongodb://[username:password@]host[:port]/database[?options]
+  #
+  # Examples:
+  # - Local without auth: mongodb://localhost:27017/yunt
+  # - With authentication: mongodb://user:pass@localhost:27017/yunt?authSource=admin
+  # - Replica set: mongodb://host1:27017,host2:27017,host3:27017/yunt?replicaSet=rs0
+  # - Atlas: mongodb+srv://user:pass@cluster.mongodb.net/yunt
+  dsn: "mongodb://localhost:27017/yunt"
+  
+  # Database name (extracted from DSN if not specified)
+  name: yunt
+  
+  # Connection pool settings
+  # MongoDB maintains its own connection pool
+  # maxOpenConns maps to maxPoolSize
+  # maxIdleConns maps to minPoolSize
+  maxOpenConns: 100
+  maxIdleConns: 5
+  connMaxIdleTime: 30m
+  
+  # Automatically run database migrations (create indexes) on startup
+  autoMigrate: true
+
+# Authentication Settings
+auth:
+  jwtSecret: "change-this-in-production"
+  jwtExpiration: 24h
+  refreshExpiration: 168h
+  bcryptCost: 10
+  sessionTimeout: 24h
+  maxLoginAttempts: 5
+  lockoutDuration: 15m
+
+# Logging Configuration
+logging:
+  level: info
+  format: text
+  output: stdout
+  includeCaller: false
+
+# Default Admin User Settings
+admin:
+  username: admin
+  password: "change-this-in-production"
+  email: admin@example.com
+  createOnStartup: true
+
+# Mail Storage Settings
+storage:
+  type: database
+  maxMailboxSize: 0
+  retentionDays: 0
