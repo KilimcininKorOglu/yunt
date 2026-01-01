@@ -6,8 +6,9 @@ const config = {
 	preprocess: vitePreprocess(),
 	kit: {
 		adapter: adapter({
-			pages: 'build',
-			assets: 'build',
+			// Output to webui/dist for go:embed
+			pages: '../webui/dist',
+			assets: '../webui/dist',
 			fallback: 'index.html',
 			precompress: false,
 			strict: true
