@@ -1,10 +1,7 @@
 // Package main is the entry point for the Yunt mail server.
 package main
 
-import (
-	"fmt"
-	"os"
-)
+import "os"
 
 // Version information set via ldflags during build.
 var (
@@ -14,7 +11,7 @@ var (
 )
 
 func main() {
-	fmt.Println("Yunt - Development Mail Server")
-	fmt.Printf("Version: %s, Commit: %s, Built: %s\n", version, commit, buildDate)
-	os.Exit(0)
+	if err := Execute(); err != nil {
+		os.Exit(1)
+	}
 }
