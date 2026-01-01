@@ -25,6 +25,9 @@ type Server struct {
 	mu         sync.RWMutex
 	shutdownCh chan struct{}
 	wg         sync.WaitGroup
+
+	// backend provides user authentication and session management.
+	backend *Backend
 }
 
 // NewServer creates a new IMAP server with the given configuration.
@@ -40,6 +43,22 @@ func NewServer(cfg *Config, logger zerolog.Logger) (*Server, error) {
 	}
 
 	return s, nil
+}
+
+// SetBackend sets the IMAP backend for authentication and data access.
+// This should be called before Start() to enable user authentication.
+func (s *Server) SetBackend(backend *Backend) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backend = backend
+	s.logger.Info().Msg("IMAP backend configured")
+}
+
+// Backend returns the current backend, or nil if not set.
+func (s *Server) Backend() *Backend {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.backend
 }
 
 // Start starts the IMAP server and begins accepting connections.
@@ -202,7 +221,18 @@ func (s *Server) buildCapabilities() imap.CapSet {
 		caps[imap.CapStartTLS] = struct{}{}
 	}
 
+	// Add authentication capabilities
+	// Note: AUTH=PLAIN and AUTH=LOGIN are advertised to indicate supported SASL mechanisms
+	// The go-imap/v2 library handles the actual SASL negotiation
+	caps[imap.Cap("AUTH=PLAIN")] = struct{}{}
+	caps[imap.Cap("AUTH=LOGIN")] = struct{}{}
+
 	return caps
+}
+
+// SupportedAuthMechanisms returns the list of supported authentication mechanisms.
+func (s *Server) SupportedAuthMechanisms() []string {
+	return SupportedAuthMechanisms()
 }
 
 // newSession creates a new IMAP session for an incoming connection.
@@ -213,6 +243,7 @@ func (s *Server) newSession(conn *imapserver.Conn) (imapserver.Session, *imapser
 	s.logger.Info().
 		Str("remote_addr", remoteAddr).
 		Int64("total_connections", s.connCount.Load()).
+		Bool("backend_available", s.backend != nil).
 		Msg("New IMAP connection")
 
 	session := &Session{
@@ -221,6 +252,7 @@ func (s *Server) newSession(conn *imapserver.Conn) (imapserver.Session, *imapser
 		logger:     s.logger.With().Str("remote_addr", remoteAddr).Logger(),
 		remoteAddr: remoteAddr,
 		createdAt:  time.Now(),
+		state:      SessionStateNotAuthenticated,
 	}
 
 	greeting := &imapserver.GreetingData{
