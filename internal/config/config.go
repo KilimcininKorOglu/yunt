@@ -89,6 +89,24 @@ type SMTPConfig struct {
 
 	// RelayPassword is the password for relay authentication.
 	RelayPassword string `yaml:"relayPassword" env:"YUNT_SMTP_RELAY_PASSWORD"`
+
+	// RelayUseTLS enables implicit TLS for the relay connection.
+	RelayUseTLS bool `yaml:"relayUseTLS" env:"YUNT_SMTP_RELAY_USE_TLS"`
+
+	// RelayUseSTARTTLS enables STARTTLS upgrade for the relay connection.
+	RelayUseSTARTTLS bool `yaml:"relayUseSTARTTLS" env:"YUNT_SMTP_RELAY_USE_STARTTLS"`
+
+	// RelayAllowedDomains is a list of domains allowed for relay (comma-separated).
+	RelayAllowedDomains []string `yaml:"relayAllowedDomains" env:"YUNT_SMTP_RELAY_ALLOWED_DOMAINS"`
+
+	// RelayTimeout is the timeout for relay operations.
+	RelayTimeout time.Duration `yaml:"relayTimeout" env:"YUNT_SMTP_RELAY_TIMEOUT"`
+
+	// RelayRetryCount is the number of retry attempts for failed relay.
+	RelayRetryCount int `yaml:"relayRetryCount" env:"YUNT_SMTP_RELAY_RETRY_COUNT"`
+
+	// RelayInsecureSkipVerify skips TLS certificate verification for relay.
+	RelayInsecureSkipVerify bool `yaml:"relayInsecureSkipVerify" env:"YUNT_SMTP_RELAY_INSECURE_SKIP_VERIFY"`
 }
 
 // IMAPConfig contains IMAP server configuration.

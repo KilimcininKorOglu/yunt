@@ -282,7 +282,41 @@ func (s *Session) Data(r io.Reader) error {
 
 	s.backend.server.stats.MessageReceived()
 
+	// Relay the message to external SMTP server if enabled
+	// This happens after local storage to ensure message is preserved
+	s.relayMessage(data, recipientAddresses)
+
 	return nil
+}
+
+// relayMessage forwards the message to an external SMTP relay if enabled.
+// Relay failures are logged but don't affect the return value of Data().
+func (s *Session) relayMessage(data []byte, recipients []string) {
+	if !s.backend.RelayEnabled() {
+		return
+	}
+
+	s.backend.server.stats.RelayAttempted()
+	result := s.backend.RelayMessage(s.ctx, s.from, recipients, data)
+
+	if result.Success {
+		s.backend.server.stats.RelaySucceeded()
+		s.logger.Info().
+			Str("from", s.from).
+			Strs("recipients", result.Recipients).
+			Int("attempts", result.Attempts).
+			Dur("duration", result.Duration).
+			Msg("message relayed successfully")
+	} else {
+		s.backend.server.stats.RelayFailed()
+		s.logger.Warn().
+			Err(result.Error).
+			Str("from", s.from).
+			Strs("failedRecipients", result.FailedRecipients).
+			Int("attempts", result.Attempts).
+			Dur("duration", result.Duration).
+			Msg("relay failed, message stored locally only")
+	}
 }
 
 // createMessage creates a new domain.Message from the received data.

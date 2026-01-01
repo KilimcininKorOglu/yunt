@@ -17,9 +17,14 @@ const (
 	DefaultSMTPMaxRecipients  = 100
 	DefaultSMTPReadTimeout    = 60 * time.Second
 	DefaultSMTPWriteTimeout   = 60 * time.Second
-	DefaultSMTPAuthRequired   = false
-	DefaultSMTPAllowRelay     = false
-	DefaultSMTPRelayPort      = 587
+	DefaultSMTPAuthRequired         = false
+	DefaultSMTPAllowRelay           = false
+	DefaultSMTPRelayPort            = 587
+	DefaultSMTPRelayUseTLS          = false
+	DefaultSMTPRelayUseSTARTTLS     = true
+	DefaultSMTPRelayTimeout         = 30 * time.Second
+	DefaultSMTPRelayRetryCount      = 3
+	DefaultSMTPRelayInsecureSkipVerify = false
 
 	// IMAP defaults.
 	DefaultIMAPEnabled      = true
@@ -90,16 +95,21 @@ func Default() *Config {
 			GracefulTimeout: DefaultServerGracefulTimeout,
 		},
 		SMTP: SMTPConfig{
-			Enabled:        DefaultSMTPEnabled,
-			Host:           DefaultSMTPHost,
-			Port:           DefaultSMTPPort,
-			MaxMessageSize: DefaultSMTPMaxMessageSize,
-			MaxRecipients:  DefaultSMTPMaxRecipients,
-			ReadTimeout:    DefaultSMTPReadTimeout,
-			WriteTimeout:   DefaultSMTPWriteTimeout,
-			AuthRequired:   DefaultSMTPAuthRequired,
-			AllowRelay:     DefaultSMTPAllowRelay,
-			RelayPort:      DefaultSMTPRelayPort,
+			Enabled:                 DefaultSMTPEnabled,
+			Host:                    DefaultSMTPHost,
+			Port:                    DefaultSMTPPort,
+			MaxMessageSize:          DefaultSMTPMaxMessageSize,
+			MaxRecipients:           DefaultSMTPMaxRecipients,
+			ReadTimeout:             DefaultSMTPReadTimeout,
+			WriteTimeout:            DefaultSMTPWriteTimeout,
+			AuthRequired:            DefaultSMTPAuthRequired,
+			AllowRelay:              DefaultSMTPAllowRelay,
+			RelayPort:               DefaultSMTPRelayPort,
+			RelayUseTLS:             DefaultSMTPRelayUseTLS,
+			RelayUseSTARTTLS:        DefaultSMTPRelayUseSTARTTLS,
+			RelayTimeout:            DefaultSMTPRelayTimeout,
+			RelayRetryCount:         DefaultSMTPRelayRetryCount,
+			RelayInsecureSkipVerify: DefaultSMTPRelayInsecureSkipVerify,
 			TLS: TLSConfig{
 				Enabled:  false,
 				StartTLS: true,
