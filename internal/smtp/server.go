@@ -2,6 +2,7 @@ package smtp
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -32,11 +33,13 @@ type Server struct {
 
 // Stats holds server statistics.
 type Stats struct {
-	mu              sync.RWMutex
-	startTime       time.Time
-	connectionsOpen int64
-	connectionsTotal int64
-	messagesTotal   int64
+	mu                    sync.RWMutex
+	startTime             time.Time
+	connectionsOpen       int64
+	connectionsTotal      int64
+	messagesTotal         int64
+	tlsConnectionsTotal   int64
+	startTLSUpgradesTotal int64
 }
 
 // NewStats creates a new Stats instance.
@@ -75,6 +78,27 @@ func (s *Stats) GetStats() (uptime time.Duration, connectionsOpen, connectionsTo
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return time.Since(s.startTime), s.connectionsOpen, s.connectionsTotal, s.messagesTotal
+}
+
+// TLSConnectionOpened increments the TLS connections counter.
+func (s *Stats) TLSConnectionOpened() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tlsConnectionsTotal++
+}
+
+// StartTLSUpgraded increments the STARTTLS upgrades counter.
+func (s *Stats) StartTLSUpgraded() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.startTLSUpgradesTotal++
+}
+
+// GetTLSStats returns TLS-related statistics.
+func (s *Stats) GetTLSStats() (tlsConnectionsTotal, startTLSUpgradesTotal int64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.tlsConnectionsTotal, s.startTLSUpgradesTotal
 }
 
 // New creates a new SMTP server with the given configuration and logger.
@@ -272,17 +296,39 @@ func (b *backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	b.server.stats.ConnectionOpened()
 
 	remoteAddr := c.Conn().RemoteAddr().String()
-	b.server.logger.Info().
-		Str("remoteAddr", remoteAddr).
-		Str("hostname", c.Hostname()).
-		Msg("new connection")
 
-	return &session{
+	// Create connection security tracker
+	security := NewConnectionSecurity()
+
+	// Check if connection is already TLS (implicit TLS)
+	if tlsConn, ok := c.Conn().(*tls.Conn); ok {
+		tlsState := tlsConn.ConnectionState()
+		security.UpdateFromTLSState(tlsState, TLSStateImplicit)
+		b.server.stats.TLSConnectionOpened()
+		b.server.logger.Info().
+			Str("remoteAddr", remoteAddr).
+			Str("hostname", c.Hostname()).
+			Str("tlsState", security.TLSState().String()).
+			Str("tlsVersion", security.TLSVersion()).
+			Str("cipherSuite", security.CipherSuite()).
+			Msg("new TLS connection")
+	} else {
+		b.server.logger.Info().
+			Str("remoteAddr", remoteAddr).
+			Str("hostname", c.Hostname()).
+			Str("tlsState", security.TLSState().String()).
+			Msg("new connection")
+	}
+
+	sess := &session{
 		backend:    b,
 		conn:       c,
 		remoteAddr: remoteAddr,
 		logger:     b.server.logger.With().Str("remoteAddr", remoteAddr).Logger(),
-	}, nil
+		security:   security,
+	}
+
+	return sess, nil
 }
 
 // session implements the smtp.Session interface.
@@ -295,6 +341,9 @@ type session struct {
 	// Session state
 	from       string
 	recipients []string
+
+	// Connection security state
+	security *ConnectionSecurity
 }
 
 // AuthMechanisms returns the list of supported authentication mechanisms.
@@ -374,7 +423,40 @@ func (s *session) Reset() {
 
 // Logout is called when the client disconnects.
 func (s *session) Logout() error {
-	s.logger.Info().Msg("connection closed")
+	// Log with security state information
+	if s.security.IsSecure() {
+		s.logger.Info().
+			Str("tlsState", s.security.TLSState().String()).
+			Str("tlsVersion", s.security.TLSVersion()).
+			Msg("connection closed")
+	} else {
+		s.logger.Info().Msg("connection closed")
+	}
 	s.backend.server.stats.ConnectionClosed()
 	return nil
+}
+
+// Security returns the connection security state.
+func (s *session) Security() *ConnectionSecurity {
+	return s.security
+}
+
+// updateTLSState updates the security state after STARTTLS handshake.
+// This is called internally when the connection is upgraded to TLS.
+func (s *session) updateTLSState() {
+	if tlsConn, ok := s.conn.Conn().(*tls.Conn); ok {
+		tlsState := tlsConn.ConnectionState()
+		s.security.UpdateFromTLSState(tlsState, TLSStateStartTLS)
+		s.backend.server.stats.StartTLSUpgraded()
+		s.logger.Info().
+			Str("tlsState", s.security.TLSState().String()).
+			Str("tlsVersion", s.security.TLSVersion()).
+			Str("cipherSuite", s.security.CipherSuite()).
+			Msg("connection upgraded to TLS via STARTTLS")
+	}
+}
+
+// IsTLS returns true if the connection is secured with TLS.
+func (s *session) IsTLS() bool {
+	return s.security.IsSecure()
 }
