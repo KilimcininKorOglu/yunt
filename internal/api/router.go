@@ -62,8 +62,19 @@ func SetVersion(v string) {
 	version = v
 }
 
+// Router wraps an Echo instance and provides access to route groups.
+type Router struct {
+	*echo.Echo
+	v1 *echo.Group
+}
+
+// V1 returns the /api/v1 route group for registering handlers.
+func (r *Router) V1() *echo.Group {
+	return r.v1
+}
+
 // NewRouter creates and configures a new Echo router with middleware.
-func NewRouter(cfg RouterConfig) *echo.Echo {
+func NewRouter(cfg RouterConfig) *Router {
 	e := echo.New()
 
 	// Disable Echo's default banner and startup message
@@ -82,35 +93,37 @@ func NewRouter(cfg RouterConfig) *echo.Echo {
 	// Logger middleware (skip health check endpoints to reduce noise)
 	e.Use(middleware.LoggerWithConfig(cfg.Logger, "/health", "/healthz", "/ready"))
 
-	// Register routes
-	registerRoutes(e, cfg)
+	// Create router wrapper
+	router := &Router{Echo: e}
 
-	return e
+	// Register routes
+	registerRoutes(router, cfg)
+
+	return router
 }
 
 // registerRoutes sets up all API routes.
-func registerRoutes(e *echo.Echo, _ RouterConfig) {
+func registerRoutes(r *Router, _ RouterConfig) {
 	// Health check endpoints
-	e.GET("/health", healthHandler)
-	e.GET("/healthz", healthzHandler)
-	e.GET("/ready", readyHandler)
+	r.GET("/health", healthHandler)
+	r.GET("/healthz", healthzHandler)
+	r.GET("/ready", readyHandler)
 
 	// API version group
-	api := e.Group("/api")
+	api := r.Group("/api")
 
 	// API v1 group
-	v1 := api.Group("/v1")
+	r.v1 = api.Group("/v1")
 
 	// Version endpoint
-	v1.GET("/version", versionHandler)
+	r.v1.GET("/version", versionHandler)
 
-	// Placeholder for future routes
-	// These will be added as other tasks are completed:
-	// - /api/v1/messages
-	// - /api/v1/mailboxes
-	// - /api/v1/users
-	// - /api/v1/settings
-	// - etc.
+	// Handler routes are registered by calling handler.RegisterRoutes(r.V1())
+	// This is done after the router is created in the application setup.
+	// Example:
+	//   router := api.NewRouter(cfg)
+	//   webhookHandler := handlers.NewWebhookHandler(webhookService, authService)
+	//   webhookHandler.RegisterRoutes(router.V1())
 }
 
 // healthHandler returns detailed health information.

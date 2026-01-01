@@ -18,7 +18,7 @@ import (
 
 // Server represents the API server.
 type Server struct {
-	echo     *echo.Echo
+	router   *Router
 	config   config.APIConfig
 	logger   *config.Logger
 	server   *http.Server
@@ -58,14 +58,19 @@ func New(cfg config.APIConfig, opts ...ServerOption) *Server {
 		CORSOrigins:   cfg.CORSAllowedOrigins,
 		EnableSwagger: cfg.EnableSwagger,
 	}
-	s.echo = NewRouter(routerCfg)
+	s.router = NewRouter(routerCfg)
 
 	return s
 }
 
 // Echo returns the underlying Echo instance for additional configuration.
 func (s *Server) Echo() *echo.Echo {
-	return s.echo
+	return s.router.Echo
+}
+
+// Router returns the router for registering handlers.
+func (s *Server) Router() *Router {
+	return s.router
 }
 
 // Start starts the API server and blocks until it is stopped.
@@ -82,7 +87,7 @@ func (s *Server) StartWithContext(ctx context.Context) error {
 	// Configure the HTTP server
 	s.server = &http.Server{
 		Addr:         addr,
-		Handler:      s.echo,
+		Handler:      s.router,
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
@@ -161,7 +166,7 @@ func (s *Server) StartWithSignals(gracefulTimeout time.Duration) error {
 	// Configure the HTTP server
 	s.server = &http.Server{
 		Addr:         addr,
-		Handler:      s.echo,
+		Handler:      s.router,
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
