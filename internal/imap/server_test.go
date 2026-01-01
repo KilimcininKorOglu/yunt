@@ -260,22 +260,52 @@ func TestServer_Capabilities(t *testing.T) {
 	logger := zerolog.Nop()
 
 	tests := []struct {
-		name         string
-		tlsEnabled   bool
-		startTLS     bool
-		wantStartTLS bool
+		name              string
+		tlsEnabled        bool
+		startTLS          bool
+		insecureAuth      bool
+		wantStartTLS      bool
+		wantLoginDisabled bool
 	}{
 		{
-			name:         "no TLS",
-			tlsEnabled:   false,
-			startTLS:     false,
-			wantStartTLS: false,
+			name:              "no TLS",
+			tlsEnabled:        false,
+			startTLS:          false,
+			insecureAuth:      false,
+			wantStartTLS:      false,
+			wantLoginDisabled: false,
 		},
 		{
-			name:         "STARTTLS only (checks capability set, not validation)",
-			tlsEnabled:   false,
-			startTLS:     true,
-			wantStartTLS: true,
+			name:              "STARTTLS only with secure auth (LOGINDISABLED)",
+			tlsEnabled:        false,
+			startTLS:          true,
+			insecureAuth:      false,
+			wantStartTLS:      true,
+			wantLoginDisabled: true,
+		},
+		{
+			name:              "STARTTLS with insecure auth allowed",
+			tlsEnabled:        false,
+			startTLS:          true,
+			insecureAuth:      true,
+			wantStartTLS:      true,
+			wantLoginDisabled: false,
+		},
+		{
+			name:              "implicit TLS enabled (no STARTTLS needed)",
+			tlsEnabled:        true,
+			startTLS:          false,
+			insecureAuth:      false,
+			wantStartTLS:      false,
+			wantLoginDisabled: false,
+		},
+		{
+			name:              "both TLS modes with secure auth",
+			tlsEnabled:        true,
+			startTLS:          true,
+			insecureAuth:      false,
+			wantStartTLS:      false,
+			wantLoginDisabled: false,
 		},
 	}
 
@@ -284,6 +314,7 @@ func TestServer_Capabilities(t *testing.T) {
 			cfg := testConfig()
 			cfg.TLS.Enabled = tt.tlsEnabled
 			cfg.TLS.StartTLS = tt.startTLS
+			cfg.InsecureAuth = tt.insecureAuth
 
 			// For this test, we're just testing the capability building logic,
 			// so we create the server struct directly to avoid validation
@@ -320,6 +351,19 @@ func TestServer_Capabilities(t *testing.T) {
 
 			if hasStartTLS != tt.wantStartTLS {
 				t.Errorf("STARTTLS capability = %v, want %v", hasStartTLS, tt.wantStartTLS)
+			}
+
+			// Check LOGINDISABLED capability
+			hasLoginDisabled := false
+			for c := range caps {
+				if string(c) == "LOGINDISABLED" {
+					hasLoginDisabled = true
+					break
+				}
+			}
+
+			if hasLoginDisabled != tt.wantLoginDisabled {
+				t.Errorf("LOGINDISABLED capability = %v, want %v", hasLoginDisabled, tt.wantLoginDisabled)
 			}
 		})
 	}
