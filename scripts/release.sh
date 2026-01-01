@@ -13,11 +13,15 @@
 #   DIST_DIR       Output directory for release binaries (default: dist)
 #   CHECKSUM       Generate checksums (default: true)
 #   COMPRESS       Create compressed archives (default: true)
+#   INCLUDE_README Include README.md in archives (default: true)
+#   BUILD_WEB      Build web UI before binaries (default: false)
+#   CGO_ENABLED    Enable CGO for builds (default: 0)
 #
 # Examples:
 #   ./scripts/release.sh
 #   ./scripts/release.sh v1.0.0
 #   PLATFORMS="linux/amd64 darwin/arm64" ./scripts/release.sh v1.0.0
+#   BUILD_WEB=true ./scripts/release.sh v1.0.0
 
 set -euo pipefail
 
@@ -51,6 +55,9 @@ fi
 # Options
 CHECKSUM="${CHECKSUM:-true}"
 COMPRESS="${COMPRESS:-true}"
+INCLUDE_README="${INCLUDE_README:-true}"
+BUILD_WEB="${BUILD_WEB:-false}"
+CGO_ENABLED="${CGO_ENABLED:-0}"
 
 # Version information
 get_version() {
@@ -109,6 +116,40 @@ check_prerequisites() {
     go_version=$(go version | awk '{print $3}' | sed 's/go//')
     print_info "Go version: ${go_version}"
     print_info "Project: ${PROJECT_ROOT}"
+    print_info "CGO_ENABLED: ${CGO_ENABLED}"
+}
+
+# Build web UI
+build_web_ui() {
+    if [[ "${BUILD_WEB}" != "true" ]]; then
+        return
+    fi
+    
+    print_header "Building Web UI"
+    
+    if ! command -v npm &>/dev/null; then
+        print_error "npm is not installed, skipping web UI build"
+        return 1
+    fi
+    
+    cd "${PROJECT_ROOT}/web"
+    
+    if [[ ! -d "node_modules" ]]; then
+        print_info "Installing web dependencies..."
+        npm ci --no-audit --no-fund
+    fi
+    
+    print_info "Building web UI..."
+    npm run build
+    
+    if [[ -f "${PROJECT_ROOT}/webui/dist/index.html" ]]; then
+        print_info "Web UI built successfully"
+    else
+        print_error "Web UI build failed"
+        return 1
+    fi
+    
+    cd "${PROJECT_ROOT}"
 }
 
 # Clean previous builds
@@ -140,7 +181,7 @@ build_platform() {
     # Build with optimizations
     local ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildDate=${BUILD_DATE}"
     
-    if GOOS="${goos}" GOARCH="${goarch}" go build \
+    if CGO_ENABLED="${CGO_ENABLED}" GOOS="${goos}" GOARCH="${goarch}" go build \
         -ldflags "${ldflags}" \
         -trimpath \
         -o "${output_file}" \
@@ -170,20 +211,32 @@ compress_binary() {
     
     local archive_name
     
+    # Prepare files to include in archive
+    local files_to_archive=("$(basename "${binary}")")
+    if [[ "${INCLUDE_README}" == "true" ]] && [[ -f "${PROJECT_ROOT}/README.md" ]]; then
+        cp "${PROJECT_ROOT}/README.md" "${DIST_DIR}/README.md"
+        files_to_archive+=("README.md")
+    fi
+    
     if [[ "${goos}" == "windows" ]]; then
         # Create zip for Windows
         archive_name="${DIST_DIR}/${name}.zip"
         if command -v zip &>/dev/null; then
-            (cd "${DIST_DIR}" && zip -q "${name}.zip" "$(basename "${binary}")")
+            (cd "${DIST_DIR}" && zip -q "${name}.zip" "${files_to_archive[@]}")
             print_info "  Compressed: ${name}.zip"
         fi
     else
         # Create tar.gz for Unix systems
         archive_name="${DIST_DIR}/${name}.tar.gz"
         if command -v tar &>/dev/null; then
-            tar -czf "${archive_name}" -C "${DIST_DIR}" "$(basename "${binary}")"
+            tar -czf "${archive_name}" -C "${DIST_DIR}" "${files_to_archive[@]}"
             print_info "  Compressed: ${name}.tar.gz"
         fi
+    fi
+    
+    # Remove README copy after archiving
+    if [[ "${INCLUDE_README}" == "true" ]]; then
+        rm -f "${DIST_DIR}/README.md"
     fi
 }
 
@@ -241,6 +294,9 @@ main() {
     
     # Change to project root
     cd "${PROJECT_ROOT}"
+    
+    # Build web UI if requested
+    build_web_ui
     
     print_header "Building Binaries"
     
