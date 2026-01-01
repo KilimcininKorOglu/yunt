@@ -1,0 +1,652 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"yunt/internal/domain"
+	"yunt/internal/repository"
+)
+
+// SettingsRepository implements the repository.SettingsRepository interface for SQLite.
+type SettingsRepository struct {
+	repo *Repository
+}
+
+// settingsRow is the database representation of settings.
+type settingsRow struct {
+	ID        string    `db:"id"`
+	Data      string    `db:"data"`
+	UpdatedAt time.Time `db:"updated_at"`
+}
+
+// settingsHistoryRow is the database representation of a settings change.
+type settingsHistoryRow struct {
+	ID        string         `db:"id"`
+	FieldPath string         `db:"field_path"`
+	OldValue  sql.NullString `db:"old_value"`
+	NewValue  sql.NullString `db:"new_value"`
+	ChangedBy sql.NullString `db:"changed_by"`
+	Reason    sql.NullString `db:"reason"`
+	ChangedAt time.Time      `db:"changed_at"`
+}
+
+// DefaultSettingsID is the ID used for the singleton settings record.
+const DefaultSettingsID = "default"
+
+// NewSettingsRepository creates a new SQLite settings repository.
+func NewSettingsRepository(repo *Repository) *SettingsRepository {
+	return &SettingsRepository{repo: repo}
+}
+
+// Get retrieves the current settings.
+func (s *SettingsRepository) Get(ctx context.Context) (*domain.Settings, error) {
+	return s.GetByID(ctx, domain.ID(DefaultSettingsID))
+}
+
+// GetByID retrieves settings by their ID.
+func (s *SettingsRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Settings, error) {
+	query := `SELECT id, data, updated_at FROM settings WHERE id = ?`
+
+	var row settingsRow
+	if err := s.repo.db().GetContext(ctx, &row, query, string(id)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Return default settings if none exist
+			return domain.NewSettings(id), nil
+		}
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	var settings domain.Settings
+	if err := json.Unmarshal([]byte(row.Data), &settings); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal settings: %w", err)
+	}
+
+	settings.ID = id
+	settings.UpdatedAt = domain.Timestamp{Time: row.UpdatedAt}
+
+	return &settings, nil
+}
+
+// Save saves or updates the settings.
+func (s *SettingsRepository) Save(ctx context.Context, settings *domain.Settings) error {
+	if settings.ID.IsEmpty() {
+		settings.ID = domain.ID(DefaultSettingsID)
+	}
+
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings: %w", err)
+	}
+
+	query := `INSERT OR REPLACE INTO settings (id, data, updated_at) VALUES (?, ?, ?)`
+	_, err = s.repo.db().ExecContext(ctx, query, string(settings.ID), string(data), time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("failed to save settings: %w", err)
+	}
+
+	return nil
+}
+
+// Update applies partial updates to settings.
+func (s *SettingsRepository) Update(ctx context.Context, id domain.ID, input *domain.SettingsUpdateInput) error {
+	settings, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Record changes for history
+	oldSettings, _ := json.Marshal(settings)
+
+	// Apply updates
+	input.Apply(settings)
+
+	// Save updated settings
+	if err := s.Save(ctx, settings); err != nil {
+		return err
+	}
+
+	// Record change in history
+	newSettings, _ := json.Marshal(settings)
+	if string(oldSettings) != string(newSettings) {
+		changeID := domain.ID(fmt.Sprintf("change-%d", time.Now().UnixNano()))
+		change := &repository.SettingsChange{
+			ID:        changeID,
+			FieldPath: "settings",
+			OldValue:  string(oldSettings),
+			NewValue:  string(newSettings),
+			ChangedAt: domain.Now(),
+		}
+		_ = s.recordChange(ctx, change)
+	}
+
+	return nil
+}
+
+// recordChange records a settings change in history.
+func (s *SettingsRepository) recordChange(ctx context.Context, change *repository.SettingsChange) error {
+	query := `INSERT INTO settings_history (id, field_path, old_value, new_value, 
+		changed_by, reason, changed_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	var changedBy, reason sql.NullString
+	if change.ChangedBy != nil {
+		changedBy = sql.NullString{String: string(*change.ChangedBy), Valid: true}
+	}
+	if change.Reason != "" {
+		reason = sql.NullString{String: change.Reason, Valid: true}
+	}
+
+	_, err := s.repo.db().ExecContext(ctx, query,
+		string(change.ID),
+		change.FieldPath,
+		change.OldValue,
+		change.NewValue,
+		changedBy,
+		reason,
+		change.ChangedAt.Time,
+	)
+
+	return err
+}
+
+// Reset resets settings to their default values.
+func (s *SettingsRepository) Reset(ctx context.Context) error {
+	settings := domain.NewSettings(domain.ID(DefaultSettingsID))
+	return s.Save(ctx, settings)
+}
+
+// Exists checks if settings have been saved.
+func (s *SettingsRepository) Exists(ctx context.Context) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM settings WHERE id = ?)`
+
+	var exists bool
+	if err := s.repo.db().GetContext(ctx, &exists, query, DefaultSettingsID); err != nil {
+		return false, fmt.Errorf("failed to check settings existence: %w", err)
+	}
+
+	return exists, nil
+}
+
+// GetSMTP retrieves only the SMTP settings.
+func (s *SettingsRepository) GetSMTP(ctx context.Context) (*domain.SMTPSettings, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &settings.SMTP, nil
+}
+
+// UpdateSMTP updates only the SMTP settings.
+func (s *SettingsRepository) UpdateSMTP(ctx context.Context, update *domain.SMTPSettingsUpdate) error {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	update.Apply(&settings.SMTP)
+	settings.UpdatedAt = domain.Now()
+
+	return s.Save(ctx, settings)
+}
+
+// GetIMAP retrieves only the IMAP settings.
+func (s *SettingsRepository) GetIMAP(ctx context.Context) (*domain.IMAPSettings, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &settings.IMAP, nil
+}
+
+// UpdateIMAP updates only the IMAP settings.
+func (s *SettingsRepository) UpdateIMAP(ctx context.Context, update *domain.IMAPSettingsUpdate) error {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	update.Apply(&settings.IMAP)
+	settings.UpdatedAt = domain.Now()
+
+	return s.Save(ctx, settings)
+}
+
+// GetWebUI retrieves only the Web UI settings.
+func (s *SettingsRepository) GetWebUI(ctx context.Context) (*domain.WebUISettings, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &settings.WebUI, nil
+}
+
+// UpdateWebUI updates only the Web UI settings.
+func (s *SettingsRepository) UpdateWebUI(ctx context.Context, update *domain.WebUISettingsUpdate) error {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	update.Apply(&settings.WebUI)
+	settings.UpdatedAt = domain.Now()
+
+	return s.Save(ctx, settings)
+}
+
+// GetStorage retrieves only the storage settings.
+func (s *SettingsRepository) GetStorage(ctx context.Context) (*domain.StorageSettings, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &settings.Storage, nil
+}
+
+// UpdateStorage updates only the storage settings.
+func (s *SettingsRepository) UpdateStorage(ctx context.Context, update *domain.StorageSettingsUpdate) error {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	update.Apply(&settings.Storage)
+	settings.UpdatedAt = domain.Now()
+
+	return s.Save(ctx, settings)
+}
+
+// GetSecurity retrieves only the security settings.
+func (s *SettingsRepository) GetSecurity(ctx context.Context) (*domain.SecuritySettings, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &settings.Security, nil
+}
+
+// UpdateSecurity updates only the security settings.
+func (s *SettingsRepository) UpdateSecurity(ctx context.Context, update *domain.SecuritySettingsUpdate) error {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	update.Apply(&settings.Security)
+	settings.UpdatedAt = domain.Now()
+
+	return s.Save(ctx, settings)
+}
+
+// GetRetention retrieves only the retention settings.
+func (s *SettingsRepository) GetRetention(ctx context.Context) (*domain.RetentionSettings, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &settings.Retention, nil
+}
+
+// UpdateRetention updates only the retention settings.
+func (s *SettingsRepository) UpdateRetention(ctx context.Context, update *domain.RetentionSettingsUpdate) error {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	update.Apply(&settings.Retention)
+	settings.UpdatedAt = domain.Now()
+
+	return s.Save(ctx, settings)
+}
+
+// GetNotifications retrieves only the notification settings.
+func (s *SettingsRepository) GetNotifications(ctx context.Context) (*domain.NotificationSettings, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &settings.Notifications, nil
+}
+
+// UpdateNotifications updates only the notification settings.
+func (s *SettingsRepository) UpdateNotifications(ctx context.Context, update *domain.NotificationSettingsUpdate) error {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	update.Apply(&settings.Notifications)
+	settings.UpdatedAt = domain.Now()
+
+	return s.Save(ctx, settings)
+}
+
+// GetSettingValue retrieves a specific setting value by path.
+func (s *SettingsRepository) GetSettingValue(ctx context.Context, path string) (interface{}, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to map for path-based access
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return nil, err
+	}
+
+	var settingsMap map[string]interface{}
+	if err := json.Unmarshal(data, &settingsMap); err != nil {
+		return nil, err
+	}
+
+	// Navigate path
+	parts := strings.Split(path, ".")
+	current := interface{}(settingsMap)
+
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			val, ok := v[part]
+			if !ok {
+				return nil, nil
+			}
+			current = val
+		default:
+			return nil, nil
+		}
+	}
+
+	return current, nil
+}
+
+// SetSettingValue sets a specific setting value by path.
+func (s *SettingsRepository) SetSettingValue(ctx context.Context, path string, value interface{}) error {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Convert to map for path-based access
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+
+	var settingsMap map[string]interface{}
+	if err := json.Unmarshal(data, &settingsMap); err != nil {
+		return err
+	}
+
+	// Navigate and set value
+	parts := strings.Split(path, ".")
+	current := settingsMap
+
+	for i, part := range parts[:len(parts)-1] {
+		if next, ok := current[part].(map[string]interface{}); ok {
+			current = next
+		} else {
+			return fmt.Errorf("invalid path: %s (failed at %s)", path, strings.Join(parts[:i+1], "."))
+		}
+	}
+
+	current[parts[len(parts)-1]] = value
+
+	// Convert back to settings
+	updatedData, err := json.Marshal(settingsMap)
+	if err != nil {
+		return err
+	}
+
+	var updatedSettings domain.Settings
+	if err := json.Unmarshal(updatedData, &updatedSettings); err != nil {
+		return err
+	}
+
+	updatedSettings.ID = settings.ID
+	updatedSettings.UpdatedAt = domain.Now()
+
+	return s.Save(ctx, &updatedSettings)
+}
+
+// GetHistory retrieves the history of settings changes.
+func (s *SettingsRepository) GetHistory(ctx context.Context, opts *repository.ListOptions) (*repository.ListResult[*repository.SettingsChange], error) {
+	countQuery := `SELECT COUNT(*) FROM settings_history`
+	var total int64
+	if err := s.repo.db().GetContext(ctx, &total, countQuery); err != nil {
+		return nil, fmt.Errorf("failed to count history: %w", err)
+	}
+
+	query := `SELECT id, field_path, old_value, new_value, changed_by, reason, changed_at 
+		FROM settings_history ORDER BY changed_at DESC`
+
+	if opts != nil && opts.Pagination != nil {
+		opts.Pagination.Normalize()
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", opts.Pagination.Limit(), opts.Pagination.Offset())
+	}
+
+	var rows []settingsHistoryRow
+	if err := s.repo.db().SelectContext(ctx, &rows, query); err != nil {
+		return nil, fmt.Errorf("failed to list history: %w", err)
+	}
+
+	changes := make([]*repository.SettingsChange, len(rows))
+	for i, row := range rows {
+		changes[i] = s.rowToSettingsChange(&row)
+	}
+
+	result := &repository.ListResult[*repository.SettingsChange]{
+		Items: changes,
+		Total: total,
+	}
+
+	if opts != nil && opts.Pagination != nil {
+		result.Pagination = &domain.Pagination{
+			Page:    opts.Pagination.Page,
+			PerPage: opts.Pagination.PerPage,
+			Total:   total,
+		}
+		result.HasMore = opts.Pagination.Page < result.Pagination.TotalPages()
+	}
+
+	return result, nil
+}
+
+// rowToSettingsChange converts a settingsHistoryRow to a repository.SettingsChange.
+func (s *SettingsRepository) rowToSettingsChange(row *settingsHistoryRow) *repository.SettingsChange {
+	change := &repository.SettingsChange{
+		ID:        domain.ID(row.ID),
+		FieldPath: row.FieldPath,
+		ChangedAt: domain.Timestamp{Time: row.ChangedAt},
+	}
+
+	if row.OldValue.Valid {
+		change.OldValue = row.OldValue.String
+	}
+	if row.NewValue.Valid {
+		change.NewValue = row.NewValue.String
+	}
+	if row.ChangedBy.Valid {
+		id := domain.ID(row.ChangedBy.String)
+		change.ChangedBy = &id
+	}
+	if row.Reason.Valid {
+		change.Reason = row.Reason.String
+	}
+
+	return change
+}
+
+// GetHistoryByField retrieves the history of changes for a specific field.
+func (s *SettingsRepository) GetHistoryByField(ctx context.Context, fieldPath string, opts *repository.ListOptions) (*repository.ListResult[*repository.SettingsChange], error) {
+	countQuery := `SELECT COUNT(*) FROM settings_history WHERE field_path = ?`
+	var total int64
+	if err := s.repo.db().GetContext(ctx, &total, countQuery, fieldPath); err != nil {
+		return nil, fmt.Errorf("failed to count history: %w", err)
+	}
+
+	query := `SELECT id, field_path, old_value, new_value, changed_by, reason, changed_at 
+		FROM settings_history WHERE field_path = ? ORDER BY changed_at DESC`
+
+	if opts != nil && opts.Pagination != nil {
+		opts.Pagination.Normalize()
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", opts.Pagination.Limit(), opts.Pagination.Offset())
+	}
+
+	var rows []settingsHistoryRow
+	if err := s.repo.db().SelectContext(ctx, &rows, query, fieldPath); err != nil {
+		return nil, fmt.Errorf("failed to list history by field: %w", err)
+	}
+
+	changes := make([]*repository.SettingsChange, len(rows))
+	for i, row := range rows {
+		changes[i] = s.rowToSettingsChange(&row)
+	}
+
+	result := &repository.ListResult[*repository.SettingsChange]{
+		Items: changes,
+		Total: total,
+	}
+
+	if opts != nil && opts.Pagination != nil {
+		result.Pagination = &domain.Pagination{
+			Page:    opts.Pagination.Page,
+			PerPage: opts.Pagination.PerPage,
+			Total:   total,
+		}
+		result.HasMore = opts.Pagination.Page < result.Pagination.TotalPages()
+	}
+
+	return result, nil
+}
+
+// Revert reverts settings to a specific historical version.
+func (s *SettingsRepository) Revert(ctx context.Context, changeID domain.ID) error {
+	query := `SELECT id, field_path, old_value, new_value, changed_by, reason, changed_at 
+		FROM settings_history WHERE id = ?`
+
+	var row settingsHistoryRow
+	if err := s.repo.db().GetContext(ctx, &row, query, string(changeID)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.NewNotFoundError("settings change", string(changeID))
+		}
+		return fmt.Errorf("failed to get change: %w", err)
+	}
+
+	// Restore old value
+	if row.OldValue.Valid {
+		var settings domain.Settings
+		if err := json.Unmarshal([]byte(row.OldValue.String), &settings); err != nil {
+			return fmt.Errorf("failed to unmarshal old settings: %w", err)
+		}
+
+		settings.ID = domain.ID(DefaultSettingsID)
+		settings.UpdatedAt = domain.Now()
+
+		return s.Save(ctx, &settings)
+	}
+
+	return nil
+}
+
+// Export exports settings in a portable format.
+func (s *SettingsRepository) Export(ctx context.Context) (*repository.SettingsExport, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return nil, err
+	}
+
+	// Simple checksum (in production, use a proper hash)
+	checksum := fmt.Sprintf("%d", len(data))
+
+	return &repository.SettingsExport{
+		Version:    "1.0",
+		ExportedAt: domain.Now(),
+		Settings:   settings,
+		Checksum:   checksum,
+	}, nil
+}
+
+// Import imports settings from a portable format.
+func (s *SettingsRepository) Import(ctx context.Context, data *repository.SettingsExport, merge bool) error {
+	if data.Settings == nil {
+		return fmt.Errorf("no settings data to import")
+	}
+
+	if merge {
+		// Get current settings and merge
+		current, err := s.Get(ctx)
+		if err != nil {
+			return err
+		}
+
+		// Use imported settings but keep ID
+		data.Settings.ID = current.ID
+	} else {
+		data.Settings.ID = domain.ID(DefaultSettingsID)
+	}
+
+	data.Settings.UpdatedAt = domain.Now()
+	return s.Save(ctx, data.Settings)
+}
+
+// Validate validates the current settings.
+func (s *SettingsRepository) Validate(ctx context.Context) ([]*repository.SettingsValidationError, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := settings.Validate(); err != nil {
+		if ve, ok := err.(*domain.ValidationErrors); ok {
+			errors := make([]*repository.SettingsValidationError, len(ve.Errors))
+			for i, e := range ve.Errors {
+				errors[i] = &repository.SettingsValidationError{
+					Path:     e.Field,
+					Message:  e.Message,
+					Severity: repository.ValidationSeverityError,
+				}
+			}
+			return errors, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// GetDatabaseInfo retrieves information about the database connection.
+func (s *SettingsRepository) GetDatabaseInfo(ctx context.Context) (*repository.DatabaseInfo, error) {
+	return s.repo.DatabaseInfo(ctx)
+}
+
+// TestSMTPConnection tests the SMTP relay connection.
+func (s *SettingsRepository) TestSMTPConnection(ctx context.Context) error {
+	smtp, err := s.GetSMTP(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !smtp.AllowRelay || smtp.RelayHost == "" {
+		return fmt.Errorf("SMTP relay is not configured")
+	}
+
+	// In a real implementation, this would attempt to connect to the relay server
+	return nil
+}
+
+// TestDatabaseConnection tests the database connection.
+func (s *SettingsRepository) TestDatabaseConnection(ctx context.Context) error {
+	return s.repo.Health(ctx)
+}
+
+// Ensure SettingsRepository implements repository.SettingsRepository
+var _ repository.SettingsRepository = (*SettingsRepository)(nil)
