@@ -70,6 +70,24 @@ smtp:
   relayPort: 587
   relayUsername: ""
   relayPassword: ""
+  
+  # Use implicit TLS for relay connection (port 465 typically)
+  relayUseTLS: false
+  
+  # Use STARTTLS upgrade for relay connection (port 587 typically)
+  relayUseSTARTTLS: true
+  
+  # List of domains allowed for relay (empty = all domains allowed)
+  relayAllowedDomains: []
+  
+  # Timeout for relay operations
+  relayTimeout: 30s
+  
+  # Number of retry attempts for failed relay
+  relayRetryCount: 3
+  
+  # Skip TLS certificate verification for relay (not recommended for production)
+  relayInsecureSkipVerify: false
 
 # IMAP Server Configuration
 # Enables mail client access (Thunderbird, Outlook, etc.)

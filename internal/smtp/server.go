@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"yunt/internal/repository"
+	"yunt/internal/service"
 )
 
 // Server represents an SMTP server instance.
@@ -26,8 +27,8 @@ type Server struct {
 	mailboxRepo repository.MailboxRepository
 	messageRepo repository.MessageRepository
 
-	// Rate limiting
-	rateLimiter *RateLimiter
+	// Relay service for forwarding messages
+	relayService *service.RelayService
 
 	// State management
 	running  atomic.Bool
@@ -55,32 +56,25 @@ func WithMessageRepo(repo repository.MessageRepository) ServerOption {
 	}
 }
 
-// WithRateLimiter sets a custom rate limiter for the server.
-func WithRateLimiter(rl *RateLimiter) ServerOption {
+// WithRelayServiceOption sets the relay service for message forwarding.
+func WithRelayServiceOption(svc *service.RelayService) ServerOption {
 	return func(s *Server) {
-		s.rateLimiter = rl
-	}
-}
-
-// WithRateLimitConfig sets the rate limit configuration for the server.
-func WithRateLimitConfig(cfg *RateLimitConfig) ServerOption {
-	return func(s *Server) {
-		// Rate limiter will be created in New() with this config
-		s.rateLimiter = nil // Mark as needing creation
-		s.config.RateLimitConfig = cfg
+		s.relayService = svc
 	}
 }
 
 // Stats holds server statistics.
 type Stats struct {
-	mu                    sync.RWMutex
-	startTime             time.Time
-	connectionsOpen       int64
-	connectionsTotal      int64
-	messagesTotal         int64
-	tlsConnectionsTotal   int64
-	startTLSUpgradesTotal int64
-	rateLimitRejects      int64
+	mu                     sync.RWMutex
+	startTime              time.Time
+	connectionsOpen        int64
+	connectionsTotal       int64
+	messagesTotal          int64
+	tlsConnectionsTotal    int64
+	startTLSUpgradesTotal  int64
+	relayAttemptsTotal     int64
+	relaySuccessesTotal    int64
+	relayFailuresTotal     int64
 }
 
 // NewStats creates a new Stats instance.
@@ -142,18 +136,32 @@ func (s *Stats) GetTLSStats() (tlsConnectionsTotal, startTLSUpgradesTotal int64)
 	return s.tlsConnectionsTotal, s.startTLSUpgradesTotal
 }
 
-// RateLimitRejected increments the rate limit rejection counter.
-func (s *Stats) RateLimitRejected() {
+// RelayAttempted increments the relay attempts counter.
+func (s *Stats) RelayAttempted() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.rateLimitRejects++
+	s.relayAttemptsTotal++
 }
 
-// GetRateLimitStats returns rate limit related statistics.
-func (s *Stats) GetRateLimitStats() int64 {
+// RelaySucceeded increments the relay success counter.
+func (s *Stats) RelaySucceeded() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.relaySuccessesTotal++
+}
+
+// RelayFailed increments the relay failure counter.
+func (s *Stats) RelayFailed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.relayFailuresTotal++
+}
+
+// GetRelayStats returns relay-related statistics.
+func (s *Stats) GetRelayStats() (attempts, successes, failures int64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.rateLimitRejects
+	return s.relayAttemptsTotal, s.relaySuccessesTotal, s.relayFailuresTotal
 }
 
 // New creates a new SMTP server with the given configuration and logger.
@@ -195,6 +203,9 @@ func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, err
 	}
 	if s.messageRepo != nil {
 		backendOpts = append(backendOpts, WithMessageRepository(s.messageRepo))
+	}
+	if s.relayService != nil {
+		backendOpts = append(backendOpts, WithRelayService(s.relayService))
 	}
 	backend := NewBackend(s, backendOpts...)
 	s.backend = backend
@@ -367,9 +378,4 @@ func (l *smtpErrorLogger) Println(v ...interface{}) {
 // Backend returns the SMTP backend.
 func (s *Server) Backend() *Backend {
 	return s.backend
-}
-
-// RateLimiter returns the rate limiter (may be nil if disabled).
-func (s *Server) RateLimiter() *RateLimiter {
-	return s.rateLimiter
 }
