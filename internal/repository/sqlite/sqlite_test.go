@@ -957,3 +957,421 @@ func TestPagination(t *testing.T) {
 		t.Error("should not have more pages")
 	}
 }
+
+// TestMigrator tests the migration system.
+func TestMigrator(t *testing.T) {
+	cfg := &ConnectionConfig{
+		DSN:               ":memory:",
+		MaxOpenConns:      1,
+		MaxIdleConns:      1,
+		EnableForeignKeys: true,
+		JournalMode:       "MEMORY",
+		SynchronousMode:   "OFF",
+	}
+
+	pool, err := NewConnectionPool(cfg)
+	if err != nil {
+		t.Fatalf("failed to create connection pool: %v", err)
+	}
+	defer pool.Close()
+
+	migrator, err := NewMigrator(pool)
+	if err != nil {
+		t.Fatalf("failed to create migrator: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Test initial migration version
+	version, err := migrator.MigrationVersion(ctx)
+	if err != nil {
+		t.Fatalf("failed to get migration version: %v", err)
+	}
+	if version != 0 {
+		t.Errorf("expected version 0, got %d", version)
+	}
+
+	// Test pending migrations
+	pending, err := migrator.IsPending(ctx)
+	if err != nil {
+		t.Fatalf("failed to check pending: %v", err)
+	}
+	if !pending {
+		t.Error("should have pending migrations")
+	}
+
+	// Get pending migrations list
+	pendingMigrations, err := migrator.GetPendingMigrations(ctx)
+	if err != nil {
+		t.Fatalf("failed to get pending migrations: %v", err)
+	}
+	if len(pendingMigrations) < 2 {
+		t.Errorf("expected at least 2 pending migrations, got %d", len(pendingMigrations))
+	}
+
+	// Run all migrations
+	if err := migrator.Migrate(ctx); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	// Check version after migration
+	version, err = migrator.MigrationVersion(ctx)
+	if err != nil {
+		t.Fatalf("failed to get migration version: %v", err)
+	}
+	if version < 2 {
+		t.Errorf("expected version >= 2, got %d", version)
+	}
+
+	// Check no pending migrations
+	pending, err = migrator.IsPending(ctx)
+	if err != nil {
+		t.Fatalf("failed to check pending: %v", err)
+	}
+	if pending {
+		t.Error("should not have pending migrations")
+	}
+
+	// Test migration status
+	status, err := migrator.MigrationStatus(ctx)
+	if err != nil {
+		t.Fatalf("failed to get migration status: %v", err)
+	}
+	if len(status) < 2 {
+		t.Errorf("expected at least 2 migration statuses, got %d", len(status))
+	}
+	for _, s := range status {
+		if !s.Applied {
+			t.Errorf("migration %d should be applied", s.Version)
+		}
+		if s.AppliedAt == nil {
+			t.Errorf("migration %d should have applied_at timestamp", s.Version)
+		}
+	}
+
+	// Test migrations are idempotent (running again should not fail)
+	if err := migrator.Migrate(ctx); err != nil {
+		t.Errorf("running migrations again should not fail: %v", err)
+	}
+}
+
+// TestMigratorRollback tests migration rollback functionality.
+func TestMigratorRollback(t *testing.T) {
+	cfg := &ConnectionConfig{
+		DSN:               ":memory:",
+		MaxOpenConns:      1,
+		MaxIdleConns:      1,
+		EnableForeignKeys: true,
+		JournalMode:       "MEMORY",
+		SynchronousMode:   "OFF",
+	}
+
+	pool, err := NewConnectionPool(cfg)
+	if err != nil {
+		t.Fatalf("failed to create connection pool: %v", err)
+	}
+	defer pool.Close()
+
+	migrator, err := NewMigrator(pool)
+	if err != nil {
+		t.Fatalf("failed to create migrator: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Run all migrations
+	if err := migrator.Migrate(ctx); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	// Get version after full migration
+	versionBefore, err := migrator.MigrationVersion(ctx)
+	if err != nil {
+		t.Fatalf("failed to get migration version: %v", err)
+	}
+
+	// Rollback one migration
+	if err := migrator.MigrateDown(ctx, 1); err != nil {
+		t.Fatalf("failed to rollback migration: %v", err)
+	}
+
+	// Check version decreased
+	versionAfter, err := migrator.MigrationVersion(ctx)
+	if err != nil {
+		t.Fatalf("failed to get migration version: %v", err)
+	}
+	if versionAfter >= versionBefore {
+		t.Errorf("version should have decreased: before=%d, after=%d", versionBefore, versionAfter)
+	}
+
+	// Migrate up again
+	if err := migrator.MigrateUp(ctx, 1); err != nil {
+		t.Fatalf("failed to migrate up: %v", err)
+	}
+
+	// Check version increased
+	versionFinal, err := migrator.MigrationVersion(ctx)
+	if err != nil {
+		t.Fatalf("failed to get migration version: %v", err)
+	}
+	if versionFinal != versionBefore {
+		t.Errorf("expected version %d, got %d", versionBefore, versionFinal)
+	}
+}
+
+// TestSeeder tests the database seeder.
+func TestSeeder(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+
+	seeder := repo.Seeder()
+	if seeder == nil {
+		t.Fatal("seeder should not be nil")
+	}
+
+	// Check if seeded (should be true after testRepo since auto-seed is enabled)
+	isSeeded, err := seeder.IsSeeded(ctx)
+	if err != nil {
+		t.Fatalf("failed to check if seeded: %v", err)
+	}
+	if !isSeeded {
+		t.Error("database should be seeded")
+	}
+
+	// Get seed status
+	status, err := seeder.GetSeedStatus(ctx)
+	if err != nil {
+		t.Fatalf("failed to get seed status: %v", err)
+	}
+	if !status.HasAdmin {
+		t.Error("should have admin user")
+	}
+	if status.UserCount < 1 {
+		t.Error("should have at least 1 user")
+	}
+	if status.MailboxCount < 1 {
+		t.Error("should have at least 1 mailbox")
+	}
+
+	// Verify admin user exists
+	admins, err := repo.Users().GetAdmins(ctx)
+	if err != nil {
+		t.Fatalf("failed to get admins: %v", err)
+	}
+	if len(admins) < 1 {
+		t.Error("should have at least 1 admin")
+	}
+
+	// Seeding again should be idempotent (not create duplicate admin)
+	if err := seeder.Seed(ctx); err != nil {
+		t.Errorf("seeding again should not fail: %v", err)
+	}
+
+	// Check admin count is still 1
+	admins, err = repo.Users().GetAdmins(ctx)
+	if err != nil {
+		t.Fatalf("failed to get admins: %v", err)
+	}
+	if len(admins) != 1 {
+		t.Errorf("should still have 1 admin, got %d", len(admins))
+	}
+}
+
+// TestSeederWithConfig tests the seeder with custom configuration.
+func TestSeederWithConfig(t *testing.T) {
+	cfg := &ConnectionConfig{
+		DSN:               ":memory:",
+		MaxOpenConns:      1,
+		MaxIdleConns:      1,
+		EnableForeignKeys: true,
+		JournalMode:       "MEMORY",
+		SynchronousMode:   "OFF",
+	}
+
+	pool, err := NewConnectionPool(cfg)
+	if err != nil {
+		t.Fatalf("failed to create connection pool: %v", err)
+	}
+
+	// Create repo without auto-seed
+	repo, err := NewWithOptions(pool, true, false)
+	if err != nil {
+		pool.Close()
+		t.Fatalf("failed to create repository: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+
+	// Verify not seeded
+	isSeeded, err := repo.IsSeeded(ctx)
+	if err != nil {
+		t.Fatalf("failed to check if seeded: %v", err)
+	}
+	if isSeeded {
+		t.Error("database should not be seeded yet")
+	}
+
+	// Seed with custom config
+	config := &SeedConfig{
+		AdminUsername:          "customadmin",
+		AdminEmail:             "customadmin@test.local",
+		AdminPassword:          "custompassword123",
+		CreateDefaultMailboxes: true,
+		DefaultMailboxAddress:  "custom@test.local",
+		CreateCatchAll:         false,
+	}
+
+	if err := repo.SeedWithConfig(ctx, config); err != nil {
+		t.Fatalf("failed to seed with config: %v", err)
+	}
+
+	// Verify admin was created with custom username
+	admin, err := repo.Users().GetByUsername(ctx, "customadmin")
+	if err != nil {
+		t.Fatalf("failed to get custom admin: %v", err)
+	}
+	if admin.Email != "customadmin@test.local" {
+		t.Errorf("expected email customadmin@test.local, got %s", admin.Email)
+	}
+	if admin.Role != domain.RoleAdmin {
+		t.Errorf("expected role admin, got %s", admin.Role)
+	}
+	if admin.Status != domain.StatusActive {
+		t.Errorf("expected status active, got %s", admin.Status)
+	}
+
+	// Verify mailbox was created
+	mailbox, err := repo.Mailboxes().GetByAddress(ctx, "custom@test.local")
+	if err != nil {
+		t.Fatalf("failed to get custom mailbox: %v", err)
+	}
+	if mailbox.UserID != admin.ID {
+		t.Errorf("mailbox should belong to admin user")
+	}
+	if !mailbox.IsDefault {
+		t.Error("mailbox should be default")
+	}
+}
+
+// TestCreateUserWithMailbox tests creating a user with default mailbox.
+func TestCreateUserWithMailbox(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+
+	seeder := repo.Seeder()
+
+	// Create new user with mailbox
+	user, mailbox, err := seeder.CreateUserWithMailbox(ctx, "newuser", "newuser@test.local", "password123")
+	if err != nil {
+		t.Fatalf("failed to create user with mailbox: %v", err)
+	}
+
+	// Verify user
+	if user.Username != "newuser" {
+		t.Errorf("expected username newuser, got %s", user.Username)
+	}
+	if user.Role != domain.RoleUser {
+		t.Errorf("expected role user, got %s", user.Role)
+	}
+
+	// Verify mailbox
+	if mailbox.UserID != user.ID {
+		t.Errorf("mailbox should belong to created user")
+	}
+	if mailbox.Address != "newuser@localhost" {
+		t.Errorf("expected address newuser@localhost, got %s", mailbox.Address)
+	}
+	if !mailbox.IsDefault {
+		t.Error("mailbox should be default")
+	}
+}
+
+// TestParseMigrationContent tests the migration content parser.
+func TestParseMigrationContent(t *testing.T) {
+	tests := []struct {
+		name        string
+		content     string
+		expectedUp  string
+		expectedDn  string
+	}{
+		{
+			name:        "no markers",
+			content:     "CREATE TABLE test (id INT);",
+			expectedUp:  "CREATE TABLE test (id INT);",
+			expectedDn:  "",
+		},
+		{
+			name: "with markers",
+			content: `-- +migrate Up
+CREATE TABLE test (id INT);
+-- +migrate Down
+DROP TABLE test;`,
+			expectedUp: "CREATE TABLE test (id INT);",
+			expectedDn: "DROP TABLE test;",
+		},
+		{
+			name: "up only",
+			content: `-- +migrate Up
+CREATE TABLE test (id INT);`,
+			expectedUp: "CREATE TABLE test (id INT);",
+			expectedDn: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			upSQL, downSQL := parseMigrationContent(tt.content)
+			if upSQL != tt.expectedUp {
+				t.Errorf("expected up '%s', got '%s'", tt.expectedUp, upSQL)
+			}
+			if downSQL != tt.expectedDn {
+				t.Errorf("expected down '%s', got '%s'", tt.expectedDn, downSQL)
+			}
+		})
+	}
+}
+
+// TestSplitStatements tests SQL statement splitting.
+func TestSplitStatements(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		expected int
+	}{
+		{
+			name:     "single statement",
+			sql:      "SELECT 1",
+			expected: 1,
+		},
+		{
+			name:     "two statements",
+			sql:      "SELECT 1; SELECT 2",
+			expected: 2,
+		},
+		{
+			name:     "semicolon in string",
+			sql:      "INSERT INTO t VALUES ('a;b');",
+			expected: 1,
+		},
+		{
+			name:     "empty",
+			sql:      "",
+			expected: 0,
+		},
+		{
+			name:     "multiple with newlines",
+			sql:      "CREATE TABLE t1 (id INT);\nCREATE TABLE t2 (id INT);\nCREATE TABLE t3 (id INT);",
+			expected: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmts := splitStatements(tt.sql)
+			if len(stmts) != tt.expected {
+				t.Errorf("expected %d statements, got %d: %v", tt.expected, len(stmts), stmts)
+			}
+		})
+	}
+}
