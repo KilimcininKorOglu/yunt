@@ -494,7 +494,40 @@ func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria,
 func (s *Session) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *imap.FetchOptions) error {
 	s.logger.Debug().Msg("FETCH command")
 
-	// TODO: Implement fetch
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
+	}
+
+	// Check if a mailbox is selected
+	if s.userSession == nil || s.userSession.SelectedMailbox == nil {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "No mailbox selected",
+		}
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create the fetch handler
+	handler := NewFetchHandler(
+		s.server.backend.Repository(),
+		s.userSession.User.ID,
+		s.userSession.SelectedMailbox,
+	)
+
+	// Execute the fetch
+	if err := handler.Fetch(ctx, w, numSet, options); err != nil {
+		s.logger.Warn().
+			Err(err).
+			Msg("FETCH failed")
+		return err
+	}
+
 	return nil
 }
 
