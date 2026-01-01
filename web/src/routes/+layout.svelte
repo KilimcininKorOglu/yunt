@@ -4,6 +4,8 @@
 	import { goto } from '$app/navigation';
 	import { authStore } from '$stores/auth';
 	import { isPublicRoute, isGuestOnlyRoute } from '$lib/guards/auth';
+	import { pollingService } from '$lib/services/polling';
+	import Toast from '$components/Toast.svelte';
 
 	interface Props {
 		children?: import('svelte').Snippet;
@@ -43,7 +45,24 @@
 			goto(`/login${redirectUrl}`);
 		}
 	});
+
+	// Start/stop polling based on authentication state
+	$effect(() => {
+		if (initialized && authStore.isAuthenticated) {
+			pollingService.start();
+		} else {
+			pollingService.stop();
+		}
+
+		// Cleanup on unmount
+		return () => {
+			pollingService.stop();
+		};
+	});
 </script>
+
+<!-- Toast notifications (always rendered) -->
+<Toast />
 
 {#if !initialized || authStore.isLoading}
 	<!-- Loading state while checking authentication -->
