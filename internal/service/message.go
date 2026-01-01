@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 
 	"yunt/internal/domain"
 	"yunt/internal/parser"
@@ -710,4 +711,890 @@ func (e *MessageServiceError) Is(target error) bool {
 		return false
 	}
 	return errors.Is(e.Err, target)
+}
+
+// User-aware methods that verify mailbox ownership before performing operations.
+
+// verifyMessageAccess checks if the user owns the mailbox containing the message.
+func (s *MessageService) verifyMessageAccess(ctx context.Context, message *domain.Message, userID domain.ID) error {
+	mailbox, err := s.repo.Mailboxes().GetByID(ctx, message.MailboxID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "verify_access",
+			Message: "failed to get mailbox",
+			Err:     err,
+		}
+	}
+
+	if mailbox.UserID != userID {
+		return &MessageServiceError{
+			Op:      "verify_access",
+			Message: "access denied to message",
+			Err:     domain.ErrForbidden,
+		}
+	}
+
+	return nil
+}
+
+// getUserMailboxIDs returns all mailbox IDs owned by the user.
+func (s *MessageService) getUserMailboxIDs(ctx context.Context, userID domain.ID) ([]domain.ID, error) {
+	result, err := s.repo.Mailboxes().ListByUser(ctx, userID, nil)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_user_mailboxes",
+			Message: "failed to get user mailboxes",
+			Err:     err,
+		}
+	}
+
+	ids := make([]domain.ID, len(result.Items))
+	for i, mailbox := range result.Items {
+		ids[i] = mailbox.ID
+	}
+
+	return ids, nil
+}
+
+// ListMessagesForUser lists messages for a specific user with optional filtering.
+// It automatically restricts results to mailboxes owned by the user.
+func (s *MessageService) ListMessagesForUser(
+	ctx context.Context,
+	userID domain.ID,
+	filter *repository.MessageFilter,
+	opts *repository.ListOptions,
+) (*repository.ListResult[*domain.Message], error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "list_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// Get user's mailbox IDs
+	mailboxIDs, err := s.getUserMailboxIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(mailboxIDs) == 0 {
+		// User has no mailboxes, return empty result
+		return &repository.ListResult[*domain.Message]{
+			Items: []*domain.Message{},
+			Total: 0,
+		}, nil
+	}
+
+	// Create filter if nil
+	if filter == nil {
+		filter = &repository.MessageFilter{}
+	}
+
+	// If a specific mailbox is requested, verify ownership
+	if filter.MailboxID != nil {
+		found := false
+		for _, id := range mailboxIDs {
+			if id == *filter.MailboxID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, &MessageServiceError{
+				Op:      "list_for_user",
+				Message: "access denied to mailbox",
+				Err:     domain.ErrForbidden,
+			}
+		}
+	} else {
+		// Restrict to user's mailboxes
+		filter.MailboxIDs = mailboxIDs
+	}
+
+	result, err := s.repo.Messages().List(ctx, filter, opts)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "list_for_user",
+			Message: "failed to list messages",
+			Err:     err,
+		}
+	}
+
+	return result, nil
+}
+
+// SearchMessagesForUser searches messages for a specific user.
+func (s *MessageService) SearchMessagesForUser(
+	ctx context.Context,
+	userID domain.ID,
+	searchOpts *repository.SearchOptions,
+	filter *repository.MessageFilter,
+	opts *repository.ListOptions,
+) (*repository.ListResult[*domain.Message], error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "search_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// Get user's mailbox IDs
+	mailboxIDs, err := s.getUserMailboxIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(mailboxIDs) == 0 {
+		return &repository.ListResult[*domain.Message]{
+			Items: []*domain.Message{},
+			Total: 0,
+		}, nil
+	}
+
+	// Create filter if nil
+	if filter == nil {
+		filter = &repository.MessageFilter{}
+	}
+
+	// If a specific mailbox is requested, verify ownership
+	if filter.MailboxID != nil {
+		found := false
+		for _, id := range mailboxIDs {
+			if id == *filter.MailboxID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, &MessageServiceError{
+				Op:      "search_for_user",
+				Message: "access denied to mailbox",
+				Err:     domain.ErrForbidden,
+			}
+		}
+	} else {
+		// Restrict to user's mailboxes
+		filter.MailboxIDs = mailboxIDs
+	}
+
+	result, err := s.repo.Messages().Search(ctx, searchOpts, filter, opts)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "search_for_user",
+			Message: "failed to search messages",
+			Err:     err,
+		}
+	}
+
+	return result, nil
+}
+
+// GetMessageForUser retrieves a message verifying user ownership.
+func (s *MessageService) GetMessageForUser(ctx context.Context, messageID, userID domain.ID) (*domain.Message, error) {
+	if messageID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return nil, err
+	}
+
+	return msg, nil
+}
+
+// GetRawMessageForUser retrieves the raw message body verifying user ownership.
+func (s *MessageService) GetRawMessageForUser(ctx context.Context, messageID, userID domain.ID) ([]byte, error) {
+	if messageID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_raw_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_raw_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_raw_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return nil, err
+	}
+
+	rawBody, err := s.repo.Messages().GetRawBody(ctx, messageID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_raw_for_user",
+			Message: "failed to get raw message body",
+			Err:     err,
+		}
+	}
+
+	return rawBody, nil
+}
+
+// GetAttachmentsForUser retrieves attachments for a message verifying user ownership.
+func (s *MessageService) GetAttachmentsForUser(ctx context.Context, messageID, userID domain.ID) ([]*domain.Attachment, error) {
+	if messageID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_attachments_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_attachments_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_attachments_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return nil, err
+	}
+
+	attachments, err := s.repo.Attachments().ListByMessage(ctx, messageID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_attachments_for_user",
+			Message: "failed to get attachments",
+			Err:     err,
+		}
+	}
+
+	return attachments, nil
+}
+
+// GetAttachmentForUser retrieves a specific attachment verifying user ownership.
+func (s *MessageService) GetAttachmentForUser(ctx context.Context, messageID, attachmentID, userID domain.ID) (*domain.Attachment, error) {
+	if messageID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if attachmentID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_for_user",
+			Message: "attachment ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access to the message
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return nil, err
+	}
+
+	// Get the attachment
+	attachment, err := s.repo.Attachments().GetByID(ctx, attachmentID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_for_user",
+			Message: "failed to get attachment",
+			Err:     err,
+		}
+	}
+
+	// Verify the attachment belongs to the message
+	if attachment.MessageID != messageID {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_for_user",
+			Message: "attachment does not belong to this message",
+			Err:     domain.ErrNotFound,
+		}
+	}
+
+	return attachment, nil
+}
+
+// GetAttachmentContentForUser retrieves attachment content verifying user ownership.
+func (s *MessageService) GetAttachmentContentForUser(ctx context.Context, messageID, attachmentID, userID domain.ID) (*domain.Attachment, io.ReadCloser, error) {
+	// First get and verify the attachment
+	attachment, err := s.GetAttachmentForUser(ctx, messageID, attachmentID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Get the content
+	content, err := s.repo.Attachments().GetContent(ctx, attachmentID)
+	if err != nil {
+		return nil, nil, &MessageServiceError{
+			Op:      "get_attachment_content_for_user",
+			Message: "failed to get attachment content",
+			Err:     err,
+		}
+	}
+
+	return attachment, content, nil
+}
+
+// DeleteMessageForUser deletes a message verifying user ownership.
+func (s *MessageService) DeleteMessageForUser(ctx context.Context, messageID, userID domain.ID) error {
+	if messageID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "delete_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "delete_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "delete_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return err
+	}
+
+	// Delete the message
+	return s.DeleteMessage(ctx, messageID)
+}
+
+// MarkAsReadForUser marks a message as read verifying user ownership.
+func (s *MessageService) MarkAsReadForUser(ctx context.Context, messageID, userID domain.ID) error {
+	if messageID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "mark_read_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "mark_read_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "mark_read_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return err
+	}
+
+	return s.MarkAsRead(ctx, messageID)
+}
+
+// MarkAsUnreadForUser marks a message as unread verifying user ownership.
+func (s *MessageService) MarkAsUnreadForUser(ctx context.Context, messageID, userID domain.ID) error {
+	if messageID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "mark_unread_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "mark_unread_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "mark_unread_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return err
+	}
+
+	return s.MarkAsUnread(ctx, messageID)
+}
+
+// StarForUser stars a message verifying user ownership.
+func (s *MessageService) StarForUser(ctx context.Context, messageID, userID domain.ID) error {
+	if messageID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "star_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "star_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "star_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return err
+	}
+
+	if err := s.repo.Messages().Star(ctx, messageID); err != nil {
+		return &MessageServiceError{
+			Op:      "star_for_user",
+			Message: "failed to star message",
+			Err:     err,
+		}
+	}
+
+	return nil
+}
+
+// UnstarForUser unstars a message verifying user ownership.
+func (s *MessageService) UnstarForUser(ctx context.Context, messageID, userID domain.ID) error {
+	if messageID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "unstar_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "unstar_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "unstar_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return err
+	}
+
+	if err := s.repo.Messages().Unstar(ctx, messageID); err != nil {
+		return &MessageServiceError{
+			Op:      "unstar_for_user",
+			Message: "failed to unstar message",
+			Err:     err,
+		}
+	}
+
+	return nil
+}
+
+// MarkAsSpamForUser marks a message as spam verifying user ownership.
+func (s *MessageService) MarkAsSpamForUser(ctx context.Context, messageID, userID domain.ID) error {
+	if messageID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "mark_spam_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "mark_spam_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "mark_spam_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return err
+	}
+
+	if err := s.repo.Messages().MarkAsSpam(ctx, messageID); err != nil {
+		return &MessageServiceError{
+			Op:      "mark_spam_for_user",
+			Message: "failed to mark message as spam",
+			Err:     err,
+		}
+	}
+
+	return nil
+}
+
+// MarkAsNotSpamForUser marks a message as not spam verifying user ownership.
+func (s *MessageService) MarkAsNotSpamForUser(ctx context.Context, messageID, userID domain.ID) error {
+	if messageID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "mark_not_spam_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "mark_not_spam_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "mark_not_spam_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return err
+	}
+
+	if err := s.repo.Messages().MarkAsNotSpam(ctx, messageID); err != nil {
+		return &MessageServiceError{
+			Op:      "mark_not_spam_for_user",
+			Message: "failed to mark message as not spam",
+			Err:     err,
+		}
+	}
+
+	return nil
+}
+
+// MoveMessageForUser moves a message to a different mailbox verifying user ownership of both.
+func (s *MessageService) MoveMessageForUser(ctx context.Context, messageID, targetMailboxID, userID domain.ID) error {
+	if messageID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "move_for_user",
+			Message: "message ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if targetMailboxID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "move_for_user",
+			Message: "target mailbox ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return &MessageServiceError{
+			Op:      "move_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// First verify access to the message
+	msg, err := s.repo.Messages().GetByID(ctx, messageID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "move_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return err
+	}
+
+	// Verify access to the target mailbox
+	targetMailbox, err := s.repo.Mailboxes().GetByID(ctx, targetMailboxID)
+	if err != nil {
+		return &MessageServiceError{
+			Op:      "move_for_user",
+			Message: "failed to get target mailbox",
+			Err:     err,
+		}
+	}
+
+	if targetMailbox.UserID != userID {
+		return &MessageServiceError{
+			Op:      "move_for_user",
+			Message: "access denied to target mailbox",
+			Err:     domain.ErrForbidden,
+		}
+	}
+
+	return s.MoveMessage(ctx, messageID, targetMailboxID)
+}
+
+// BulkMarkAsReadForUser marks multiple messages as read verifying user ownership.
+func (s *MessageService) BulkMarkAsReadForUser(ctx context.Context, messageIDs []domain.ID, userID domain.ID) (*repository.BulkOperation, error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "bulk_mark_read_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	result := repository.NewBulkOperation()
+
+	for _, messageID := range messageIDs {
+		if err := s.MarkAsReadForUser(ctx, messageID, userID); err != nil {
+			result.AddFailure(string(messageID), err)
+		} else {
+			result.AddSuccess()
+		}
+	}
+
+	return result, nil
+}
+
+// BulkMarkAsUnreadForUser marks multiple messages as unread verifying user ownership.
+func (s *MessageService) BulkMarkAsUnreadForUser(ctx context.Context, messageIDs []domain.ID, userID domain.ID) (*repository.BulkOperation, error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "bulk_mark_unread_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	result := repository.NewBulkOperation()
+
+	for _, messageID := range messageIDs {
+		if err := s.MarkAsUnreadForUser(ctx, messageID, userID); err != nil {
+			result.AddFailure(string(messageID), err)
+		} else {
+			result.AddSuccess()
+		}
+	}
+
+	return result, nil
+}
+
+// BulkDeleteForUser deletes multiple messages verifying user ownership.
+func (s *MessageService) BulkDeleteForUser(ctx context.Context, messageIDs []domain.ID, userID domain.ID) (*repository.BulkOperation, error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "bulk_delete_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	result := repository.NewBulkOperation()
+
+	for _, messageID := range messageIDs {
+		if err := s.DeleteMessageForUser(ctx, messageID, userID); err != nil {
+			result.AddFailure(string(messageID), err)
+		} else {
+			result.AddSuccess()
+		}
+	}
+
+	return result, nil
+}
+
+// BulkMoveForUser moves multiple messages verifying user ownership.
+func (s *MessageService) BulkMoveForUser(ctx context.Context, messageIDs []domain.ID, targetMailboxID, userID domain.ID) (*repository.BulkOperation, error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "bulk_move_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if targetMailboxID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "bulk_move_for_user",
+			Message: "target mailbox ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// Verify access to the target mailbox first
+	targetMailbox, err := s.repo.Mailboxes().GetByID(ctx, targetMailboxID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "bulk_move_for_user",
+			Message: "failed to get target mailbox",
+			Err:     err,
+		}
+	}
+
+	if targetMailbox.UserID != userID {
+		return nil, &MessageServiceError{
+			Op:      "bulk_move_for_user",
+			Message: "access denied to target mailbox",
+			Err:     domain.ErrForbidden,
+		}
+	}
+
+	result := repository.NewBulkOperation()
+
+	for _, messageID := range messageIDs {
+		if err := s.MoveMessageForUser(ctx, messageID, targetMailboxID, userID); err != nil {
+			result.AddFailure(string(messageID), err)
+		} else {
+			result.AddSuccess()
+		}
+	}
+
+	return result, nil
+}
+
+// BulkStarForUser stars multiple messages verifying user ownership.
+func (s *MessageService) BulkStarForUser(ctx context.Context, messageIDs []domain.ID, userID domain.ID) (*repository.BulkOperation, error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "bulk_star_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	result := repository.NewBulkOperation()
+
+	for _, messageID := range messageIDs {
+		if err := s.StarForUser(ctx, messageID, userID); err != nil {
+			result.AddFailure(string(messageID), err)
+		} else {
+			result.AddSuccess()
+		}
+	}
+
+	return result, nil
+}
+
+// BulkUnstarForUser unstars multiple messages verifying user ownership.
+func (s *MessageService) BulkUnstarForUser(ctx context.Context, messageIDs []domain.ID, userID domain.ID) (*repository.BulkOperation, error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "bulk_unstar_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	result := repository.NewBulkOperation()
+
+	for _, messageID := range messageIDs {
+		if err := s.UnstarForUser(ctx, messageID, userID); err != nil {
+			result.AddFailure(string(messageID), err)
+		} else {
+			result.AddSuccess()
+		}
+	}
+
+	return result, nil
 }

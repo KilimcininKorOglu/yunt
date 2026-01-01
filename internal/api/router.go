@@ -10,7 +10,6 @@ import (
 
 	"yunt/internal/api/middleware"
 	"yunt/internal/config"
-	"yunt/webui"
 )
 
 // RouterConfig contains configuration for the API router.
