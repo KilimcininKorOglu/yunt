@@ -149,12 +149,43 @@ func (s *Session) Select(mailbox string, options *imap.SelectOptions) (*imap.Sel
 		Str("mailbox", mailbox).
 		Msg("SELECT command")
 
-	// TODO: Implement mailbox selection
-	return nil, &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Code: imap.ResponseCodeNonExistent,
-		Text: "Mailbox does not exist",
+	if !s.IsAuthenticated() {
+		return nil, &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
 	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the mailbox operator
+	op := NewMailboxOperator(s.server.backend.Repository(), s.userSession.User.ID)
+
+	// Select the mailbox
+	domainMailbox, selectData, err := op.Select(ctx, mailbox, options)
+	if err != nil {
+		s.logger.Warn().
+			Str("mailbox", mailbox).
+			Err(err).
+			Msg("SELECT failed")
+		return nil, err
+	}
+
+	// Update session state
+	readOnly := options != nil && options.ReadOnly
+	s.userSession.SelectMailbox(domainMailbox, readOnly)
+	s.state = SessionStateSelected
+
+	s.logger.Info().
+		Str("mailbox", mailbox).
+		Int64("messages", domainMailbox.MessageCount).
+		Int64("unseen", domainMailbox.UnreadCount).
+		Bool("readOnly", readOnly).
+		Msg("Mailbox selected")
+
+	return selectData, nil
 }
 
 // Create creates a new mailbox.
@@ -163,11 +194,34 @@ func (s *Session) Create(mailbox string, options *imap.CreateOptions) error {
 		Str("mailbox", mailbox).
 		Msg("CREATE command")
 
-	// TODO: Implement mailbox creation
-	return &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Text: "CREATE not yet implemented",
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
 	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the mailbox operator
+	op := NewMailboxOperator(s.server.backend.Repository(), s.userSession.User.ID)
+
+	// Create the mailbox
+	if err := op.Create(ctx, mailbox, options); err != nil {
+		s.logger.Warn().
+			Str("mailbox", mailbox).
+			Err(err).
+			Msg("CREATE failed")
+		return err
+	}
+
+	s.logger.Info().
+		Str("mailbox", mailbox).
+		Msg("Mailbox created")
+
+	return nil
 }
 
 // Delete deletes a mailbox.
@@ -176,11 +230,34 @@ func (s *Session) Delete(mailbox string) error {
 		Str("mailbox", mailbox).
 		Msg("DELETE command")
 
-	// TODO: Implement mailbox deletion
-	return &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Text: "DELETE not yet implemented",
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
 	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the mailbox operator
+	op := NewMailboxOperator(s.server.backend.Repository(), s.userSession.User.ID)
+
+	// Delete the mailbox
+	if err := op.Delete(ctx, mailbox); err != nil {
+		s.logger.Warn().
+			Str("mailbox", mailbox).
+			Err(err).
+			Msg("DELETE failed")
+		return err
+	}
+
+	s.logger.Info().
+		Str("mailbox", mailbox).
+		Msg("Mailbox deleted")
+
+	return nil
 }
 
 // Rename renames a mailbox.
@@ -190,11 +267,36 @@ func (s *Session) Rename(mailbox, newName string, options *imap.RenameOptions) e
 		Str("new_name", newName).
 		Msg("RENAME command")
 
-	// TODO: Implement mailbox renaming
-	return &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Text: "RENAME not yet implemented",
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
 	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the mailbox operator
+	op := NewMailboxOperator(s.server.backend.Repository(), s.userSession.User.ID)
+
+	// Rename the mailbox
+	if err := op.Rename(ctx, mailbox, newName, options); err != nil {
+		s.logger.Warn().
+			Str("old_name", mailbox).
+			Str("new_name", newName).
+			Err(err).
+			Msg("RENAME failed")
+		return err
+	}
+
+	s.logger.Info().
+		Str("old_name", mailbox).
+		Str("new_name", newName).
+		Msg("Mailbox renamed")
+
+	return nil
 }
 
 // Subscribe subscribes to a mailbox.
@@ -203,11 +305,34 @@ func (s *Session) Subscribe(mailbox string) error {
 		Str("mailbox", mailbox).
 		Msg("SUBSCRIBE command")
 
-	// TODO: Implement subscription
-	return &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Text: "SUBSCRIBE not yet implemented",
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
 	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the mailbox operator
+	op := NewMailboxOperator(s.server.backend.Repository(), s.userSession.User.ID)
+
+	// Subscribe to the mailbox
+	if err := op.Subscribe(ctx, mailbox); err != nil {
+		s.logger.Warn().
+			Str("mailbox", mailbox).
+			Err(err).
+			Msg("SUBSCRIBE failed")
+		return err
+	}
+
+	s.logger.Debug().
+		Str("mailbox", mailbox).
+		Msg("Subscribed to mailbox")
+
+	return nil
 }
 
 // Unsubscribe unsubscribes from a mailbox.
@@ -216,11 +341,34 @@ func (s *Session) Unsubscribe(mailbox string) error {
 		Str("mailbox", mailbox).
 		Msg("UNSUBSCRIBE command")
 
-	// TODO: Implement unsubscription
-	return &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Text: "UNSUBSCRIBE not yet implemented",
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
 	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the mailbox operator
+	op := NewMailboxOperator(s.server.backend.Repository(), s.userSession.User.ID)
+
+	// Unsubscribe from the mailbox
+	if err := op.Unsubscribe(ctx, mailbox); err != nil {
+		s.logger.Warn().
+			Str("mailbox", mailbox).
+			Err(err).
+			Msg("UNSUBSCRIBE failed")
+		return err
+	}
+
+	s.logger.Debug().
+		Str("mailbox", mailbox).
+		Msg("Unsubscribed from mailbox")
+
+	return nil
 }
 
 // List lists mailboxes matching the given criteria.
@@ -230,8 +378,30 @@ func (s *Session) List(w *imapserver.ListWriter, ref string, patterns []string, 
 		Strs("patterns", patterns).
 		Msg("LIST command")
 
-	// TODO: Implement mailbox listing
-	// For now, return empty list (no mailboxes)
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the mailbox lister
+	lister := NewMailboxLister(s.server.backend.Repository(), s.userSession.User.ID)
+
+	// List mailboxes
+	if err := lister.List(ctx, w, ref, patterns, options); err != nil {
+		s.logger.Warn().
+			Str("ref", ref).
+			Strs("patterns", patterns).
+			Err(err).
+			Msg("LIST failed")
+		return err
+	}
+
 	return nil
 }
 
@@ -241,12 +411,31 @@ func (s *Session) Status(mailbox string, options *imap.StatusOptions) (*imap.Sta
 		Str("mailbox", mailbox).
 		Msg("STATUS command")
 
-	// TODO: Implement status
-	return nil, &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Code: imap.ResponseCodeNonExistent,
-		Text: "Mailbox does not exist",
+	if !s.IsAuthenticated() {
+		return nil, &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
 	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the mailbox operator
+	op := NewMailboxOperator(s.server.backend.Repository(), s.userSession.User.ID)
+
+	// Get status
+	statusData, err := op.Status(ctx, mailbox, options)
+	if err != nil {
+		s.logger.Warn().
+			Str("mailbox", mailbox).
+			Err(err).
+			Msg("STATUS failed")
+		return nil, err
+	}
+
+	return statusData, nil
 }
 
 // Append appends a message to a mailbox.
