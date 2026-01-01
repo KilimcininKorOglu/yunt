@@ -187,7 +187,9 @@
 								<span class={`h-2.5 w-2.5 rounded-full ${item.color}`}></span>
 								<span class="text-sm text-secondary-600">{item.label}</span>
 							</div>
-							<span class="text-sm font-medium text-secondary-900">{formatBytes(item.bytes)}</span>
+							<span class="text-sm font-medium text-secondary-900"
+								>{formatBytes(item.bytes)}</span
+							>
 						</div>
 					{/each}
 				</div>

@@ -102,7 +102,9 @@
 		<div class="mb-4 space-y-1">
 			{#each systemFolders as folder (folder.id)}
 				{@const isSelected =
-					folder.id === null ? selectedMailboxId === null : selectedMailboxId === folder.id}
+					folder.id === null
+						? selectedMailboxId === null
+						: selectedMailboxId === folder.id}
 				<button
 					type="button"
 					onclick={() => handleSelectMailbox(folder.id)}
@@ -111,7 +113,12 @@
 						: 'text-secondary-700 hover:bg-secondary-50'}"
 					title={collapsed ? folder.name : undefined}
 				>
-					<svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<svg
+						class="h-5 w-5 flex-shrink-0"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
@@ -137,7 +144,9 @@
 		{#if mailboxes.length > 0}
 			<div class="mb-2 border-t border-secondary-200 pt-4">
 				{#if !collapsed}
-					<h2 class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-secondary-500">
+					<h2
+						class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-secondary-500"
+					>
 						Mailboxes
 					</h2>
 				{/if}
@@ -150,7 +159,9 @@
 							class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors {isSelected
 								? 'bg-primary-50 text-primary-700'
 								: 'text-secondary-700 hover:bg-secondary-50'}"
-							title={collapsed ? `${mailbox.name} (${mailbox.unreadCount} unread)` : undefined}
+							title={collapsed
+								? `${mailbox.name} (${mailbox.unreadCount} unread)`
+								: undefined}
 						>
 							<svg
 								class="h-5 w-5 flex-shrink-0"

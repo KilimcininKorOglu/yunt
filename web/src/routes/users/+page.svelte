@@ -252,18 +252,12 @@
 		<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div>
 				<h1 class="text-2xl font-bold text-secondary-900">User Management</h1>
-				<p class="mt-1 text-sm text-secondary-500">
-					Manage users, roles, and permissions
-				</p>
+				<p class="mt-1 text-sm text-secondary-500">Manage users, roles, and permissions</p>
 			</div>
 
 			<div class="flex gap-3">
 				<!-- Back to dashboard -->
-				<button
-					type="button"
-					class="btn-secondary"
-					onclick={() => goto('/')}
-				>
+				<button type="button" class="btn-secondary" onclick={() => goto('/')}>
 					<svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path
 							stroke-linecap="round"

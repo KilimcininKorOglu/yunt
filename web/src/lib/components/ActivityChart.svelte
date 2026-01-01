@@ -43,12 +43,7 @@
 	const barGap = 8;
 
 	// Calculate max value for scaling
-	const maxValue = $derived(
-		Math.max(
-			1,
-			...data.map((d) => Math.max(d.received, d.sent ?? 0))
-		)
-	);
+	const maxValue = $derived(Math.max(1, ...data.map((d) => Math.max(d.received, d.sent ?? 0))));
 
 	// Calculate total messages
 	const totalReceived = $derived(data.reduce((sum, d) => sum + d.received, 0));
@@ -154,7 +149,10 @@
 				style="height: {height - chartPadding}px;"
 			>
 				{#each data as point, i (i)}
-					<div class="group relative flex flex-col items-center" style="width: {barWidth * 2 + barGap}px;">
+					<div
+						class="group relative flex flex-col items-center"
+						style="width: {barWidth * 2 + barGap}px;"
+					>
 						<div class="flex items-end gap-0.5" style="height: 100%;">
 							<!-- Received bar -->
 							<div

@@ -152,7 +152,9 @@
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-4">
 					<h1 class="text-2xl font-bold text-primary-600">Yunt</h1>
-					<span class="hidden text-sm text-secondary-400 sm:inline">Development Mail Server</span>
+					<span class="hidden text-sm text-secondary-400 sm:inline"
+						>Development Mail Server</span
+					>
 				</div>
 				<div class="flex items-center gap-4">
 					<!-- Refresh Button -->
@@ -202,9 +204,7 @@
 		<div class="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
 			<div>
 				<h2 class="text-xl font-semibold text-secondary-900">Dashboard</h2>
-				<p class="text-sm text-secondary-500">
-					Overview of your mail server activity
-				</p>
+				<p class="text-sm text-secondary-500">Overview of your mail server activity</p>
 			</div>
 			{#if lastRefresh}
 				<p class="text-xs text-secondary-400">
@@ -280,19 +280,27 @@
 							<p class="mt-1 font-mono text-sm text-secondary-700">localhost:8025</p>
 						</div>
 					</div>
-					<div class="mt-4 grid grid-cols-2 gap-4 border-t border-secondary-100 pt-4 sm:grid-cols-4">
+					<div
+						class="mt-4 grid grid-cols-2 gap-4 border-t border-secondary-100 pt-4 sm:grid-cols-4"
+					>
 						<div>
 							<p class="text-xs text-secondary-400">Total Mailboxes</p>
 							{#if loading}
-								<div class="mt-1 h-5 w-12 animate-pulse rounded bg-secondary-200"></div>
+								<div
+									class="mt-1 h-5 w-12 animate-pulse rounded bg-secondary-200"
+								></div>
 							{:else}
-								<p class="mt-1 text-lg font-semibold text-secondary-900">{totalMailboxes}</p>
+								<p class="mt-1 text-lg font-semibold text-secondary-900">
+									{totalMailboxes}
+								</p>
 							{/if}
 						</div>
 						<div>
 							<p class="text-xs text-secondary-400">Active Users</p>
 							{#if loading}
-								<div class="mt-1 h-5 w-12 animate-pulse rounded bg-secondary-200"></div>
+								<div
+									class="mt-1 h-5 w-12 animate-pulse rounded bg-secondary-200"
+								></div>
 							{:else}
 								<p class="mt-1 text-lg font-semibold text-secondary-900">
 									{stats?.users?.active ?? 0}
@@ -302,7 +310,9 @@
 						<div>
 							<p class="text-xs text-secondary-400">Uptime</p>
 							{#if loading}
-								<div class="mt-1 h-5 w-16 animate-pulse rounded bg-secondary-200"></div>
+								<div
+									class="mt-1 h-5 w-16 animate-pulse rounded bg-secondary-200"
+								></div>
 							{:else}
 								<p class="mt-1 text-lg font-semibold text-secondary-900">
 									{stats?.uptime ? Math.floor(stats.uptime / 3600) + 'h' : '0h'}
@@ -312,7 +322,9 @@
 						<div>
 							<p class="text-xs text-secondary-400">Messages/Hour</p>
 							{#if loading}
-								<div class="mt-1 h-5 w-12 animate-pulse rounded bg-secondary-200"></div>
+								<div
+									class="mt-1 h-5 w-12 animate-pulse rounded bg-secondary-200"
+								></div>
 							{:else}
 								<p class="mt-1 text-lg font-semibold text-secondary-900">
 									{stats?.uptime && stats.uptime > 0

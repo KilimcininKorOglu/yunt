@@ -72,7 +72,9 @@
 					stroke-linejoin="round"
 				>
 					{#if icon === 'mail'}
-						<path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+						<path
+							d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+						/>
 					{:else if icon === 'clock'}
 						<circle cx="12" cy="12" r="10" />
 						<path d="M12 6v6l4 2" />
@@ -82,7 +84,9 @@
 						<line x1="8" y1="2" x2="8" y2="6" />
 						<line x1="3" y1="10" x2="21" y2="10" />
 					{:else if icon === 'week'}
-						<path d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+						<path
+							d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"
+						/>
 						<path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
 					{/if}
 				</svg>
