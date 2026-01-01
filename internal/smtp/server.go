@@ -3,15 +3,15 @@ package smtp
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
 	"github.com/rs/zerolog"
+
+	"yunt/internal/repository"
 )
 
 // Server represents an SMTP server instance.
@@ -20,6 +20,11 @@ type Server struct {
 	server   *smtp.Server
 	logger   zerolog.Logger
 	listener net.Listener
+	backend  *Backend
+
+	// Repositories for message handling
+	mailboxRepo repository.MailboxRepository
+	messageRepo repository.MessageRepository
 
 	// State management
 	running  atomic.Bool
@@ -30,13 +35,30 @@ type Server struct {
 	stats *Stats
 }
 
+// ServerOption is a functional option for configuring the Server.
+type ServerOption func(*Server)
+
+// WithMailboxRepo sets the mailbox repository for recipient validation.
+func WithMailboxRepo(repo repository.MailboxRepository) ServerOption {
+	return func(s *Server) {
+		s.mailboxRepo = repo
+	}
+}
+
+// WithMessageRepo sets the message repository for message storage.
+func WithMessageRepo(repo repository.MessageRepository) ServerOption {
+	return func(s *Server) {
+		s.messageRepo = repo
+	}
+}
+
 // Stats holds server statistics.
 type Stats struct {
-	mu              sync.RWMutex
-	startTime       time.Time
-	connectionsOpen int64
+	mu               sync.RWMutex
+	startTime        time.Time
+	connectionsOpen  int64
 	connectionsTotal int64
-	messagesTotal   int64
+	messagesTotal    int64
 }
 
 // NewStats creates a new Stats instance.
@@ -78,7 +100,9 @@ func (s *Stats) GetStats() (uptime time.Duration, connectionsOpen, connectionsTo
 }
 
 // New creates a new SMTP server with the given configuration and logger.
-func New(cfg *Config, logger zerolog.Logger) (*Server, error) {
+// Optional ServerOptions can be provided to inject repositories for
+// recipient validation and message storage.
+func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
@@ -94,8 +118,21 @@ func New(cfg *Config, logger zerolog.Logger) (*Server, error) {
 		stats:    NewStats(),
 	}
 
-	// Create the SMTP backend
-	backend := newBackend(s)
+	// Apply options
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	// Create the SMTP backend with repository options
+	backendOpts := make([]BackendOption, 0)
+	if s.mailboxRepo != nil {
+		backendOpts = append(backendOpts, WithMailboxRepository(s.mailboxRepo))
+	}
+	if s.messageRepo != nil {
+		backendOpts = append(backendOpts, WithMessageRepository(s.messageRepo))
+	}
+	backend := NewBackend(s, backendOpts...)
+	s.backend = backend
 
 	// Create the go-smtp server
 	smtpServer := smtp.NewServer(backend)
@@ -257,124 +294,7 @@ func (l *smtpErrorLogger) Println(v ...interface{}) {
 	l.logger.Error().Msg(fmt.Sprint(v...))
 }
 
-// backend implements the smtp.Backend interface.
-type backend struct {
-	server *Server
-}
-
-// newBackend creates a new SMTP backend.
-func newBackend(s *Server) *backend {
-	return &backend{server: s}
-}
-
-// NewSession creates a new SMTP session.
-func (b *backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
-	b.server.stats.ConnectionOpened()
-
-	remoteAddr := c.Conn().RemoteAddr().String()
-	b.server.logger.Info().
-		Str("remoteAddr", remoteAddr).
-		Str("hostname", c.Hostname()).
-		Msg("new connection")
-
-	return &session{
-		backend:    b,
-		conn:       c,
-		remoteAddr: remoteAddr,
-		logger:     b.server.logger.With().Str("remoteAddr", remoteAddr).Logger(),
-	}, nil
-}
-
-// session implements the smtp.Session interface.
-type session struct {
-	backend    *backend
-	conn       *smtp.Conn
-	remoteAddr string
-	logger     zerolog.Logger
-
-	// Session state
-	from       string
-	recipients []string
-}
-
-// AuthMechanisms returns the list of supported authentication mechanisms.
-func (s *session) AuthMechanisms() []string {
-	// If auth is required or explicitly enabled, return supported mechanisms
-	if s.backend.server.config.AuthRequired {
-		return []string{"PLAIN", "LOGIN"}
-	}
-	return []string{}
-}
-
-// Auth handles SMTP authentication.
-// Note: This is a placeholder - full authentication will be implemented
-// when integrating with the user service.
-func (s *session) Auth(mech string) (sasl.Server, error) {
-	s.logger.Debug().Str("mechanism", mech).Msg("auth attempt")
-	// For now, return auth unsupported as we don't have user service integration
-	return nil, smtp.ErrAuthUnsupported
-}
-
-// Mail handles the MAIL FROM command.
-func (s *session) Mail(from string, opts *smtp.MailOptions) error {
-	s.logger.Debug().
-		Str("from", from).
-		Msg("MAIL FROM")
-
-	s.from = from
-	s.recipients = nil // Reset recipients for new message
-
-	return nil
-}
-
-// Rcpt handles the RCPT TO command.
-func (s *session) Rcpt(to string, opts *smtp.RcptOptions) error {
-	s.logger.Debug().
-		Str("to", to).
-		Int("recipientCount", len(s.recipients)+1).
-		Msg("RCPT TO")
-
-	s.recipients = append(s.recipients, to)
-	return nil
-}
-
-// Data handles the DATA command.
-func (s *session) Data(r io.Reader) error {
-	s.logger.Info().
-		Str("from", s.from).
-		Strs("to", s.recipients).
-		Msg("receiving message data")
-
-	// Read the message data
-	// For now, we just consume the data - actual message handling
-	// will be implemented when integrating with the storage service
-	data, err := io.ReadAll(r)
-	if err != nil {
-		s.logger.Error().Err(err).Msg("failed to read message data")
-		return err
-	}
-
-	s.logger.Info().
-		Str("from", s.from).
-		Strs("to", s.recipients).
-		Int("size", len(data)).
-		Msg("message received")
-
-	s.backend.server.stats.MessageReceived()
-
-	return nil
-}
-
-// Reset resets the session state.
-func (s *session) Reset() {
-	s.logger.Debug().Msg("session reset")
-	s.from = ""
-	s.recipients = nil
-}
-
-// Logout is called when the client disconnects.
-func (s *session) Logout() error {
-	s.logger.Info().Msg("connection closed")
-	s.backend.server.stats.ConnectionClosed()
-	return nil
+// Backend returns the SMTP backend.
+func (s *Server) Backend() *Backend {
+	return s.backend
 }
