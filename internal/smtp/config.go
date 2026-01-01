@@ -52,6 +52,12 @@ type Config struct {
 
 	// GracefulTimeout is the duration to wait for graceful shutdown.
 	GracefulTimeout time.Duration
+
+	// RateLimitEnabled determines if rate limiting is enabled.
+	RateLimitEnabled bool
+
+	// RateLimitConfig holds the rate limiting configuration.
+	RateLimitConfig *RateLimitConfig
 }
 
 // NewConfig creates a new SMTP Config from the application configuration.

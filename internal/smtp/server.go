@@ -2,7 +2,6 @@ package smtp
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"sync"
@@ -26,6 +25,9 @@ type Server struct {
 	// Repositories for message handling
 	mailboxRepo repository.MailboxRepository
 	messageRepo repository.MessageRepository
+
+	// Rate limiting
+	rateLimiter *RateLimiter
 
 	// State management
 	running  atomic.Bool
@@ -53,6 +55,22 @@ func WithMessageRepo(repo repository.MessageRepository) ServerOption {
 	}
 }
 
+// WithRateLimiter sets a custom rate limiter for the server.
+func WithRateLimiter(rl *RateLimiter) ServerOption {
+	return func(s *Server) {
+		s.rateLimiter = rl
+	}
+}
+
+// WithRateLimitConfig sets the rate limit configuration for the server.
+func WithRateLimitConfig(cfg *RateLimitConfig) ServerOption {
+	return func(s *Server) {
+		// Rate limiter will be created in New() with this config
+		s.rateLimiter = nil // Mark as needing creation
+		s.config.RateLimitConfig = cfg
+	}
+}
+
 // Stats holds server statistics.
 type Stats struct {
 	mu                    sync.RWMutex
@@ -62,6 +80,7 @@ type Stats struct {
 	messagesTotal         int64
 	tlsConnectionsTotal   int64
 	startTLSUpgradesTotal int64
+	rateLimitRejects      int64
 }
 
 // NewStats creates a new Stats instance.
@@ -123,6 +142,20 @@ func (s *Stats) GetTLSStats() (tlsConnectionsTotal, startTLSUpgradesTotal int64)
 	return s.tlsConnectionsTotal, s.startTLSUpgradesTotal
 }
 
+// RateLimitRejected increments the rate limit rejection counter.
+func (s *Stats) RateLimitRejected() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rateLimitRejects++
+}
+
+// GetRateLimitStats returns rate limit related statistics.
+func (s *Stats) GetRateLimitStats() int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.rateLimitRejects
+}
+
 // New creates a new SMTP server with the given configuration and logger.
 // Optional ServerOptions can be provided to inject repositories for
 // recipient validation and message storage.
@@ -145,6 +178,14 @@ func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, err
 	// Apply options
 	for _, opt := range opts {
 		opt(s)
+	}
+
+	// Create rate limiter if not provided via options
+	if s.rateLimiter == nil && cfg.RateLimitConfig != nil {
+		s.rateLimiter = NewRateLimiter(cfg.RateLimitConfig, s.logger)
+	} else if s.rateLimiter == nil && cfg.RateLimitEnabled {
+		// Use default rate limit config if enabled but no config provided
+		s.rateLimiter = NewRateLimiter(DefaultRateLimitConfig(), s.logger)
 	}
 
 	// Create the SMTP backend with repository options
@@ -242,6 +283,11 @@ func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info().Msg("stopping SMTP server")
 	s.running.Store(false)
 
+	// Stop the rate limiter
+	if s.rateLimiter != nil {
+		s.rateLimiter.Stop()
+	}
+
 	// Use graceful timeout from config if context has no deadline
 	shutdownCtx := ctx
 	if _, ok := ctx.Deadline(); !ok && s.config.GracefulTimeout > 0 {
@@ -323,27 +369,7 @@ func (s *Server) Backend() *Backend {
 	return s.backend
 }
 
-// Security returns the connection security state.
-func (s *Session) Security() *ConnectionSecurity {
-	return s.security
-}
-
-// updateTLSState updates the security state after STARTTLS handshake.
-// This is called internally when the connection is upgraded to TLS.
-func (s *Session) updateTLSState() {
-	if tlsConn, ok := s.conn.Conn().(*tls.Conn); ok {
-		tlsState := tlsConn.ConnectionState()
-		s.security.UpdateFromTLSState(tlsState, TLSStateStartTLS)
-		s.backend.server.stats.StartTLSUpgraded()
-		s.logger.Info().
-			Str("tlsState", s.security.TLSState().String()).
-			Str("tlsVersion", s.security.TLSVersion()).
-			Str("cipherSuite", s.security.CipherSuite()).
-			Msg("connection upgraded to TLS via STARTTLS")
-	}
-}
-
-// IsTLS returns true if the connection is secured with TLS.
-func (s *Session) IsTLS() bool {
-	return s.security.IsSecure()
+// RateLimiter returns the rate limiter (may be nil if disabled).
+func (s *Server) RateLimiter() *RateLimiter {
+	return s.rateLimiter
 }
