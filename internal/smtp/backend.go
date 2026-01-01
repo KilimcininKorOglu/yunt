@@ -19,6 +19,7 @@ type Backend struct {
 	messageRepo   repository.MessageRepository
 	repo          repository.Repository
 	authenticator *Authenticator
+	relayService  *service.RelayService
 }
 
 // BackendOption is a functional option for configuring the Backend.
@@ -43,6 +44,13 @@ func WithRepository(repo repository.Repository) BackendOption {
 	return func(b *Backend) {
 		b.repo = repo
 		b.authenticator = NewAuthenticator(repo)
+	}
+}
+
+// WithRelayService sets the relay service for forwarding messages.
+func WithRelayService(svc *service.RelayService) BackendOption {
+	return func(b *Backend) {
+		b.relayService = svc
 	}
 }
 
@@ -182,4 +190,23 @@ func (b *Backend) Authenticator() *Authenticator {
 // AuthEnabled returns true if authentication is available (repository is configured).
 func (b *Backend) AuthEnabled() bool {
 	return b.authenticator != nil
+}
+
+// RelayEnabled returns true if relay functionality is enabled.
+func (b *Backend) RelayEnabled() bool {
+	if b.relayService == nil {
+		return false
+	}
+	return b.relayService.IsEnabled()
+}
+
+// RelayMessage forwards a message to the external relay server.
+func (b *Backend) RelayMessage(ctx context.Context, from string, recipients []string, data []byte) *service.RelayResult {
+	if b.relayService == nil {
+		return &service.RelayResult{
+			Success: false,
+			Error:   fmt.Errorf("relay service not configured"),
+		}
+	}
+	return b.relayService.Relay(ctx, from, recipients, data)
 }

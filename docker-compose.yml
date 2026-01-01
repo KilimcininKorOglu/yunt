@@ -1,76 +1,101 @@
-# Yunt Mail Server - Docker Compose (Standalone Mode)
-#
-# This configuration runs Yunt in standalone mode with SQLite database.
-# Ideal for development, testing, and single-instance deployments.
+# =============================================================================
+# Yunt Mail Server - Docker Compose Configuration
+# =============================================================================
+# This configuration provides a complete development mail server setup with
+# health checks and container orchestration.
 #
 # Usage:
-#   docker-compose up -d          # Start Yunt in background
-#   docker-compose logs -f        # View logs
-#   docker-compose down           # Stop Yunt
-#   docker-compose down -v        # Stop and remove data volumes
-#
-# Access:
-#   Web UI:  http://localhost:8025
-#   SMTP:    localhost:1025
-#   IMAP:    localhost:1143
+#   docker-compose up -d          # Start all services
+#   docker-compose down           # Stop all services
+#   docker-compose logs -f yunt   # View Yunt logs
+#   docker-compose ps             # Check container health status
+# =============================================================================
 
 services:
+  # Yunt Mail Server
   yunt:
-    image: yunt/yunt:latest
+    image: yunt:latest
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        VERSION: ${YUNT_VERSION:-dev}
-        COMMIT: ${YUNT_COMMIT:-unknown}
-        BUILD_DATE: ${YUNT_BUILD_DATE:-unknown}
-    container_name: yunt
+    container_name: yunt-mail-server
     restart: unless-stopped
     ports:
       # SMTP server
-      - "${YUNT_SMTP_PORT:-1025}:1025"
+      - "1025:1025"
       # IMAP server
-      - "${YUNT_IMAP_PORT:-1143}:1143"
-      # Web UI and API
-      - "${YUNT_API_PORT:-8025}:8025"
+      - "1143:1143"
+      # Web UI / API
+      - "8025:8025"
     volumes:
-      # SQLite database and mail storage
+      # Persistent data storage
       - yunt_data:/var/lib/yunt
-      # Optional: Mount custom configuration
+      # Configuration (optional, mount local config if needed)
       # - ./configs/yunt.yaml:/etc/yunt/yunt.yaml:ro
     environment:
-      # Server settings
-      - YUNT_SERVER_NAME=${YUNT_SERVER_NAME:-localhost}
-      - YUNT_SERVER_DOMAIN=${YUNT_SERVER_DOMAIN:-localhost}
-      # Database (SQLite by default)
-      - YUNT_DATABASE_DRIVER=${YUNT_DATABASE_DRIVER:-sqlite}
-      - YUNT_DATABASE_DSN=${YUNT_DATABASE_DSN:-/var/lib/yunt/yunt.db}
-      # Logging
-      - YUNT_LOGGING_LEVEL=${YUNT_LOGGING_LEVEL:-info}
-      - YUNT_LOGGING_FORMAT=${YUNT_LOGGING_FORMAT:-json}
-      - YUNT_LOGGING_OUTPUT=${YUNT_LOGGING_OUTPUT:-stdout}
-      # Authentication
-      - YUNT_AUTH_JWTSECRET=${YUNT_AUTH_JWTSECRET:-}
-      # Admin user
-      - YUNT_ADMIN_USERNAME=${YUNT_ADMIN_USERNAME:-admin}
-      - YUNT_ADMIN_PASSWORD=${YUNT_ADMIN_PASSWORD:-}
-      - YUNT_ADMIN_EMAIL=${YUNT_ADMIN_EMAIL:-admin@localhost}
-      # SMTP settings
-      - YUNT_SMTP_AUTHREQUIRED=${YUNT_SMTP_AUTHREQUIRED:-false}
-      - YUNT_SMTP_ALLOWRELAY=${YUNT_SMTP_ALLOWRELAY:-false}
-      # API settings
-      - YUNT_API_RATELIMIT=${YUNT_API_RATELIMIT:-100}
+      # Database configuration
+      YUNT_DATABASE_DSN: /var/lib/yunt/yunt.db
+      # Logging configuration
+      YUNT_LOGGING_OUTPUT: stdout
+      YUNT_LOGGING_FORMAT: json
+      YUNT_LOGGING_LEVEL: info
+      # SMTP configuration
+      YUNT_SMTP_ENABLED: "true"
+      YUNT_SMTP_HOST: "0.0.0.0"
+      YUNT_SMTP_PORT: "1025"
+      # IMAP configuration
+      YUNT_IMAP_ENABLED: "true"
+      YUNT_IMAP_HOST: "0.0.0.0"
+      YUNT_IMAP_PORT: "1143"
+      # API configuration
+      YUNT_API_ENABLED: "true"
+      YUNT_API_HOST: "0.0.0.0"
+      YUNT_API_PORT: "8025"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8025/healthz"]
+      # Comprehensive health check that verifies all services
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8025/ready"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      start_period: 15s
       retries: 3
+    # Resource limits (optional, adjust based on expected load)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # PostgreSQL Database (optional - uncomment to use PostgreSQL instead of SQLite)
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: yunt-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: yunt
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yunt_password}
+  #     POSTGRES_DB: yunt
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U yunt -d yunt"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   # When using PostgreSQL, update yunt environment:
+  #   # YUNT_DATABASE_DRIVER: postgres
+  #   # YUNT_DATABASE_HOST: postgres
+  #   # YUNT_DATABASE_PORT: "5432"
+  #   # YUNT_DATABASE_USER: yunt
+  #   # YUNT_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-yunt_password}
+  #   # YUNT_DATABASE_NAME: yunt
 
 volumes:
   yunt_data:
-    name: yunt_data
+    name: yunt-data
+  # postgres_data:
+  #   name: yunt-postgres-data
 
 networks:
   default:
-    name: yunt_network
+    name: yunt-network

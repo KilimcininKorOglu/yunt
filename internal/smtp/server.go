@@ -2,6 +2,7 @@ package smtp
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"sync"
@@ -30,6 +31,9 @@ type Server struct {
 
 	// Relay service for forwarding messages
 	relayService *service.RelayService
+
+	// Rate limiter for connection and message throttling
+	rateLimiter *RateLimiter
 
 	// State management
 	running  atomic.Bool
@@ -73,6 +77,10 @@ type Stats struct {
 	messagesTotal         int64
 	tlsConnectionsTotal   int64
 	startTLSUpgradesTotal int64
+	rateLimitRejected     int64
+	relayAttemptsTotal    int64
+	relaySuccessesTotal   int64
+	relayFailuresTotal    int64
 }
 
 // NewStats creates a new Stats instance.
@@ -132,6 +140,13 @@ func (s *Stats) GetTLSStats() (tlsConnectionsTotal, startTLSUpgradesTotal int64)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.tlsConnectionsTotal, s.startTLSUpgradesTotal
+}
+
+// RateLimitRejected increments the rate limit rejected counter.
+func (s *Stats) RateLimitRejected() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rateLimitRejected++
 }
 
 // RelayAttempted increments the relay attempts counter.
@@ -337,6 +352,11 @@ func (s *Server) Config() *Config {
 // Stats returns the server statistics.
 func (s *Server) Stats() *Stats {
 	return s.stats
+}
+
+// RateLimiter returns the rate limiter instance.
+func (s *Server) RateLimiter() *RateLimiter {
+	return s.rateLimiter
 }
 
 // Addr returns the server address.
