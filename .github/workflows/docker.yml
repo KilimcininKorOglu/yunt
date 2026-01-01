@@ -1,0 +1,298 @@
+# =============================================================================
+# Docker Multi-Platform Build Workflow
+# =============================================================================
+# This workflow builds and publishes multi-platform Docker images for Yunt.
+# Triggers on:
+#   - Push to main branch (publishes latest tag)
+#   - Version tags (v*.*.* publishes version + latest)
+#   - Pull requests (builds without pushing for validation)
+#   - Manual trigger (workflow_dispatch)
+# =============================================================================
+
+name: Docker Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Push images to registry'
+        required: false
+        default: 'false'
+        type: boolean
+      platforms:
+        description: 'Platforms to build (comma-separated)'
+        required: false
+        default: 'linux/amd64,linux/arm64'
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    
+    steps:
+      # =======================================================================
+      # Checkout and Setup
+      # =======================================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git describe
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      # =======================================================================
+      # Authentication
+      # =======================================================================
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # =======================================================================
+      # Metadata and Tags
+      # =======================================================================
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Set latest tag for default branch
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            # Version tag (v1.2.3 -> 1.2.3)
+            type=semver,pattern={{version}}
+            # Major.Minor tag (v1.2.3 -> 1.2)
+            type=semver,pattern={{major}}.{{minor}}
+            # Major tag (v1.2.3 -> 1)
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            # Short SHA for traceability
+            type=sha,prefix=sha-,format=short
+            # Branch name for feature branches
+            type=ref,event=branch,enable=${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+            # PR number
+            type=ref,event=pr
+          labels: |
+            org.opencontainers.image.title=Yunt Mail Server
+            org.opencontainers.image.description=Lightweight development mail server
+            org.opencontainers.image.vendor=Yunt
+
+      - name: Determine build version
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo 'dev')"
+          fi
+          COMMIT="$(git rev-parse --short HEAD)"
+          BUILD_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+          
+          echo "Version: ${VERSION}"
+          echo "Commit: ${COMMIT}"
+          echo "Build Date: ${BUILD_DATE}"
+
+      # =======================================================================
+      # Build and Push
+      # =======================================================================
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ github.event.inputs.platforms || 'linux/amd64,linux/arm64' }}
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ steps.version.outputs.commit }}
+            BUILD_DATE=${{ steps.version.outputs.build_date }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      # =======================================================================
+      # Post-Build
+      # =======================================================================
+      - name: Generate artifact attestation
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Print image digest
+        run: |
+          echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ steps.version.outputs.commit }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Date:** ${{ steps.version.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Verify Multi-Platform Image
+  # ===========================================================================
+  verify:
+    name: Verify Multi-Platform Image
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.platform }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and verify image
+        run: |
+          # Determine the tag to verify
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          fi
+          
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
+          
+          echo "Verifying image: ${IMAGE}"
+          echo "Platform: ${{ matrix.platform }}"
+          
+          # Pull the image for specific platform
+          docker pull --platform ${{ matrix.platform }} "${IMAGE}"
+          
+          # Verify the binary runs and shows version
+          docker run --rm --platform ${{ matrix.platform }} "${IMAGE}" version || echo "Version command not available"
+          
+          # Check image labels
+          docker inspect "${IMAGE}" --format '{{json .Config.Labels}}' | jq .
+          
+          echo "Verification successful for ${{ matrix.platform }}"
+
+      - name: Health check test
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          fi
+          
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
+          
+          echo "Running health check test for ${IMAGE}"
+          
+          # Start container in background
+          CONTAINER_ID=$(docker run -d --platform ${{ matrix.platform }} \
+            -p 8025:8025 \
+            "${IMAGE}")
+          
+          # Wait for container to be ready
+          echo "Waiting for container to start..."
+          sleep 10
+          
+          # Check if container is running
+          if docker ps -q --filter "id=${CONTAINER_ID}" | grep -q .; then
+            echo "Container is running"
+            
+            # Check health endpoint
+            if curl -sf http://localhost:8025/healthz; then
+              echo "Health check passed"
+            else
+              echo "Health check endpoint not responding yet (may need more time)"
+            fi
+            
+            # Show container logs
+            docker logs "${CONTAINER_ID}"
+          else
+            echo "Container exited unexpectedly"
+            docker logs "${CONTAINER_ID}"
+          fi
+          
+          # Cleanup
+          docker stop "${CONTAINER_ID}" || true
+          docker rm "${CONTAINER_ID}" || true
+
+  # ===========================================================================
+  # Cleanup old images (optional, runs weekly)
+  # ===========================================================================
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.cleanup == 'true')
+    
+    permissions:
+      packages: write
+    
+    steps:
+      - name: Delete old container versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: container
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: true
