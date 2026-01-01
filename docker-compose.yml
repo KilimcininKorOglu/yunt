@@ -5,10 +5,12 @@
 # health checks and container orchestration.
 #
 # Usage:
-#   docker-compose up -d          # Start all services
-#   docker-compose down           # Stop all services
-#   docker-compose logs -f yunt   # View Yunt logs
-#   docker-compose ps             # Check container health status
+#   docker-compose up -d                        # Start with SQLite (default)
+#   docker-compose --profile mysql up -d        # Start with MySQL database
+#   docker-compose --profile postgres up -d     # Start with PostgreSQL database
+#   docker-compose down                         # Stop all services
+#   docker-compose logs -f yunt                 # View Yunt logs
+#   docker-compose ps                           # Check container health status
 # =============================================================================
 
 services:
@@ -66,35 +68,194 @@ services:
         reservations:
           memory: 128M
 
-  # PostgreSQL Database (optional - uncomment to use PostgreSQL instead of SQLite)
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: yunt-postgres
-  #   restart: unless-stopped
-  #   environment:
-  #     POSTGRES_USER: yunt
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yunt_password}
-  #     POSTGRES_DB: yunt
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U yunt -d yunt"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   # When using PostgreSQL, update yunt environment:
-  #   # YUNT_DATABASE_DRIVER: postgres
-  #   # YUNT_DATABASE_HOST: postgres
-  #   # YUNT_DATABASE_PORT: "5432"
-  #   # YUNT_DATABASE_USER: yunt
-  #   # YUNT_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-yunt_password}
-  #   # YUNT_DATABASE_NAME: yunt
+  # ---------------------------------------------------------------------------
+  # MySQL Database (profile: mysql)
+  # ---------------------------------------------------------------------------
+  # Start with: docker-compose --profile mysql up -d
+  mysql:
+    image: mysql:8.0
+    container_name: yunt-mysql
+    profiles:
+      - mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
+      MYSQL_DATABASE: yunt
+      MYSQL_USER: yunt
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-yunt_password}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Yunt Mail Server with MySQL backend
+  yunt-mysql:
+    image: yunt:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yunt-mail-server-mysql
+    profiles:
+      - mysql
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "1025:1025"
+      - "1143:1143"
+      - "8025:8025"
+    volumes:
+      - yunt_data_mysql:/var/lib/yunt
+    environment:
+      # Database configuration - MySQL
+      YUNT_DATABASE_DRIVER: mysql
+      YUNT_DATABASE_HOST: mysql
+      YUNT_DATABASE_PORT: "3306"
+      YUNT_DATABASE_NAME: yunt
+      YUNT_DATABASE_USERNAME: yunt
+      YUNT_DATABASE_PASSWORD: ${MYSQL_PASSWORD:-yunt_password}
+      YUNT_DATABASE_AUTOMIGRATE: "true"
+      # Logging configuration
+      YUNT_LOGGING_OUTPUT: stdout
+      YUNT_LOGGING_FORMAT: json
+      YUNT_LOGGING_LEVEL: info
+      # SMTP configuration
+      YUNT_SMTP_ENABLED: "true"
+      YUNT_SMTP_HOST: "0.0.0.0"
+      YUNT_SMTP_PORT: "1025"
+      # IMAP configuration
+      YUNT_IMAP_ENABLED: "true"
+      YUNT_IMAP_HOST: "0.0.0.0"
+      YUNT_IMAP_PORT: "1143"
+      # API configuration
+      YUNT_API_ENABLED: "true"
+      YUNT_API_HOST: "0.0.0.0"
+      YUNT_API_PORT: "8025"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8025/ready"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database (profile: postgres)
+  # ---------------------------------------------------------------------------
+  # Start with: docker-compose --profile postgres up -d
+  postgres:
+    image: postgres:16-alpine
+    container_name: yunt-postgres
+    profiles:
+      - postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: yunt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yunt_password}
+      POSTGRES_DB: yunt
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yunt -d yunt"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Yunt Mail Server with PostgreSQL backend
+  yunt-postgres:
+    image: yunt:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yunt-mail-server-postgres
+    profiles:
+      - postgres
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "1025:1025"
+      - "1143:1143"
+      - "8025:8025"
+    volumes:
+      - yunt_data_postgres:/var/lib/yunt
+    environment:
+      # Database configuration - PostgreSQL
+      YUNT_DATABASE_DRIVER: postgres
+      YUNT_DATABASE_HOST: postgres
+      YUNT_DATABASE_PORT: "5432"
+      YUNT_DATABASE_NAME: yunt
+      YUNT_DATABASE_USERNAME: yunt
+      YUNT_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-yunt_password}
+      YUNT_DATABASE_AUTOMIGRATE: "true"
+      # Logging configuration
+      YUNT_LOGGING_OUTPUT: stdout
+      YUNT_LOGGING_FORMAT: json
+      YUNT_LOGGING_LEVEL: info
+      # SMTP configuration
+      YUNT_SMTP_ENABLED: "true"
+      YUNT_SMTP_HOST: "0.0.0.0"
+      YUNT_SMTP_PORT: "1025"
+      # IMAP configuration
+      YUNT_IMAP_ENABLED: "true"
+      YUNT_IMAP_HOST: "0.0.0.0"
+      YUNT_IMAP_PORT: "1143"
+      # API configuration
+      YUNT_API_ENABLED: "true"
+      YUNT_API_HOST: "0.0.0.0"
+      YUNT_API_PORT: "8025"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8025/ready"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
 
 volumes:
   yunt_data:
     name: yunt-data
-  # postgres_data:
-  #   name: yunt-postgres-data
+  mysql_data:
+    name: yunt-mysql-data
+  yunt_data_mysql:
+    name: yunt-data-mysql
+  postgres_data:
+    name: yunt-postgres-data
+  yunt_data_postgres:
+    name: yunt-data-postgres
 
 networks:
   default:
