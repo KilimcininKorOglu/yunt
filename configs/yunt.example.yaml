@@ -1,0 +1,248 @@
+# Yunt Mail Server Configuration
+# 
+# This is an example configuration file for Yunt. Copy this file to yunt.yaml
+# and modify it according to your needs.
+#
+# All settings can be overridden using environment variables with the YUNT_ prefix.
+# For example: YUNT_SMTP_PORT=2025 will override smtp.port
+#
+# Durations can be specified as: 30s, 5m, 1h, 24h, etc.
+
+# Server Settings
+# General server configuration
+server:
+  # Server hostname used in SMTP HELO/EHLO
+  name: localhost
+  
+  # Primary mail domain
+  domain: localhost
+  
+  # Duration to wait for graceful shutdown
+  gracefulTimeout: 30s
+
+# SMTP Server Configuration
+# Handles incoming email via SMTP protocol
+smtp:
+  # Enable or disable SMTP server
+  enabled: true
+  
+  # Address to bind the SMTP server to
+  # Use 0.0.0.0 to listen on all interfaces
+  host: 0.0.0.0
+  
+  # Port number for the SMTP server
+  # Default: 1025 (non-privileged port for development)
+  # Production: Use 25, 465 (SSL), or 587 (submission)
+  port: 1025
+  
+  # TLS configuration for SMTP
+  tls:
+    # Enable TLS (implicit TLS on connect)
+    enabled: false
+    
+    # Path to TLS certificate file
+    certFile: ""
+    
+    # Path to TLS private key file
+    keyFile: ""
+    
+    # Enable STARTTLS support (upgrade plain connection to TLS)
+    startTLS: true
+  
+  # Maximum message size in bytes (default: 10MB)
+  maxMessageSize: 10485760
+  
+  # Maximum number of recipients per message
+  maxRecipients: 100
+  
+  # Connection timeouts
+  readTimeout: 60s
+  writeTimeout: 60s
+  
+  # Require authentication for sending mail
+  authRequired: false
+  
+  # Allow relaying to external domains
+  allowRelay: false
+  
+  # External relay server settings (used when allowRelay is true)
+  relayHost: ""
+  relayPort: 587
+  relayUsername: ""
+  relayPassword: ""
+
+# IMAP Server Configuration
+# Enables mail client access (Thunderbird, Outlook, etc.)
+imap:
+  # Enable or disable IMAP server
+  enabled: true
+  
+  # Address to bind the IMAP server to
+  host: 0.0.0.0
+  
+  # Port number for the IMAP server
+  # Default: 1143 (non-privileged port for development)
+  # Production: Use 143 or 993 (SSL)
+  port: 1143
+  
+  # TLS configuration for IMAP
+  tls:
+    enabled: false
+    certFile: ""
+    keyFile: ""
+    startTLS: true
+  
+  # Connection timeouts
+  readTimeout: 60s
+  writeTimeout: 60s
+  
+  # IDLE connection timeout
+  idleTimeout: 30m
+
+# REST API and Web UI Configuration
+api:
+  # Enable or disable API server
+  enabled: true
+  
+  # Address to bind the API server to
+  host: 0.0.0.0
+  
+  # Port number for the API and Web UI
+  port: 8025
+  
+  # TLS configuration for API
+  tls:
+    enabled: false
+    certFile: ""
+    keyFile: ""
+  
+  # Connection timeouts
+  readTimeout: 30s
+  writeTimeout: 30s
+  
+  # CORS allowed origins
+  # Use ["*"] to allow all origins (development only)
+  corsAllowedOrigins:
+    - "*"
+  
+  # Rate limit: requests per minute per IP
+  rateLimit: 100
+  
+  # Enable Swagger API documentation at /api/docs
+  enableSwagger: true
+
+# Database Configuration
+database:
+  # Database driver: sqlite, postgres, mysql, mongodb
+  driver: sqlite
+  
+  # Data Source Name (DSN) for database connection
+  # SQLite: file path (e.g., "yunt.db" or "/var/lib/yunt/yunt.db")
+  # PostgreSQL: "host=localhost port=5432 user=yunt password=secret dbname=yunt sslmode=disable"
+  # MySQL: "user:password@tcp(localhost:3306)/yunt?charset=utf8mb4&parseTime=True"
+  # MongoDB: "mongodb://localhost:27017/yunt"
+  dsn: yunt.db
+  
+  # Alternative connection settings (used if DSN is not set)
+  # These are ignored for SQLite
+  host: localhost
+  port: 5432
+  name: yunt
+  username: ""
+  password: ""
+  
+  # SSL mode for PostgreSQL connections
+  # Options: disable, require, verify-ca, verify-full
+  sslMode: disable
+  
+  # Connection pool settings
+  maxOpenConns: 25
+  maxIdleConns: 5
+  connMaxLifetime: 5m
+  connMaxIdleTime: 5m
+  
+  # Automatically run database migrations on startup
+  autoMigrate: true
+
+# Authentication Settings
+auth:
+  # JWT secret key for token signing
+  # IMPORTANT: Change this in production!
+  # Generate with: openssl rand -hex 32
+  jwtSecret: ""
+  
+  # JWT token expiration duration
+  jwtExpiration: 24h
+  
+  # Refresh token expiration duration
+  refreshExpiration: 168h  # 7 days
+  
+  # BCrypt hashing cost (4-31, higher is more secure but slower)
+  bcryptCost: 10
+  
+  # Session timeout duration
+  sessionTimeout: 24h
+  
+  # Maximum failed login attempts before lockout
+  maxLoginAttempts: 5
+  
+  # Account lockout duration after max attempts
+  lockoutDuration: 15m
+
+# Logging Configuration
+logging:
+  # Minimum log level: debug, info, warn, error
+  level: info
+  
+  # Log format: json, text
+  format: text
+  
+  # Log output: stdout, stderr, file
+  output: stdout
+  
+  # Log file path (required when output is "file")
+  filePath: ""
+  
+  # Maximum log file size in megabytes before rotation
+  maxSize: 100
+  
+  # Maximum number of old log files to retain
+  maxBackups: 3
+  
+  # Maximum number of days to retain old log files
+  maxAge: 28
+  
+  # Compress old log files
+  compress: true
+  
+  # Include caller information in logs
+  includeCaller: false
+
+# Default Admin User Settings
+admin:
+  # Admin username
+  username: admin
+  
+  # Admin password
+  # IMPORTANT: Change this in production!
+  password: ""
+  
+  # Admin email address
+  email: admin@localhost
+  
+  # Create admin user on startup if it doesn't exist
+  createOnStartup: true
+
+# Mail Storage Settings
+storage:
+  # Storage type: database, filesystem
+  type: database
+  
+  # Filesystem storage path (used when type is "filesystem")
+  path: ./data/mail
+  
+  # Maximum mailbox size in bytes (0 for unlimited)
+  maxMailboxSize: 0
+  
+  # Number of days to retain messages (0 for unlimited)
+  retentionDays: 0
