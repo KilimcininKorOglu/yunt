@@ -15,12 +15,59 @@ Yunt is a lightweight, powerful mail server written in Go, designed for develope
 
 ## Quick Start
 
-### Prerequisites
+### Using Docker (Recommended)
+
+The fastest way to get started is using Docker. Multi-platform images are available for both AMD64 and ARM64 architectures.
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/yunt/yunt:latest
+
+# Run with default settings
+docker run -d \
+  -p 1025:1025 \
+  -p 1143:1143 \
+  -p 8025:8025 \
+  ghcr.io/yunt/yunt:latest
+
+# Run with persistent data
+docker run -d \
+  -p 1025:1025 \
+  -p 1143:1143 \
+  -p 8025:8025 \
+  -v yunt-data:/var/lib/yunt \
+  -v ./yunt.yaml:/etc/yunt/yunt.yaml:ro \
+  ghcr.io/yunt/yunt:latest
+```
+
+### Using Docker Compose
+
+```yaml
+services:
+  yunt:
+    image: ghcr.io/yunt/yunt:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "1143:1143"  # IMAP
+      - "8025:8025"  # Web UI
+    volumes:
+      - yunt-data:/var/lib/yunt
+    environment:
+      - YUNT_DATABASE_DSN=/var/lib/yunt/yunt.db
+    restart: unless-stopped
+
+volumes:
+  yunt-data:
+```
+
+### Building from Source
+
+#### Prerequisites
 
 - Go 1.22 or higher
 - Make (optional, for build commands)
 
-### Build
+#### Build
 
 ```bash
 # Build the binary
@@ -30,7 +77,7 @@ make build
 go build -o bin/yunt ./cmd/yunt
 ```
 
-### Run
+#### Run
 
 ```bash
 # Start the server with default configuration
@@ -75,6 +122,53 @@ yunt/
 ├── go.mod              # Go module definition
 └── Makefile            # Build automation
 ```
+
+## Docker
+
+### Available Images
+
+Multi-platform Docker images are automatically built and published to GitHub Container Registry (ghcr.io) for both AMD64 and ARM64 architectures.
+
+| Tag            | Description                                    |
+|----------------|------------------------------------------------|
+| `latest`       | Latest stable release from main branch         |
+| `v1.2.3`       | Specific version release                       |
+| `1.2`          | Major.minor version (tracks latest patch)      |
+| `sha-abc1234`  | Specific commit SHA                            |
+
+### Building Multi-Platform Images Locally
+
+```bash
+# Build for local testing (single platform)
+./scripts/docker-build.sh -l
+
+# Build for specific platform
+./scripts/docker-build.sh -p linux/arm64 -l
+
+# Build and push to registry
+./scripts/docker-build.sh -t v1.0.0 -P
+
+# Build with registry cache
+./scripts/docker-build.sh -t latest -P -c
+```
+
+### Environment Variables
+
+| Variable               | Default                    | Description              |
+|------------------------|----------------------------|--------------------------|
+| `YUNT_DATABASE_DSN`    | `/var/lib/yunt/yunt.db`    | Database connection      |
+| `YUNT_LOGGING_OUTPUT`  | `stdout`                   | Log output destination   |
+| `YUNT_LOGGING_FORMAT`  | `json`                     | Log format (json/text)   |
+| `YUNT_SMTP_PORT`       | `1025`                     | SMTP server port         |
+| `YUNT_IMAP_PORT`       | `1143`                     | IMAP server port         |
+| `YUNT_API_PORT`        | `8025`                     | Web UI/API port          |
+
+### Volumes
+
+| Path               | Description                             |
+|--------------------|-----------------------------------------|
+| `/var/lib/yunt`    | Data directory (database, attachments)  |
+| `/etc/yunt`        | Configuration files                     |
 
 ## Development
 
