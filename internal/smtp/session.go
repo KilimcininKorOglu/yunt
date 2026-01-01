@@ -1,0 +1,437 @@
+package smtp
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+
+	"github.com/emersion/go-sasl"
+	"github.com/emersion/go-smtp"
+	"github.com/google/uuid"
+	"github.com/rs/zerolog"
+
+	"yunt/internal/domain"
+)
+
+// Session implements the smtp.Session interface.
+// It manages the state for a single SMTP transaction (from connection to QUIT).
+type Session struct {
+	backend    *Backend
+	conn       *smtp.Conn
+	remoteAddr string
+	logger     zerolog.Logger
+
+	// Session state
+	from        string
+	fromOpts    *smtp.MailOptions
+	recipients  []recipientInfo
+	messageSize int64
+
+	// Context for cancellation
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// recipientInfo holds information about a recipient.
+type recipientInfo struct {
+	address string
+	mailbox *domain.Mailbox
+}
+
+// NewSession creates a new SMTP session.
+func NewSession(b *Backend, c *smtp.Conn, remoteAddr string) *Session {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Session{
+		backend:    b,
+		conn:       c,
+		remoteAddr: remoteAddr,
+		logger:     b.server.logger.With().Str("remoteAddr", remoteAddr).Logger(),
+		recipients: make([]recipientInfo, 0),
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+}
+
+// AuthMechanisms returns the list of supported authentication mechanisms.
+// Returns an empty slice if authentication is not required.
+func (s *Session) AuthMechanisms() []string {
+	if s.backend.AuthRequired() {
+		return []string{"PLAIN", "LOGIN"}
+	}
+	return []string{}
+}
+
+// Auth handles SMTP authentication.
+// Returns sasl.Server for the requested mechanism or an error.
+func (s *Session) Auth(mech string) (sasl.Server, error) {
+	s.logger.Debug().
+		Str("mechanism", mech).
+		Msg("auth attempt")
+
+	// For now, return auth unsupported as user service integration is pending
+	// This will be implemented when the user service is available
+	return nil, smtp.ErrAuthUnsupported
+}
+
+// Mail handles the MAIL FROM command.
+// Validates the sender address and size restrictions.
+func (s *Session) Mail(from string, opts *smtp.MailOptions) error {
+	s.logger.Debug().
+		Str("from", from).
+		Msg("MAIL FROM")
+
+	// Reset session state for new message
+	s.Reset()
+
+	// Validate sender address format (basic validation)
+	if from == "" {
+		// Empty MAIL FROM is allowed for bounce messages (RFC 5321)
+		s.from = ""
+	} else {
+		// Extract address if it's in angle bracket format
+		from = extractAddress(from)
+		if !isValidEmailFormat(from) {
+			// RFC 5321: 553 - Requested action not taken: mailbox name not allowed
+			return &smtp.SMTPError{
+				Code:         553,
+				EnhancedCode: smtp.EnhancedCode{5, 1, 3},
+				Message:      "invalid sender address format",
+			}
+		}
+		s.from = from
+	}
+
+	// Check SIZE parameter if provided
+	if opts != nil && opts.Size > 0 {
+		maxSize := s.backend.MaxMessageSize()
+		if maxSize > 0 && opts.Size > maxSize {
+			// RFC 1870: 552 - Message size exceeds fixed maximum message size
+			return &smtp.SMTPError{
+				Code:         552,
+				EnhancedCode: smtp.EnhancedCode{5, 3, 4},
+				Message:      fmt.Sprintf("message size %d exceeds maximum %d", opts.Size, maxSize),
+			}
+		}
+		s.messageSize = opts.Size
+	}
+
+	s.fromOpts = opts
+	return nil
+}
+
+// Rcpt handles the RCPT TO command.
+// Validates the recipient address against the database.
+func (s *Session) Rcpt(to string, opts *smtp.RcptOptions) error {
+	// Extract address if it's in angle bracket format
+	to = extractAddress(to)
+
+	s.logger.Debug().
+		Str("to", to).
+		Int("recipientCount", len(s.recipients)+1).
+		Msg("RCPT TO")
+
+	// Check recipient limit
+	maxRecipients := s.backend.MaxRecipients()
+	if maxRecipients > 0 && len(s.recipients) >= maxRecipients {
+		// RFC 5321: 452 - Too many recipients
+		return &smtp.SMTPError{
+			Code:         452,
+			EnhancedCode: smtp.EnhancedCode{4, 5, 3},
+			Message:      fmt.Sprintf("too many recipients, maximum is %d", maxRecipients),
+		}
+	}
+
+	// Validate address format
+	if !isValidEmailFormat(to) {
+		// RFC 5321: 553 - Requested action not taken: mailbox name not allowed
+		return &smtp.SMTPError{
+			Code:         553,
+			EnhancedCode: smtp.EnhancedCode{5, 1, 3},
+			Message:      "invalid recipient address format",
+		}
+	}
+
+	// Check for duplicate recipients
+	for _, r := range s.recipients {
+		if strings.EqualFold(r.address, to) {
+			// Silently accept duplicates but don't add them again
+			s.logger.Debug().
+				Str("to", to).
+				Msg("duplicate recipient ignored")
+			return nil
+		}
+	}
+
+	// Validate recipient against database
+	if err := s.backend.validateRecipient(s.ctx, to); err != nil {
+		return err
+	}
+
+	// Get the mailbox for this recipient
+	mailbox, _ := s.backend.getMailbox(s.ctx, to)
+
+	s.recipients = append(s.recipients, recipientInfo{
+		address: to,
+		mailbox: mailbox,
+	})
+
+	return nil
+}
+
+// Data handles the DATA command.
+// Receives the message data and stores it for each recipient.
+func (s *Session) Data(r io.Reader) error {
+	// Verify we have at least one recipient
+	if len(s.recipients) == 0 {
+		// RFC 5321: 503 - Bad sequence of commands
+		return &smtp.SMTPError{
+			Code:         503,
+			EnhancedCode: smtp.EnhancedCode{5, 5, 1},
+			Message:      "no valid recipients",
+		}
+	}
+
+	s.logger.Info().
+		Str("from", s.from).
+		Int("recipientCount", len(s.recipients)).
+		Msg("receiving message data")
+
+	// Read the message data with size limit enforcement
+	maxSize := s.backend.MaxMessageSize()
+	var data []byte
+	var err error
+
+	if maxSize > 0 {
+		// Use a limited reader to enforce size limits
+		limitedReader := &limitedReader{
+			r:        r,
+			maxSize:  maxSize,
+			readSize: 0,
+		}
+		data, err = io.ReadAll(limitedReader)
+		if limitedReader.exceeded {
+			// RFC 5321: 552 - Message exceeds fixed maximum message size
+			return &smtp.SMTPError{
+				Code:         552,
+				EnhancedCode: smtp.EnhancedCode{5, 3, 4},
+				Message:      fmt.Sprintf("message size exceeds maximum %d bytes", maxSize),
+			}
+		}
+	} else {
+		data, err = io.ReadAll(r)
+	}
+
+	if err != nil {
+		s.logger.Error().Err(err).Msg("failed to read message data")
+		// RFC 5321: 451 - Requested action aborted: local error in processing
+		return &smtp.SMTPError{
+			Code:         451,
+			EnhancedCode: smtp.EnhancedCode{4, 0, 0},
+			Message:      "error reading message data",
+		}
+	}
+
+	messageSize := int64(len(data))
+
+	// Store message for each recipient
+	recipientAddresses := make([]string, 0, len(s.recipients))
+	for _, r := range s.recipients {
+		recipientAddresses = append(recipientAddresses, r.address)
+	}
+
+	s.logger.Info().
+		Str("from", s.from).
+		Strs("to", recipientAddresses).
+		Int64("size", messageSize).
+		Msg("message received")
+
+	// Create and store messages for each recipient with a unique mailbox
+	mailboxesSeen := make(map[string]bool)
+	for _, recipient := range s.recipients {
+		if recipient.mailbox == nil {
+			// No mailbox, message will be logged but not stored
+			continue
+		}
+
+		// Avoid storing duplicate messages for the same mailbox
+		mailboxID := recipient.mailbox.ID.String()
+		if mailboxesSeen[mailboxID] {
+			continue
+		}
+		mailboxesSeen[mailboxID] = true
+
+		// Create the message
+		msg := s.createMessage(recipient.mailbox.ID, data, messageSize, recipientAddresses)
+
+		// Store the message
+		if err := s.backend.storeMessage(s.ctx, msg); err != nil {
+			s.logger.Error().
+				Err(err).
+				Str("mailboxId", mailboxID).
+				Msg("failed to store message")
+			// Continue with other recipients even if one fails
+		} else {
+			s.logger.Debug().
+				Str("messageId", msg.ID.String()).
+				Str("mailboxId", mailboxID).
+				Msg("message stored")
+		}
+	}
+
+	s.backend.server.stats.MessageReceived()
+
+	return nil
+}
+
+// createMessage creates a new domain.Message from the received data.
+func (s *Session) createMessage(mailboxID domain.ID, data []byte, size int64, recipients []string) *domain.Message {
+	msgID := domain.ID(uuid.New().String())
+	msg := domain.NewMessage(msgID, mailboxID)
+
+	// Set basic fields
+	msg.From = domain.EmailAddress{Address: s.from}
+	msg.Size = size
+	msg.RawBody = data
+	msg.ReceivedAt = domain.Now()
+
+	// Add recipients
+	for _, addr := range recipients {
+		msg.AddRecipient("", addr)
+	}
+
+	// Generate a Message-ID header if not present in raw data
+	if msg.MessageID == "" {
+		msg.MessageID = fmt.Sprintf("<%s@%s>", uuid.New().String(), s.backend.server.config.Domain)
+	}
+
+	return msg
+}
+
+// Reset resets the session state for a new transaction.
+// Called after RSET command or after successful DATA.
+func (s *Session) Reset() {
+	s.logger.Debug().Msg("session reset")
+	s.from = ""
+	s.fromOpts = nil
+	s.recipients = make([]recipientInfo, 0)
+	s.messageSize = 0
+}
+
+// Logout is called when the client disconnects.
+// Cleans up session resources.
+func (s *Session) Logout() error {
+	s.logger.Info().Msg("connection closed")
+	s.cancel() // Cancel any pending operations
+	s.backend.server.stats.ConnectionClosed()
+	return nil
+}
+
+// limitedReader wraps an io.Reader with a size limit.
+type limitedReader struct {
+	r        io.Reader
+	maxSize  int64
+	readSize int64
+	exceeded bool
+}
+
+// Read implements io.Reader with size limit checking.
+func (lr *limitedReader) Read(p []byte) (n int, err error) {
+	if lr.exceeded {
+		return 0, io.EOF
+	}
+
+	n, err = lr.r.Read(p)
+	lr.readSize += int64(n)
+
+	if lr.readSize > lr.maxSize {
+		lr.exceeded = true
+		return n, io.EOF
+	}
+
+	return n, err
+}
+
+// extractAddress extracts the email address from angle bracket format.
+// e.g., "<user@example.com>" -> "user@example.com"
+func extractAddress(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if strings.HasPrefix(addr, "<") && strings.HasSuffix(addr, ">") {
+		return addr[1 : len(addr)-1]
+	}
+	return addr
+}
+
+// isValidEmailFormat performs basic email format validation.
+// This is a simplified check; full RFC 5322 validation is complex.
+func isValidEmailFormat(email string) bool {
+	if email == "" {
+		return false
+	}
+
+	// Must contain exactly one @ symbol
+	atIndex := strings.Index(email, "@")
+	if atIndex == -1 || atIndex == 0 || atIndex == len(email)-1 {
+		return false
+	}
+
+	// Check for multiple @ symbols
+	if strings.Count(email, "@") != 1 {
+		return false
+	}
+
+	// Local part and domain must not be empty
+	localPart := email[:atIndex]
+	domainPart := email[atIndex+1:]
+
+	if localPart == "" || domainPart == "" {
+		return false
+	}
+
+	// Domain must contain at least one dot (simplified check)
+	// Note: This allows for local domains like "localhost" in dev mode
+	// A stricter check would require a dot in the domain
+
+	// Check for invalid characters (simplified)
+	invalidChars := " \t\r\n"
+	if strings.ContainsAny(email, invalidChars) {
+		return false
+	}
+
+	return true
+}
+
+// SessionContext returns the session's context.
+func (s *Session) SessionContext() context.Context {
+	return s.ctx
+}
+
+// RemoteAddr returns the remote address of the client.
+func (s *Session) RemoteAddr() string {
+	return s.remoteAddr
+}
+
+// From returns the envelope sender.
+func (s *Session) From() string {
+	return s.from
+}
+
+// Recipients returns the list of recipient addresses.
+func (s *Session) Recipients() []string {
+	addrs := make([]string, len(s.recipients))
+	for i, r := range s.recipients {
+		addrs[i] = r.address
+	}
+	return addrs
+}
+
+// RecipientCount returns the number of recipients.
+func (s *Session) RecipientCount() int {
+	return len(s.recipients)
+}
+
+// Deadline returns the session deadline if set.
+func (s *Session) Deadline() (time.Time, bool) {
+	return s.ctx.Deadline()
+}
