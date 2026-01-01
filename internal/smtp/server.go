@@ -1,0 +1,380 @@
+package smtp
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/emersion/go-sasl"
+	"github.com/emersion/go-smtp"
+	"github.com/rs/zerolog"
+)
+
+// Server represents an SMTP server instance.
+type Server struct {
+	config   *Config
+	server   *smtp.Server
+	logger   zerolog.Logger
+	listener net.Listener
+
+	// State management
+	running  atomic.Bool
+	mu       sync.RWMutex
+	doneChan chan struct{}
+
+	// Statistics
+	stats *Stats
+}
+
+// Stats holds server statistics.
+type Stats struct {
+	mu              sync.RWMutex
+	startTime       time.Time
+	connectionsOpen int64
+	connectionsTotal int64
+	messagesTotal   int64
+}
+
+// NewStats creates a new Stats instance.
+func NewStats() *Stats {
+	return &Stats{
+		startTime: time.Now(),
+	}
+}
+
+// ConnectionOpened increments the open connections counter.
+func (s *Stats) ConnectionOpened() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.connectionsOpen++
+	s.connectionsTotal++
+}
+
+// ConnectionClosed decrements the open connections counter.
+func (s *Stats) ConnectionClosed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.connectionsOpen > 0 {
+		s.connectionsOpen--
+	}
+}
+
+// MessageReceived increments the messages counter.
+func (s *Stats) MessageReceived() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.messagesTotal++
+}
+
+// GetStats returns the current statistics.
+func (s *Stats) GetStats() (uptime time.Duration, connectionsOpen, connectionsTotal, messagesTotal int64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return time.Since(s.startTime), s.connectionsOpen, s.connectionsTotal, s.messagesTotal
+}
+
+// New creates a new SMTP server with the given configuration and logger.
+func New(cfg *Config, logger zerolog.Logger) (*Server, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
+	s := &Server{
+		config:   cfg,
+		logger:   logger.With().Str("component", "smtp").Logger(),
+		doneChan: make(chan struct{}),
+		stats:    NewStats(),
+	}
+
+	// Create the SMTP backend
+	backend := newBackend(s)
+
+	// Create the go-smtp server
+	smtpServer := smtp.NewServer(backend)
+	smtpServer.Addr = cfg.Addr()
+	smtpServer.Domain = cfg.Domain
+	smtpServer.ReadTimeout = cfg.ReadTimeout
+	smtpServer.WriteTimeout = cfg.WriteTimeout
+	smtpServer.MaxMessageBytes = cfg.MaxMessageSize
+	smtpServer.MaxRecipients = cfg.MaxRecipients
+	smtpServer.AllowInsecureAuth = cfg.AllowInsecureAuth
+
+	// Set TLS configuration if available
+	if cfg.TLSConfig != nil {
+		smtpServer.TLSConfig = cfg.TLSConfig
+	}
+
+	// Set up debug logging if debug level is enabled
+	if logger.GetLevel() <= zerolog.DebugLevel {
+		smtpServer.Debug = &logWriter{logger: logger}
+	}
+
+	// Set error logger
+	smtpServer.ErrorLog = &smtpErrorLogger{logger: logger}
+
+	s.server = smtpServer
+
+	return s, nil
+}
+
+// Start starts the SMTP server.
+func (s *Server) Start() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.running.Load() {
+		return fmt.Errorf("server already running")
+	}
+
+	addr := s.config.Addr()
+	s.logger.Info().
+		Str("addr", addr).
+		Str("domain", s.config.Domain).
+		Int64("maxMessageSize", s.config.MaxMessageSize).
+		Int("maxRecipients", s.config.MaxRecipients).
+		Dur("readTimeout", s.config.ReadTimeout).
+		Dur("writeTimeout", s.config.WriteTimeout).
+		Bool("authRequired", s.config.AuthRequired).
+		Bool("tlsEnabled", s.config.TLSConfig != nil).
+		Bool("startTLS", s.config.EnableStartTLS).
+		Msg("starting SMTP server")
+
+	// Create listener
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", addr, err)
+	}
+	s.listener = listener
+
+	s.running.Store(true)
+	s.stats = NewStats()
+
+	// Start serving in a goroutine
+	go func() {
+		if err := s.server.Serve(listener); err != nil && s.running.Load() {
+			s.logger.Error().Err(err).Msg("SMTP server error")
+		}
+		close(s.doneChan)
+	}()
+
+	s.logger.Info().Str("addr", addr).Msg("SMTP server started")
+	return nil
+}
+
+// Stop gracefully stops the SMTP server.
+func (s *Server) Stop(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.running.Load() {
+		return nil
+	}
+
+	s.logger.Info().Msg("stopping SMTP server")
+	s.running.Store(false)
+
+	// Use graceful timeout from config if context has no deadline
+	shutdownCtx := ctx
+	if _, ok := ctx.Deadline(); !ok && s.config.GracefulTimeout > 0 {
+		var cancel context.CancelFunc
+		shutdownCtx, cancel = context.WithTimeout(ctx, s.config.GracefulTimeout)
+		defer cancel()
+	}
+
+	// Attempt graceful shutdown
+	if err := s.server.Shutdown(shutdownCtx); err != nil {
+		s.logger.Warn().Err(err).Msg("graceful shutdown failed, forcing close")
+		if closeErr := s.server.Close(); closeErr != nil {
+			return fmt.Errorf("failed to close server: %w", closeErr)
+		}
+	}
+
+	// Wait for server to finish
+	select {
+	case <-s.doneChan:
+		s.logger.Info().Msg("SMTP server stopped")
+	case <-shutdownCtx.Done():
+		s.logger.Warn().Msg("shutdown context expired")
+	}
+
+	return nil
+}
+
+// IsRunning returns true if the server is running.
+func (s *Server) IsRunning() bool {
+	return s.running.Load()
+}
+
+// Config returns the server configuration.
+func (s *Server) Config() *Config {
+	return s.config
+}
+
+// Stats returns the server statistics.
+func (s *Server) Stats() *Stats {
+	return s.stats
+}
+
+// Addr returns the server address.
+// Returns empty string if server is not running.
+func (s *Server) Addr() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.listener != nil {
+		return s.listener.Addr().String()
+	}
+	return ""
+}
+
+// logWriter implements io.Writer for debug logging.
+type logWriter struct {
+	logger zerolog.Logger
+}
+
+func (w *logWriter) Write(p []byte) (n int, err error) {
+	w.logger.Debug().Str("debug", string(p)).Msg("smtp protocol")
+	return len(p), nil
+}
+
+// smtpErrorLogger implements smtp.Logger interface for error logging.
+type smtpErrorLogger struct {
+	logger zerolog.Logger
+}
+
+func (l *smtpErrorLogger) Printf(format string, v ...interface{}) {
+	l.logger.Error().Msgf(format, v...)
+}
+
+func (l *smtpErrorLogger) Println(v ...interface{}) {
+	l.logger.Error().Msg(fmt.Sprint(v...))
+}
+
+// backend implements the smtp.Backend interface.
+type backend struct {
+	server *Server
+}
+
+// newBackend creates a new SMTP backend.
+func newBackend(s *Server) *backend {
+	return &backend{server: s}
+}
+
+// NewSession creates a new SMTP session.
+func (b *backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
+	b.server.stats.ConnectionOpened()
+
+	remoteAddr := c.Conn().RemoteAddr().String()
+	b.server.logger.Info().
+		Str("remoteAddr", remoteAddr).
+		Str("hostname", c.Hostname()).
+		Msg("new connection")
+
+	return &session{
+		backend:    b,
+		conn:       c,
+		remoteAddr: remoteAddr,
+		logger:     b.server.logger.With().Str("remoteAddr", remoteAddr).Logger(),
+	}, nil
+}
+
+// session implements the smtp.Session interface.
+type session struct {
+	backend    *backend
+	conn       *smtp.Conn
+	remoteAddr string
+	logger     zerolog.Logger
+
+	// Session state
+	from       string
+	recipients []string
+}
+
+// AuthMechanisms returns the list of supported authentication mechanisms.
+func (s *session) AuthMechanisms() []string {
+	// If auth is required or explicitly enabled, return supported mechanisms
+	if s.backend.server.config.AuthRequired {
+		return []string{"PLAIN", "LOGIN"}
+	}
+	return []string{}
+}
+
+// Auth handles SMTP authentication.
+// Note: This is a placeholder - full authentication will be implemented
+// when integrating with the user service.
+func (s *session) Auth(mech string) (sasl.Server, error) {
+	s.logger.Debug().Str("mechanism", mech).Msg("auth attempt")
+	// For now, return auth unsupported as we don't have user service integration
+	return nil, smtp.ErrAuthUnsupported
+}
+
+// Mail handles the MAIL FROM command.
+func (s *session) Mail(from string, opts *smtp.MailOptions) error {
+	s.logger.Debug().
+		Str("from", from).
+		Msg("MAIL FROM")
+
+	s.from = from
+	s.recipients = nil // Reset recipients for new message
+
+	return nil
+}
+
+// Rcpt handles the RCPT TO command.
+func (s *session) Rcpt(to string, opts *smtp.RcptOptions) error {
+	s.logger.Debug().
+		Str("to", to).
+		Int("recipientCount", len(s.recipients)+1).
+		Msg("RCPT TO")
+
+	s.recipients = append(s.recipients, to)
+	return nil
+}
+
+// Data handles the DATA command.
+func (s *session) Data(r io.Reader) error {
+	s.logger.Info().
+		Str("from", s.from).
+		Strs("to", s.recipients).
+		Msg("receiving message data")
+
+	// Read the message data
+	// For now, we just consume the data - actual message handling
+	// will be implemented when integrating with the storage service
+	data, err := io.ReadAll(r)
+	if err != nil {
+		s.logger.Error().Err(err).Msg("failed to read message data")
+		return err
+	}
+
+	s.logger.Info().
+		Str("from", s.from).
+		Strs("to", s.recipients).
+		Int("size", len(data)).
+		Msg("message received")
+
+	s.backend.server.stats.MessageReceived()
+
+	return nil
+}
+
+// Reset resets the session state.
+func (s *session) Reset() {
+	s.logger.Debug().Msg("session reset")
+	s.from = ""
+	s.recipients = nil
+}
+
+// Logout is called when the client disconnects.
+func (s *session) Logout() error {
+	s.logger.Info().Msg("connection closed")
+	s.backend.server.stats.ConnectionClosed()
+	return nil
+}
