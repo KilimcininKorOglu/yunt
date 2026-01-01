@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+bin/
+dist/
+
+# Development
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node modules (in web directory)
+web/node_modules/
+web/.svelte-kit/
+web/build/
+
+# Test and coverage
+*.test
+coverage.out
+coverage.html
+*.coverprofile
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Example configs
+configs/
+
+# Scripts (not needed in container)
+scripts/
+
+# Tools (development only)
+tools/
+
+# Local development files
+.air.toml
+.env
+.env.*
+*.local
+
+# IDE and editor files
+.editorconfig
+.eslintrc.*
+.prettierrc*
+.prettierignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*
+
+# Makefiles (not needed in container)
+Makefile
+
+# Golangci config
+.golangci.yml
