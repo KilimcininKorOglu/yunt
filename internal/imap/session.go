@@ -513,7 +513,50 @@ func (s *Session) Unselect() error {
 func (s *Session) Expunge(w *imapserver.ExpungeWriter, uids *imap.UIDSet) error {
 	s.logger.Debug().Msg("EXPUNGE command")
 
-	// TODO: Implement expunge
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
+	}
+
+	// Check if a mailbox is selected
+	if s.userSession == nil || s.userSession.SelectedMailbox == nil {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "No mailbox selected",
+		}
+	}
+
+	// Check if mailbox is read-only
+	if s.userSession.IsReadOnly {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Mailbox is read-only",
+		}
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create the expunge handler
+	handler := NewExpungeHandler(
+		s.server.backend.Repository(),
+		s.userSession.User.ID,
+		s.userSession.SelectedMailbox,
+	)
+
+	// Execute the expunge
+	if err := handler.Expunge(ctx, w, uids); err != nil {
+		s.logger.Warn().
+			Err(err).
+			Msg("EXPUNGE failed")
+		return err
+	}
+
+	s.logger.Debug().Msg("EXPUNGE completed successfully")
+
 	return nil
 }
 
@@ -676,13 +719,125 @@ func (s *Session) Copy(numSet imap.NumSet, dest string) (*imap.CopyData, error) 
 		Str("dest", dest).
 		Msg("COPY command")
 
-	// TODO: Implement copy
-	return nil, &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Code: imap.ResponseCodeTryCreate,
-		Text: "Destination mailbox does not exist",
+	if !s.IsAuthenticated() {
+		return nil, &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
 	}
+
+	// Check if a mailbox is selected
+	if s.userSession == nil || s.userSession.SelectedMailbox == nil {
+		return nil, &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "No mailbox selected",
+		}
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create the copy handler
+	handler := NewCopyHandler(
+		s.server.backend.Repository(),
+		s.userSession.User.ID,
+		s.userSession.SelectedMailbox,
+	)
+
+	// Execute the copy
+	copyData, err := handler.Copy(ctx, numSet, dest)
+	if err != nil {
+		s.logger.Warn().
+			Str("dest", dest).
+			Err(err).
+			Msg("COPY failed")
+		return nil, err
+	}
+
+	uids, _ := copyData.DestUIDs.Nums()
+	s.logger.Info().
+		Str("dest", dest).
+		Int("copied", len(uids)).
+		Msg("COPY completed successfully")
+
+	return copyData, nil
+}
+
+// Move moves messages to another mailbox (RFC 6851).
+func (s *Session) Move(w *imapserver.MoveWriter, numSet imap.NumSet, dest string) error {
+	s.logger.Debug().
+		Str("dest", dest).
+		Msg("MOVE command")
+
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
+	}
+
+	// Check if a mailbox is selected
+	if s.userSession == nil || s.userSession.SelectedMailbox == nil {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "No mailbox selected",
+		}
+	}
+
+	// Check if mailbox is read-only
+	if s.userSession.IsReadOnly {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Mailbox is read-only",
+		}
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create the copy handler
+	handler := NewCopyHandler(
+		s.server.backend.Repository(),
+		s.userSession.User.ID,
+		s.userSession.SelectedMailbox,
+	)
+
+	// Execute the move
+	copyData, expungedSeqNums, err := handler.Move(ctx, numSet, dest)
+	if err != nil {
+		s.logger.Warn().
+			Str("dest", dest).
+			Err(err).
+			Msg("MOVE failed")
+		return err
+	}
+
+	// Write the COPYUID response
+	if err := w.WriteCopyData(copyData); err != nil {
+		return err
+	}
+
+	// Write EXPUNGE responses for moved messages
+	// Messages must be expunged in descending sequence number order
+	sortUint32Desc(expungedSeqNums)
+	for _, seqNum := range expungedSeqNums {
+		if err := w.WriteExpunge(seqNum); err != nil {
+			return err
+		}
+	}
+
+	s.logger.Info().
+		Str("dest", dest).
+		Int("moved", len(expungedSeqNums)).
+		Msg("MOVE completed successfully")
+
+	return nil
 }
 
 // Ensure Session implements the imapserver.Session interface.
 var _ imapserver.Session = (*Session)(nil)
+
+// Ensure Session implements the imapserver.SessionMove interface for MOVE support.
+var _ imapserver.SessionMove = (*Session)(nil)
