@@ -1,0 +1,81 @@
+version: "3.8"
+
+# Docker Compose configuration for integration tests
+# This file provides test database instances for SQLite, PostgreSQL, MySQL, and MongoDB
+#
+# Usage:
+#   docker-compose up -d        # Start all databases
+#   docker-compose down -v      # Stop and remove volumes
+#   docker-compose logs -f      # View logs
+#
+# The databases are configured for testing purposes only.
+# Do not use these configurations in production.
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: yunt-test-postgres
+    environment:
+      POSTGRES_USER: yunt
+      POSTGRES_PASSWORD: yunt_test_password
+      POSTGRES_DB: yunt_test
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yunt -d yunt_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: yunt-test-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_test_password
+      MYSQL_USER: yunt
+      MYSQL_PASSWORD: yunt_test_password
+      MYSQL_DATABASE: yunt_test
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "yunt", "-pyunt_test_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: yunt-test-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: yunt
+      MONGO_INITDB_ROOT_PASSWORD: yunt_test_password
+      MONGO_INITDB_DATABASE: yunt_test
+    ports:
+      - "17017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mysql_data:
+  mongodb_data:
+
+networks:
+  default:
+    name: yunt-test-network
