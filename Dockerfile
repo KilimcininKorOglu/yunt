@@ -97,9 +97,11 @@ LABEL org.opencontainers.image.title="Yunt Mail Server" \
 # Install minimal runtime dependencies
 # ca-certificates: for HTTPS/TLS connections
 # tzdata: for timezone support
+# curl: for health checks (smaller than wget on alpine)
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
+    curl \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user and group
@@ -137,9 +139,10 @@ ENV YUNT_DATABASE_DSN=/var/lib/yunt/yunt.db \
     YUNT_LOGGING_FORMAT=json
 
 # Health check
-# Check if the API server is responding
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8025/healthz || exit 1
+# Check if all services are ready (database, SMTP, IMAP)
+# Uses /ready endpoint which verifies all enabled services are running
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl --fail --silent http://localhost:8025/ready || exit 1
 
 # Default command
 ENTRYPOINT ["/usr/local/bin/yunt"]
