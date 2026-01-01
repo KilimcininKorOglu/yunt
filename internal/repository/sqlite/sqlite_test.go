@@ -1375,3 +1375,359 @@ func TestSplitStatements(t *testing.T) {
 		})
 	}
 }
+
+// TestStatsRepository tests statistics repository operations.
+func TestStatsRepository(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	stats := repo.Stats()
+
+	// Create a user
+	user := &domain.User{
+		ID:           domain.ID("stats-user-1"),
+		Username:     "statsuser",
+		Email:        "stats@example.com",
+		PasswordHash: "hash",
+		Role:         domain.RoleUser,
+		Status:       domain.StatusActive,
+		CreatedAt:    domain.Now(),
+		UpdatedAt:    domain.Now(),
+	}
+	if err := repo.Users().Create(ctx, user); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// Create a mailbox
+	mailbox := &domain.Mailbox{
+		ID:        domain.ID("stats-mailbox-1"),
+		UserID:    user.ID,
+		Name:      "Stats Test Inbox",
+		Address:   "stats-test@example.com",
+		CreatedAt: domain.Now(),
+		UpdatedAt: domain.Now(),
+	}
+	if err := repo.Mailboxes().Create(ctx, mailbox); err != nil {
+		t.Fatalf("failed to create mailbox: %v", err)
+	}
+
+	// Get initial stats
+	systemStats, err := stats.GetStats(ctx)
+	if err != nil {
+		t.Fatalf("failed to get stats: %v", err)
+	}
+
+	// Verify initial user stats
+	if systemStats.Users.TotalUsers < 1 {
+		t.Errorf("expected at least 1 user, got %d", systemStats.Users.TotalUsers)
+	}
+
+	// Verify initial mailbox stats
+	if systemStats.Mailboxes.TotalMailboxes < 1 {
+		t.Errorf("expected at least 1 mailbox, got %d", systemStats.Mailboxes.TotalMailboxes)
+	}
+
+	// Create messages
+	for i := 0; i < 3; i++ {
+		msg := &domain.Message{
+			ID:        domain.ID(fmt.Sprintf("stats-msg-%d", i)),
+			MailboxID: mailbox.ID,
+			From:      domain.EmailAddress{Address: "sender@example.com"},
+			To:        []domain.EmailAddress{{Address: "stats-test@example.com"}},
+			Subject:   fmt.Sprintf("Test Message %d", i),
+			TextBody:  "Test body",
+			Size:      int64(1000 + i*100),
+			Status:    domain.MessageUnread,
+			CreatedAt: domain.Now(),
+			UpdatedAt: domain.Now(),
+		}
+		if i == 0 {
+			msg.IsStarred = true
+		}
+		if i == 2 {
+			msg.IsSpam = true
+		}
+		if err := repo.Messages().Create(ctx, msg); err != nil {
+			t.Fatalf("failed to create message %d: %v", i, err)
+		}
+	}
+
+	// Get message stats
+	messageStats, err := stats.GetMessageAggregateStats(ctx)
+	if err != nil {
+		t.Fatalf("failed to get message aggregate stats: %v", err)
+	}
+
+	if messageStats.TotalMessages < 3 {
+		t.Errorf("expected at least 3 messages, got %d", messageStats.TotalMessages)
+	}
+
+	if messageStats.StarredMessages < 1 {
+		t.Errorf("expected at least 1 starred message, got %d", messageStats.StarredMessages)
+	}
+
+	if messageStats.SpamMessages < 1 {
+		t.Errorf("expected at least 1 spam message, got %d", messageStats.SpamMessages)
+	}
+
+	if messageStats.UnreadMessages < 3 {
+		t.Errorf("expected at least 3 unread messages, got %d", messageStats.UnreadMessages)
+	}
+
+	// Get mailbox-specific stats
+	mailboxStats, err := stats.GetMessageStatsByMailbox(ctx, mailbox.ID)
+	if err != nil {
+		t.Fatalf("failed to get mailbox stats: %v", err)
+	}
+
+	if mailboxStats.Count != 3 {
+		t.Errorf("expected 3 messages in mailbox, got %d", mailboxStats.Count)
+	}
+
+	if mailboxStats.UnreadCount != 3 {
+		t.Errorf("expected 3 unread in mailbox, got %d", mailboxStats.UnreadCount)
+	}
+
+	if mailboxStats.StarredCount != 1 {
+		t.Errorf("expected 1 starred in mailbox, got %d", mailboxStats.StarredCount)
+	}
+
+	// Get user stats
+	userStats, err := stats.GetMessageStatsByUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to get user stats: %v", err)
+	}
+
+	if userStats.Count != 3 {
+		t.Errorf("expected 3 messages for user, got %d", userStats.Count)
+	}
+
+	// Get storage stats
+	storageStats, err := stats.GetStorageStats(ctx)
+	if err != nil {
+		t.Fatalf("failed to get storage stats: %v", err)
+	}
+
+	if storageStats.TotalSize <= 0 {
+		t.Errorf("expected positive total size, got %d", storageStats.TotalSize)
+	}
+
+	// Get top senders
+	topSenders, err := stats.GetTopSenders(ctx, 10)
+	if err != nil {
+		t.Fatalf("failed to get top senders: %v", err)
+	}
+
+	if len(topSenders) == 0 {
+		t.Error("expected at least one sender")
+	} else if topSenders[0].MessageCount < 3 {
+		t.Errorf("expected sender to have at least 3 messages, got %d", topSenders[0].MessageCount)
+	}
+
+	// Get counts
+	starredCount, err := stats.GetStarredCount(ctx, nil)
+	if err != nil {
+		t.Fatalf("failed to get starred count: %v", err)
+	}
+	if starredCount < 1 {
+		t.Errorf("expected at least 1 starred, got %d", starredCount)
+	}
+
+	spamCount, err := stats.GetSpamCount(ctx, nil)
+	if err != nil {
+		t.Fatalf("failed to get spam count: %v", err)
+	}
+	if spamCount < 1 {
+		t.Errorf("expected at least 1 spam, got %d", spamCount)
+	}
+
+	unreadCount, err := stats.GetUnreadCount(ctx, nil)
+	if err != nil {
+		t.Fatalf("failed to get unread count: %v", err)
+	}
+	if unreadCount < 3 {
+		t.Errorf("expected at least 3 unread, got %d", unreadCount)
+	}
+
+	// Test filtered counts
+	mailboxFilter := &domain.StatsFilter{MailboxID: &mailbox.ID}
+	filteredStarred, err := stats.GetStarredCount(ctx, mailboxFilter)
+	if err != nil {
+		t.Fatalf("failed to get filtered starred count: %v", err)
+	}
+	if filteredStarred != 1 {
+		t.Errorf("expected 1 starred in mailbox, got %d", filteredStarred)
+	}
+}
+
+// TestStatsRecalculation tests that statistics can be recalculated accurately.
+func TestStatsRecalculation(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	stats := repo.Stats()
+
+	// Create a user and mailbox
+	user := &domain.User{
+		ID:           domain.ID("recalc-user"),
+		Username:     "recalcuser",
+		Email:        "recalc@example.com",
+		PasswordHash: "hash",
+		Role:         domain.RoleUser,
+		Status:       domain.StatusActive,
+		CreatedAt:    domain.Now(),
+		UpdatedAt:    domain.Now(),
+	}
+	repo.Users().Create(ctx, user)
+
+	mailbox := &domain.Mailbox{
+		ID:        domain.ID("recalc-mailbox"),
+		UserID:    user.ID,
+		Name:      "Recalc Inbox",
+		Address:   "recalc@example.com",
+		CreatedAt: domain.Now(),
+		UpdatedAt: domain.Now(),
+	}
+	repo.Mailboxes().Create(ctx, mailbox)
+
+	// Create some messages
+	for i := 0; i < 5; i++ {
+		msg := &domain.Message{
+			ID:        domain.ID(fmt.Sprintf("recalc-msg-%d", i)),
+			MailboxID: mailbox.ID,
+			From:      domain.EmailAddress{Address: "sender@example.com"},
+			To:        []domain.EmailAddress{{Address: "recalc@example.com"}},
+			Subject:   fmt.Sprintf("Recalc Message %d", i),
+			Size:      int64(500 + i*50),
+			Status:    domain.MessageUnread,
+			CreatedAt: domain.Now(),
+			UpdatedAt: domain.Now(),
+		}
+		repo.Messages().Create(ctx, msg)
+	}
+
+	// Mark some as read
+	repo.Messages().MarkAsRead(ctx, domain.ID("recalc-msg-0"))
+	repo.Messages().MarkAsRead(ctx, domain.ID("recalc-msg-1"))
+
+	// Verify mailbox counters are accurate
+	mailboxData, _ := repo.Mailboxes().GetByID(ctx, mailbox.ID)
+	if mailboxData.MessageCount != 5 {
+		t.Errorf("expected message count 5, got %d", mailboxData.MessageCount)
+	}
+	if mailboxData.UnreadCount != 3 {
+		t.Errorf("expected unread count 3, got %d", mailboxData.UnreadCount)
+	}
+
+	// Verify stats match actual data
+	verifyResult, err := stats.VerifyMailboxStats(ctx)
+	if err != nil {
+		t.Fatalf("failed to verify mailbox stats: %v", err)
+	}
+
+	// The mailbox should pass verification (no mismatches)
+	found := false
+	for _, id := range verifyResult {
+		if id == mailbox.ID {
+			found = true
+			break
+		}
+	}
+	if found {
+		t.Error("mailbox should pass verification but was flagged as mismatched")
+	}
+
+	// Recalculate all stats
+	affected, err := stats.RecalculateAllMailboxStats(ctx)
+	if err != nil {
+		t.Fatalf("failed to recalculate stats: %v", err)
+	}
+	if affected == 0 {
+		t.Error("expected some mailboxes to be affected by recalculation")
+	}
+}
+
+// TestStatsDenormalizedCounters tests that denormalized counters stay in sync.
+func TestStatsDenormalizedCounters(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+
+	// Create user and mailbox
+	user := &domain.User{
+		ID:           domain.ID("counter-user"),
+		Username:     "counteruser",
+		Email:        "counter@example.com",
+		PasswordHash: "hash",
+		Role:         domain.RoleUser,
+		Status:       domain.StatusActive,
+		CreatedAt:    domain.Now(),
+		UpdatedAt:    domain.Now(),
+	}
+	repo.Users().Create(ctx, user)
+
+	mailbox := &domain.Mailbox{
+		ID:        domain.ID("counter-mailbox"),
+		UserID:    user.ID,
+		Name:      "Counter Inbox",
+		Address:   "counter@example.com",
+		CreatedAt: domain.Now(),
+		UpdatedAt: domain.Now(),
+	}
+	repo.Mailboxes().Create(ctx, mailbox)
+
+	// Verify initial counters
+	mb, _ := repo.Mailboxes().GetByID(ctx, mailbox.ID)
+	if mb.MessageCount != 0 || mb.UnreadCount != 0 || mb.TotalSize != 0 {
+		t.Error("initial counters should be zero")
+	}
+
+	// Create a message - counters should increment
+	msg := &domain.Message{
+		ID:        domain.ID("counter-msg-1"),
+		MailboxID: mailbox.ID,
+		From:      domain.EmailAddress{Address: "sender@example.com"},
+		To:        []domain.EmailAddress{{Address: "counter@example.com"}},
+		Subject:   "Counter Test",
+		Size:      1024,
+		Status:    domain.MessageUnread,
+		CreatedAt: domain.Now(),
+		UpdatedAt: domain.Now(),
+	}
+	repo.Messages().Create(ctx, msg)
+
+	mb, _ = repo.Mailboxes().GetByID(ctx, mailbox.ID)
+	if mb.MessageCount != 1 {
+		t.Errorf("expected message count 1, got %d", mb.MessageCount)
+	}
+	if mb.UnreadCount != 1 {
+		t.Errorf("expected unread count 1, got %d", mb.UnreadCount)
+	}
+	if mb.TotalSize != 1024 {
+		t.Errorf("expected total size 1024, got %d", mb.TotalSize)
+	}
+
+	// Mark as read - unread should decrement
+	repo.Messages().MarkAsRead(ctx, msg.ID)
+	mb, _ = repo.Mailboxes().GetByID(ctx, mailbox.ID)
+	if mb.UnreadCount != 0 {
+		t.Errorf("expected unread count 0 after mark read, got %d", mb.UnreadCount)
+	}
+
+	// Mark as unread - unread should increment
+	repo.Messages().MarkAsUnread(ctx, msg.ID)
+	mb, _ = repo.Mailboxes().GetByID(ctx, mailbox.ID)
+	if mb.UnreadCount != 1 {
+		t.Errorf("expected unread count 1 after mark unread, got %d", mb.UnreadCount)
+	}
+
+	// Delete message - all counters should decrement
+	repo.Messages().Delete(ctx, msg.ID)
+	mb, _ = repo.Mailboxes().GetByID(ctx, mailbox.ID)
+	if mb.MessageCount != 0 {
+		t.Errorf("expected message count 0 after delete, got %d", mb.MessageCount)
+	}
+	if mb.UnreadCount != 0 {
+		t.Errorf("expected unread count 0 after delete, got %d", mb.UnreadCount)
+	}
+	if mb.TotalSize != 0 {
+		t.Errorf("expected total size 0 after delete, got %d", mb.TotalSize)
+	}
+}
