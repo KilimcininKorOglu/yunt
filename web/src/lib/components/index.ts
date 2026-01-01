@@ -1,8 +1,10 @@
 /**
- * Components Library
- * Reusable UI components for the Yunt Web UI.
+ * Components Index
+ * Re-exports all components for easy importing.
  */
 
-export { default as ConfirmDialog } from './ConfirmDialog.svelte';
-export { default as UserForm } from './UserForm.svelte';
-export { default as UserTable } from './UserTable.svelte';
+export { default as Sidebar } from './Sidebar.svelte';
+export { default as SearchBar } from './SearchBar.svelte';
+export { default as FilterControls } from './FilterControls.svelte';
+export { default as BulkActions } from './BulkActions.svelte';
+export { default as MessageTable } from './MessageTable.svelte';
