@@ -39,6 +39,10 @@ out/
 web/.svelte-kit/
 web/build/
 
+# Embedded Web UI build output (keep .gitkeep)
+webui/dist/*
+!webui/dist/.gitkeep
+
 # Data directory
 /data/
 *.db

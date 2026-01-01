@@ -10,6 +10,7 @@ import (
 
 	"yunt/internal/api/middleware"
 	"yunt/internal/config"
+	"yunt/webui"
 )
 
 // RouterConfig contains configuration for the API router.
@@ -111,6 +112,12 @@ func registerRoutes(e *echo.Echo, _ RouterConfig) {
 	// - /api/v1/users
 	// - /api/v1/settings
 	// - etc.
+
+	// Serve embedded Web UI at root
+	// This must be registered last to act as a catch-all for SPA routing
+	if webui.IsAvailable() {
+		e.GET("/*", webui.Handler())
+	}
 }
 
 // healthHandler returns detailed health information.

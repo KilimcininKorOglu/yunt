@@ -10,6 +10,7 @@
 #   -v, --version VER   Version string (default: git describe or 'dev')
 #   -p, --platform OS/ARCH  Target platform (default: current)
 #   -d, --debug         Build with debug symbols
+#   -w, --with-web      Build web UI before Go binary
 #   -h, --help          Show this help message
 #
 # Examples:
@@ -17,6 +18,7 @@
 #   ./scripts/build.sh -v 1.0.0
 #   ./scripts/build.sh -p linux/amd64
 #   ./scripts/build.sh -o dist -v 1.0.0 -p darwin/arm64
+#   ./scripts/build.sh -w  # Build with embedded web UI
 
 set -euo pipefail
 
@@ -29,6 +31,7 @@ BINARY_NAME="yunt"
 OUTPUT_DIR="${PROJECT_ROOT}/bin"
 MAIN_PATH="./cmd/yunt"
 DEBUG_BUILD=false
+BUILD_WEB=false
 TARGET_OS=""
 TARGET_ARCH=""
 
@@ -89,6 +92,10 @@ parse_args() {
                 DEBUG_BUILD=true
                 shift
                 ;;
+            -w|--with-web)
+                BUILD_WEB=true
+                shift
+                ;;
             -h|--help)
                 show_help
                 ;;
@@ -110,6 +117,44 @@ check_go() {
     local go_version
     go_version=$(go version | awk '{print $3}' | sed 's/go//')
     print_info "Using Go version: ${go_version}"
+}
+
+# Build web UI
+build_web() {
+    print_info "Building web UI..."
+    
+    # Check if npm is installed
+    if ! command -v npm &>/dev/null; then
+        print_error "npm is not installed. Please install Node.js and npm."
+        exit 1
+    fi
+    
+    # Change to web directory
+    cd "${PROJECT_ROOT}/web"
+    
+    # Check if node_modules exists
+    if [[ ! -d "node_modules" ]]; then
+        print_info "Installing web dependencies..."
+        npm install
+    fi
+    
+    # Clean previous build in webui/dist
+    print_info "Cleaning previous web build..."
+    find "${PROJECT_ROOT}/webui/dist" -type f ! -name '.gitkeep' -delete 2>/dev/null || true
+    
+    # Build the web UI
+    npm run build
+    
+    # Verify build output
+    if [[ -f "${PROJECT_ROOT}/webui/dist/index.html" ]]; then
+        print_info "Web UI built successfully to webui/dist/"
+    else
+        print_error "Web UI build failed: index.html not found in webui/dist/"
+        exit 1
+    fi
+    
+    # Return to project root
+    cd "${PROJECT_ROOT}"
 }
 
 # Build the binary
@@ -167,6 +212,12 @@ build() {
 main() {
     parse_args "$@"
     check_go
+    
+    # Build web UI if requested
+    if [[ "${BUILD_WEB}" == "true" ]]; then
+        build_web
+    fi
+    
     build
 }
 

@@ -33,7 +33,7 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 .DEFAULT_GOAL := build
 
 # Phony targets
-.PHONY: all build build-all test test-coverage test-race lint lint-fix fmt vet tidy clean run help
+.PHONY: all build build-all build-full test test-coverage test-race lint lint-fix fmt vet tidy clean run help
 .PHONY: release release-linux release-darwin release-windows install dev deps check
 .PHONY: web-install web-dev web-build web-lint web-check web-clean
 
@@ -46,6 +46,10 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Binary built: $(BUILD_DIR)/$(BINARY_NAME)"
+
+## build-full: Build web UI and Go binary together
+build-full: web-build build
+	@echo "Full build complete: Web UI embedded in $(BUILD_DIR)/$(BINARY_NAME)"
 
 ## build-all: Build for all target platforms
 build-all: clean
@@ -205,10 +209,17 @@ web-dev:
 	@echo "Starting web development server..."
 	cd web && npm run dev
 
-## web-build: Build web for production
-web-build:
+## web-build: Build web for production (outputs to webui/dist for go:embed)
+web-build: web-clean-dist
 	@echo "Building web for production..."
 	cd web && npm run build
+	@echo "Web UI built to webui/dist/"
+
+## web-clean-dist: Clean webui/dist directory (preserving .gitkeep)
+web-clean-dist:
+	@echo "Cleaning webui/dist..."
+	@find webui/dist -type f ! -name '.gitkeep' -delete 2>/dev/null || true
+	@find webui/dist -type d -empty -delete 2>/dev/null || true
 
 ## web-lint: Lint web code
 web-lint:
@@ -224,3 +235,5 @@ web-check:
 web-clean:
 	@echo "Cleaning web build artifacts..."
 	rm -rf web/build web/.svelte-kit web/node_modules
+	@find webui/dist -type f ! -name '.gitkeep' -delete 2>/dev/null || true
+	@find webui/dist -type d -empty -delete 2>/dev/null || true
