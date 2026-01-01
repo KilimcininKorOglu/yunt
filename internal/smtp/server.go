@@ -26,6 +26,7 @@ type Server struct {
 	// Repositories for message handling
 	mailboxRepo repository.MailboxRepository
 	messageRepo repository.MessageRepository
+	repo        repository.Repository
 
 	// Relay service for forwarding messages
 	relayService *service.RelayService
@@ -56,25 +57,22 @@ func WithMessageRepo(repo repository.MessageRepository) ServerOption {
 	}
 }
 
-// WithRelayServiceOption sets the relay service for message forwarding.
-func WithRelayServiceOption(svc *service.RelayService) ServerOption {
+// WithRepo sets the main repository for user authentication.
+func WithRepo(repo repository.Repository) ServerOption {
 	return func(s *Server) {
-		s.relayService = svc
+		s.repo = repo
 	}
 }
 
 // Stats holds server statistics.
 type Stats struct {
-	mu                     sync.RWMutex
-	startTime              time.Time
-	connectionsOpen        int64
-	connectionsTotal       int64
-	messagesTotal          int64
-	tlsConnectionsTotal    int64
-	startTLSUpgradesTotal  int64
-	relayAttemptsTotal     int64
-	relaySuccessesTotal    int64
-	relayFailuresTotal     int64
+	mu                    sync.RWMutex
+	startTime             time.Time
+	connectionsOpen       int64
+	connectionsTotal      int64
+	messagesTotal         int64
+	tlsConnectionsTotal   int64
+	startTLSUpgradesTotal int64
 }
 
 // NewStats creates a new Stats instance.
@@ -204,8 +202,8 @@ func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, err
 	if s.messageRepo != nil {
 		backendOpts = append(backendOpts, WithMessageRepository(s.messageRepo))
 	}
-	if s.relayService != nil {
-		backendOpts = append(backendOpts, WithRelayService(s.relayService))
+	if s.repo != nil {
+		backendOpts = append(backendOpts, WithRepository(s.repo))
 	}
 	backend := NewBackend(s, backendOpts...)
 	s.backend = backend
@@ -378,4 +376,29 @@ func (l *smtpErrorLogger) Println(v ...interface{}) {
 // Backend returns the SMTP backend.
 func (s *Server) Backend() *Backend {
 	return s.backend
+}
+
+// Security returns the connection security state.
+func (s *Session) Security() *ConnectionSecurity {
+	return s.security
+}
+
+// updateTLSState updates the security state after STARTTLS handshake.
+// This is called internally when the connection is upgraded to TLS.
+func (s *Session) updateTLSState() {
+	if tlsConn, ok := s.conn.Conn().(*tls.Conn); ok {
+		tlsState := tlsConn.ConnectionState()
+		s.security.UpdateFromTLSState(tlsState, TLSStateStartTLS)
+		s.backend.server.stats.StartTLSUpgraded()
+		s.logger.Info().
+			Str("tlsState", s.security.TLSState().String()).
+			Str("tlsVersion", s.security.TLSVersion()).
+			Str("cipherSuite", s.security.CipherSuite()).
+			Msg("connection upgraded to TLS via STARTTLS")
+	}
+}
+
+// IsTLS returns true if the connection is secured with TLS.
+func (s *Session) IsTLS() bool {
+	return s.security.IsSecure()
 }

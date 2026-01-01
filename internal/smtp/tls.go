@@ -48,12 +48,12 @@ func (s TLSState) IsSecure() bool {
 
 // ConnectionSecurity tracks the security state of an SMTP connection.
 type ConnectionSecurity struct {
-	mu           sync.RWMutex
-	tlsState     TLSState
-	tlsVersion   uint16
-	cipherSuite  uint16
-	serverName   string
-	peerCertDN   string
+	mu            sync.RWMutex
+	tlsState      TLSState
+	tlsVersion    uint16
+	cipherSuite   uint16
+	serverName    string
+	peerCertDN    string
 	handshakeDone bool
 }
 
@@ -179,13 +179,13 @@ func tlsVersionString(version uint16) string {
 
 // TLSManager manages TLS configuration and certificate loading for the SMTP server.
 type TLSManager struct {
-	mu         sync.RWMutex
-	tlsConfig  *tls.Config
-	certFile   string
-	keyFile    string
-	enabled    bool
-	startTLS   bool
-	logger     zerolog.Logger
+	mu        sync.RWMutex
+	tlsConfig *tls.Config
+	certFile  string
+	keyFile   string
+	enabled   bool
+	startTLS  bool
+	logger    zerolog.Logger
 }
 
 // NewTLSManager creates a new TLSManager with the given configuration.

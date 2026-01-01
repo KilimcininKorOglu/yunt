@@ -14,10 +14,11 @@ import (
 // Backend implements the smtp.Backend interface.
 // It manages SMTP connections and creates sessions for handling mail transactions.
 type Backend struct {
-	server       *Server
-	mailboxRepo  repository.MailboxRepository
-	messageRepo  repository.MessageRepository
-	relayService *service.RelayService
+	server        *Server
+	mailboxRepo   repository.MailboxRepository
+	messageRepo   repository.MessageRepository
+	repo          repository.Repository
+	authenticator *Authenticator
 }
 
 // BackendOption is a functional option for configuring the Backend.
@@ -37,10 +38,11 @@ func WithMessageRepository(repo repository.MessageRepository) BackendOption {
 	}
 }
 
-// WithRelayService sets the relay service for forwarding messages.
-func WithRelayService(svc *service.RelayService) BackendOption {
+// WithRepository sets the main repository for user authentication.
+func WithRepository(repo repository.Repository) BackendOption {
 	return func(b *Backend) {
-		b.relayService = svc
+		b.repo = repo
+		b.authenticator = NewAuthenticator(repo)
 	}
 }
 
@@ -171,26 +173,13 @@ func (b *Backend) AuthRequired() bool {
 	return b.server.config.AuthRequired
 }
 
-// RelayEnabled returns true if relay is enabled.
-func (b *Backend) RelayEnabled() bool {
-	return b.relayService != nil && b.relayService.IsEnabled()
+// Authenticator returns the authenticator for SMTP authentication.
+// Returns nil if no repository is configured.
+func (b *Backend) Authenticator() *Authenticator {
+	return b.authenticator
 }
 
-// RelayMessage forwards a message to the external SMTP relay server.
-// This is called after the message is stored locally.
-// Returns the relay result; errors are logged but don't fail the message delivery.
-func (b *Backend) RelayMessage(ctx context.Context, from string, recipients []string, data []byte) *service.RelayResult {
-	if b.relayService == nil {
-		return &service.RelayResult{
-			Success: false,
-			Error:   fmt.Errorf("relay service not configured"),
-		}
-	}
-
-	return b.relayService.Relay(ctx, from, recipients, data)
-}
-
-// GetRelayService returns the relay service for direct access.
-func (b *Backend) GetRelayService() *service.RelayService {
-	return b.relayService
+// AuthEnabled returns true if authentication is available (repository is configured).
+func (b *Backend) AuthEnabled() bool {
+	return b.authenticator != nil
 }
