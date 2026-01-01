@@ -48,6 +48,7 @@ type Session struct {
 	remoteAddr string
 	createdAt  time.Time
 	username   string
+	sessionID  string // Unique session identifier for IDLE tracking
 
 	// Authentication and session state
 	state       SessionState
@@ -458,12 +459,46 @@ func (s *Session) Poll(w *imapserver.UpdateWriter, allowExpunge bool) error {
 	return nil
 }
 
-// Idle waits for mailbox updates.
+// Idle waits for mailbox updates using the IMAP IDLE extension (RFC 2177).
+// It allows the client to receive real-time notifications about mailbox changes.
 func (s *Session) Idle(w *imapserver.UpdateWriter, stop <-chan struct{}) error {
 	s.logger.Debug().Msg("IDLE command started")
-	<-stop
+
+	// Check if a mailbox is selected
+	if s.userSession == nil || s.userSession.SelectedMailbox == nil {
+		s.logger.Debug().Msg("IDLE ended - no mailbox selected")
+		<-stop
+		return nil
+	}
+
+	// Check if IDLE manager is configured
+	idleManager := s.server.IdleManager()
+	if idleManager == nil {
+		// Fallback to simple wait without notifications
+		s.logger.Debug().Msg("IDLE manager not configured, using fallback mode")
+		<-stop
+		s.logger.Debug().Msg("IDLE command ended")
+		return nil
+	}
+
+	// Create a context for the IDLE operation
+	ctx := context.Background()
+
+	// Get the idle handler and process
+	handler := idleManager.CreateHandler(s.sessionID)
+	defer idleManager.RemoveHandler(s.sessionID)
+
+	err := handler.HandleIdle(
+		ctx,
+		w,
+		stop,
+		s.sessionID,
+		s.userSession.SelectedMailbox.ID,
+		s.userSession.User.ID,
+	)
+
 	s.logger.Debug().Msg("IDLE command ended")
-	return nil
+	return err
 }
 
 // Selected state commands

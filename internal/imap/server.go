@@ -11,6 +11,7 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 
@@ -28,6 +29,9 @@ type Server struct {
 
 	// backend provides user authentication and session management.
 	backend *Backend
+
+	// idleManager manages IDLE sessions for real-time notifications.
+	idleManager *IdleManager
 }
 
 // NewServer creates a new IMAP server with the given configuration.
@@ -52,6 +56,22 @@ func (s *Server) SetBackend(backend *Backend) {
 	defer s.mu.Unlock()
 	s.backend = backend
 	s.logger.Info().Msg("IMAP backend configured")
+}
+
+// SetIdleManager sets the IDLE manager for real-time notifications.
+// This should be called before Start() to enable IDLE notifications.
+func (s *Server) SetIdleManager(manager *IdleManager) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.idleManager = manager
+	s.logger.Info().Msg("IMAP IDLE manager configured")
+}
+
+// IdleManager returns the current idle manager, or nil if not set.
+func (s *Server) IdleManager() *IdleManager {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.idleManager
 }
 
 // Backend returns the current backend, or nil if not set.
@@ -254,12 +274,14 @@ func (s *Server) newSession(conn *imapserver.Conn) (imapserver.Session, *imapser
 		Bool("backend_available", s.backend != nil).
 		Msg("New IMAP connection")
 
+	sessionID := uuid.New().String()
 	session := &Session{
 		server:     s,
 		conn:       conn,
-		logger:     s.logger.With().Str("remote_addr", remoteAddr).Logger(),
+		logger:     s.logger.With().Str("remote_addr", remoteAddr).Str("session_id", sessionID).Logger(),
 		remoteAddr: remoteAddr,
 		createdAt:  time.Now(),
+		sessionID:  sessionID,
 		state:      SessionStateNotAuthenticated,
 	}
 
