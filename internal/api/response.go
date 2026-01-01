@@ -220,6 +220,22 @@ func FromError(c echo.Context, err error) error {
 		return BadRequest(c, err.Error())
 	}
 
+	// Handle token-related errors
+	var invalidTokenErr *domain.InvalidTokenError
+	if errors.As(err, &invalidTokenErr) {
+		return Unauthorized(c, invalidTokenErr.Error())
+	}
+
+	var expiredTokenErr *domain.ExpiredTokenError
+	if errors.As(err, &expiredTokenErr) {
+		return Unauthorized(c, "token expired")
+	}
+
+	var sessionRevokedErr *domain.SessionRevokedError
+	if errors.As(err, &sessionRevokedErr) {
+		return Unauthorized(c, "session has been revoked")
+	}
+
 	// Handle validation errors
 	var validationErr *domain.ValidationError
 	if errors.As(err, &validationErr) {
