@@ -1,12 +1,43 @@
 package imap
 
 import (
+	"context"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
 	"github.com/rs/zerolog"
 )
+
+// SessionState represents the current state of an IMAP session.
+type SessionState int
+
+const (
+	// SessionStateNotAuthenticated indicates the session has not yet authenticated.
+	SessionStateNotAuthenticated SessionState = iota
+	// SessionStateAuthenticated indicates the session is authenticated but no mailbox is selected.
+	SessionStateAuthenticated
+	// SessionStateSelected indicates the session has a mailbox selected.
+	SessionStateSelected
+	// SessionStateLogout indicates the session is logging out.
+	SessionStateLogout
+)
+
+// String returns a string representation of the session state.
+func (s SessionState) String() string {
+	switch s {
+	case SessionStateNotAuthenticated:
+		return "not_authenticated"
+	case SessionStateAuthenticated:
+		return "authenticated"
+	case SessionStateSelected:
+		return "selected"
+	case SessionStateLogout:
+		return "logout"
+	default:
+		return "unknown"
+	}
+}
 
 // Session represents an IMAP session for a connected client.
 // It implements the imapserver.Session interface.
@@ -17,14 +48,26 @@ type Session struct {
 	remoteAddr string
 	createdAt  time.Time
 	username   string
+
+	// Authentication and session state
+	state       SessionState
+	userSession *UserSession
 }
 
 // Close is called when the session is closed.
 func (s *Session) Close() error {
+	s.state = SessionStateLogout
 	duration := time.Since(s.createdAt)
+
+	// Clean up user session if authenticated
+	if s.userSession != nil && s.server.backend != nil {
+		s.server.backend.Logout(s.userSession.ID)
+	}
+
 	s.logger.Info().
 		Dur("duration", duration).
 		Str("username", s.username).
+		Str("state", s.state.String()).
 		Msg("Session closed")
 	s.server.onSessionClose(s.remoteAddr)
 	return nil
@@ -39,13 +82,63 @@ func (s *Session) Login(username, password string) error {
 		Str("username", username).
 		Msg("Login attempt")
 
-	// TODO: Implement actual authentication against user store
-	// For now, return authentication failed as we don't have a backend yet
-	s.logger.Warn().
-		Str("username", username).
-		Msg("Login rejected - authentication backend not implemented")
+	// Check if backend is available
+	if s.server.backend == nil {
+		s.logger.Warn().
+			Str("username", username).
+			Msg("Login rejected - backend not configured")
+		return imapserver.ErrAuthFailed
+	}
 
-	return imapserver.ErrAuthFailed
+	// Create a context with timeout for the authentication
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Attempt authentication
+	userSession, err := s.server.backend.Login(ctx, username, password)
+	if err != nil {
+		// Log authentication failure with reason
+		if authErr, ok := err.(*AuthenticationError); ok {
+			s.logger.Warn().
+				Str("username", username).
+				Str("reason", authErr.Reason).
+				Msg("Login rejected")
+		} else {
+			s.logger.Error().
+				Str("username", username).
+				Err(err).
+				Msg("Login failed due to internal error")
+		}
+		return imapserver.ErrAuthFailed
+	}
+
+	// Authentication successful
+	s.username = username
+	s.userSession = userSession
+	s.state = SessionStateAuthenticated
+
+	s.logger.Info().
+		Str("username", username).
+		Str("userID", userSession.User.ID.String()).
+		Str("sessionID", userSession.ID).
+		Msg("Login successful")
+
+	return nil
+}
+
+// IsAuthenticated returns true if the session is authenticated.
+func (s *Session) IsAuthenticated() bool {
+	return s.state >= SessionStateAuthenticated && s.userSession != nil
+}
+
+// GetUserSession returns the authenticated user session, or nil if not authenticated.
+func (s *Session) GetUserSession() *UserSession {
+	return s.userSession
+}
+
+// GetState returns the current session state.
+func (s *Session) GetState() SessionState {
+	return s.state
 }
 
 // Authenticated state commands
