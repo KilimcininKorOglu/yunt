@@ -1,10 +1,9 @@
 /**
- * Components Index
- * Re-exports all components for easy importing.
+ * Component Library Exports
+ * Central export point for all reusable components.
  */
 
-export { default as Sidebar } from './Sidebar.svelte';
-export { default as SearchBar } from './SearchBar.svelte';
-export { default as FilterControls } from './FilterControls.svelte';
-export { default as BulkActions } from './BulkActions.svelte';
-export { default as MessageTable } from './MessageTable.svelte';
+export { default as StatCard } from './StatCard.svelte';
+export { default as MessageList } from './MessageList.svelte';
+export { default as StorageUsage } from './StorageUsage.svelte';
+export { default as ActivityChart } from './ActivityChart.svelte';
