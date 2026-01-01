@@ -533,9 +533,55 @@ func (s *Session) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *
 
 // Store alters message flags.
 func (s *Session) Store(w *imapserver.FetchWriter, numSet imap.NumSet, flags *imap.StoreFlags, options *imap.StoreOptions) error {
-	s.logger.Debug().Msg("STORE command")
+	s.logger.Debug().
+		Bool("silent", flags.Silent).
+		Int("op", int(flags.Op)).
+		Msg("STORE command")
 
-	// TODO: Implement store
+	if !s.IsAuthenticated() {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
+	}
+
+	// Check if a mailbox is selected
+	if s.userSession == nil || s.userSession.SelectedMailbox == nil {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "No mailbox selected",
+		}
+	}
+
+	// Check if mailbox is read-only
+	if s.userSession.IsReadOnly {
+		return &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Mailbox is read-only",
+		}
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create the store handler
+	handler := NewStoreHandler(
+		s.server.backend.Repository(),
+		s.userSession.User.ID,
+		s.userSession.SelectedMailbox,
+	)
+
+	// Execute the store operation
+	if err := handler.Store(ctx, w, numSet, flags, options); err != nil {
+		s.logger.Warn().
+			Err(err).
+			Msg("STORE failed")
+		return err
+	}
+
+	s.logger.Debug().Msg("STORE completed successfully")
+
 	return nil
 }
 
