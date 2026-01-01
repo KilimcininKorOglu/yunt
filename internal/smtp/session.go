@@ -193,6 +193,18 @@ func (s *Session) Data(r io.Reader) error {
 		}
 	}
 
+	// Check rate limits before accepting message
+	if s.backend.server.rateLimiter != nil {
+		if err := s.backend.server.rateLimiter.CheckMessage(s.ctx, s.remoteAddr); err != nil {
+			s.backend.server.stats.RateLimitRejected()
+			s.logger.Warn().
+				Err(err).
+				Str("from", s.from).
+				Msg("message rejected by rate limiter")
+			return err
+		}
+	}
+
 	s.logger.Info().
 		Str("from", s.from).
 		Int("recipientCount", len(s.recipients)).
@@ -282,6 +294,11 @@ func (s *Session) Data(r io.Reader) error {
 
 	s.backend.server.stats.MessageReceived()
 
+	// Track message for rate limiting
+	if s.backend.server.rateLimiter != nil {
+		s.backend.server.rateLimiter.OnMessageSent(s.remoteAddr)
+	}
+
 	return nil
 }
 
@@ -325,6 +342,12 @@ func (s *Session) Logout() error {
 	s.logger.Info().Msg("connection closed")
 	s.cancel() // Cancel any pending operations
 	s.backend.server.stats.ConnectionClosed()
+
+	// Track connection close for rate limiting
+	if s.backend.server.rateLimiter != nil {
+		s.backend.server.rateLimiter.OnConnectionClosed(s.remoteAddr)
+	}
+
 	return nil
 }
 

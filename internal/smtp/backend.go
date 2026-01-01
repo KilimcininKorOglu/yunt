@@ -49,9 +49,24 @@ func NewBackend(s *Server, opts ...BackendOption) *Backend {
 // NewSession creates a new SMTP session for handling a connection.
 // This method is called by the go-smtp library when a new connection is established.
 func (b *Backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
+	remoteAddr := c.Conn().RemoteAddr().String()
+
+	// Check rate limits before accepting connection
+	if b.server.rateLimiter != nil {
+		if err := b.server.rateLimiter.CheckConnection(context.Background(), remoteAddr); err != nil {
+			b.server.stats.RateLimitRejected()
+			b.server.logger.Warn().
+				Str("remoteAddr", remoteAddr).
+				Err(err).
+				Msg("connection rejected by rate limiter")
+			return nil, err
+		}
+		// Track connection for rate limiting
+		b.server.rateLimiter.OnConnectionOpened(remoteAddr)
+	}
+
 	b.server.stats.ConnectionOpened()
 
-	remoteAddr := c.Conn().RemoteAddr().String()
 	b.server.logger.Info().
 		Str("remoteAddr", remoteAddr).
 		Str("hostname", c.Hostname()).
