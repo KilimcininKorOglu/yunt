@@ -25,6 +25,7 @@ type Repository struct {
 	attachments *AttachmentRepository
 	webhooks    *WebhookRepository
 	settings    *SettingsRepository
+	stats       *StatsRepository
 
 	// For transaction support
 	tx   *sqlx.Tx
@@ -64,6 +65,7 @@ func NewWithOptions(pool *ConnectionPool, autoMigrate, autoSeed bool) (*Reposito
 	repo.attachments = NewAttachmentRepository(repo)
 	repo.webhooks = NewWebhookRepository(repo)
 	repo.settings = NewSettingsRepository(repo)
+	repo.stats = NewStatsRepository(repo)
 
 	// Create seeder
 	repo.seeder = NewSeeder(repo)
@@ -113,6 +115,11 @@ func (r *Repository) Webhooks() repository.WebhookRepository {
 // Settings returns the settings repository.
 func (r *Repository) Settings() repository.SettingsRepository {
 	return r.settings
+}
+
+// Stats returns the stats repository.
+func (r *Repository) Stats() *StatsRepository {
+	return r.stats
 }
 
 // Transaction executes the given function within a database transaction.
@@ -184,6 +191,7 @@ func (r *Repository) withTx(tx *sqlx.Tx) *Repository {
 	txRepo.attachments = NewAttachmentRepository(txRepo)
 	txRepo.webhooks = NewWebhookRepository(txRepo)
 	txRepo.settings = NewSettingsRepository(txRepo)
+	txRepo.stats = NewStatsRepository(txRepo)
 
 	return txRepo
 }

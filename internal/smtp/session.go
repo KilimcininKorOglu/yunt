@@ -29,6 +29,9 @@ type Session struct {
 	recipients  []recipientInfo
 	messageSize int64
 
+	// Security state
+	security *ConnectionSecurity
+
 	// Context for cancellation
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -49,6 +52,7 @@ func NewSession(b *Backend, c *smtp.Conn, remoteAddr string) *Session {
 		remoteAddr: remoteAddr,
 		logger:     b.server.logger.With().Str("remoteAddr", remoteAddr).Logger(),
 		recipients: make([]recipientInfo, 0),
+		security:   NewConnectionSecurity(),
 		ctx:        ctx,
 		cancel:     cancel,
 	}
