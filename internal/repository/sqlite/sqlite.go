@@ -15,7 +15,9 @@ import (
 // Repository is the main SQLite repository implementation.
 // It aggregates all entity repositories and provides transaction support.
 type Repository struct {
-	pool *ConnectionPool
+	pool     *ConnectionPool
+	migrator *Migrator
+	seeder   *Seeder
 
 	users       *UserRepository
 	mailboxes   *MailboxRepository
@@ -31,13 +33,28 @@ type Repository struct {
 }
 
 // New creates a new SQLite repository with the given connection pool.
+// It automatically runs pending migrations and seeds initial data if needed.
 func New(pool *ConnectionPool) (*Repository, error) {
+	return NewWithOptions(pool, true, true)
+}
+
+// NewWithOptions creates a new SQLite repository with custom options.
+// autoMigrate determines if migrations should run automatically.
+// autoSeed determines if initial data should be seeded automatically.
+func NewWithOptions(pool *ConnectionPool, autoMigrate, autoSeed bool) (*Repository, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("connection pool is required")
 	}
 
+	// Create migrator
+	migrator, err := NewMigrator(pool)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create migrator: %w", err)
+	}
+
 	repo := &Repository{
-		pool: pool,
+		pool:     pool,
+		migrator: migrator,
 	}
 
 	// Initialize entity repositories
@@ -48,9 +65,21 @@ func New(pool *ConnectionPool) (*Repository, error) {
 	repo.webhooks = NewWebhookRepository(repo)
 	repo.settings = NewSettingsRepository(repo)
 
-	// Create schema if needed
-	if err := repo.createSchema(context.Background()); err != nil {
-		return nil, fmt.Errorf("failed to create schema: %w", err)
+	// Create seeder
+	repo.seeder = NewSeeder(repo)
+
+	// Run migrations if auto-migrate is enabled
+	if autoMigrate {
+		if err := repo.Migrate(context.Background()); err != nil {
+			return nil, fmt.Errorf("failed to run migrations: %w", err)
+		}
+	}
+
+	// Seed initial data if auto-seed is enabled
+	if autoSeed {
+		if err := repo.Seed(context.Background()); err != nil {
+			return nil, fmt.Errorf("failed to seed database: %w", err)
+		}
 	}
 
 	return repo, nil
@@ -404,9 +433,79 @@ func (r *Repository) createSchema(ctx context.Context) error {
 	return nil
 }
 
-// Migrate runs database migrations.
+// Migrate runs all pending database migrations.
 func (r *Repository) Migrate(ctx context.Context) error {
-	return r.createSchema(ctx)
+	if r.migrator == nil {
+		// Fallback to legacy schema creation for backward compatibility
+		return r.createSchema(ctx)
+	}
+	return r.migrator.Migrate(ctx)
+}
+
+// MigrateUp runs a specific number of pending migrations.
+func (r *Repository) MigrateUp(ctx context.Context, steps int) error {
+	if r.migrator == nil {
+		return fmt.Errorf("migrator not initialized")
+	}
+	return r.migrator.MigrateUp(ctx, steps)
+}
+
+// MigrateDown rolls back a specific number of migrations.
+func (r *Repository) MigrateDown(ctx context.Context, steps int) error {
+	if r.migrator == nil {
+		return fmt.Errorf("migrator not initialized")
+	}
+	return r.migrator.MigrateDown(ctx, steps)
+}
+
+// MigrationVersion returns the current migration version.
+func (r *Repository) MigrationVersion(ctx context.Context) (int64, error) {
+	if r.migrator == nil {
+		return 0, fmt.Errorf("migrator not initialized")
+	}
+	return r.migrator.MigrationVersion(ctx)
+}
+
+// MigrationStatus returns the status of all migrations.
+func (r *Repository) MigrationStatus(ctx context.Context) ([]repository.MigrationInfo, error) {
+	if r.migrator == nil {
+		return nil, fmt.Errorf("migrator not initialized")
+	}
+	return r.migrator.MigrationStatus(ctx)
+}
+
+// Migrator returns the underlying migrator instance.
+func (r *Repository) Migrator() *Migrator {
+	return r.migrator
+}
+
+// Seed populates the database with initial data.
+func (r *Repository) Seed(ctx context.Context) error {
+	if r.seeder == nil {
+		return fmt.Errorf("seeder not initialized")
+	}
+	return r.seeder.Seed(ctx)
+}
+
+// SeedWithConfig populates the database with initial data using custom configuration.
+func (r *Repository) SeedWithConfig(ctx context.Context, config *SeedConfig) error {
+	if r.seeder == nil {
+		return fmt.Errorf("seeder not initialized")
+	}
+	return r.seeder.SeedWithConfig(ctx, config)
+}
+
+// Seeder returns the underlying seeder instance.
+func (r *Repository) Seeder() *Seeder {
+	return r.seeder
+}
+
+// IsSeeded checks if the database has been seeded with initial data.
+func (r *Repository) IsSeeded(ctx context.Context) (bool, error) {
+	if r.seeder == nil {
+		return false, fmt.Errorf("seeder not initialized")
+	}
+	return r.seeder.IsSeeded(ctx)
 }
 
 // DatabaseInfo returns information about the SQLite database.
