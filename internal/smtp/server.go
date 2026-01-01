@@ -26,6 +26,7 @@ type Server struct {
 	// Repositories for message handling
 	mailboxRepo repository.MailboxRepository
 	messageRepo repository.MessageRepository
+	repo        repository.Repository
 
 	// State management
 	running  atomic.Bool
@@ -53,13 +54,22 @@ func WithMessageRepo(repo repository.MessageRepository) ServerOption {
 	}
 }
 
+// WithRepo sets the main repository for user authentication.
+func WithRepo(repo repository.Repository) ServerOption {
+	return func(s *Server) {
+		s.repo = repo
+	}
+}
+
 // Stats holds server statistics.
 type Stats struct {
-	mu               sync.RWMutex
-	startTime        time.Time
-	connectionsOpen  int64
-	connectionsTotal int64
-	messagesTotal    int64
+	mu                    sync.RWMutex
+	startTime             time.Time
+	connectionsOpen       int64
+	connectionsTotal      int64
+	messagesTotal         int64
+	tlsConnectionsTotal   int64
+	startTLSUpgradesTotal int64
 }
 
 // NewStats creates a new Stats instance.
@@ -152,6 +162,9 @@ func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, err
 	}
 	if s.messageRepo != nil {
 		backendOpts = append(backendOpts, WithMessageRepository(s.messageRepo))
+	}
+	if s.repo != nil {
+		backendOpts = append(backendOpts, WithRepository(s.repo))
 	}
 	backend := NewBackend(s, backendOpts...)
 	s.backend = backend
@@ -322,13 +335,13 @@ func (s *Server) Backend() *Backend {
 }
 
 // Security returns the connection security state.
-func (s *session) Security() *ConnectionSecurity {
+func (s *Session) Security() *ConnectionSecurity {
 	return s.security
 }
 
 // updateTLSState updates the security state after STARTTLS handshake.
 // This is called internally when the connection is upgraded to TLS.
-func (s *session) updateTLSState() {
+func (s *Session) updateTLSState() {
 	if tlsConn, ok := s.conn.Conn().(*tls.Conn); ok {
 		tlsState := tlsConn.ConnectionState()
 		s.security.UpdateFromTLSState(tlsState, TLSStateStartTLS)
@@ -342,6 +355,6 @@ func (s *session) updateTLSState() {
 }
 
 // IsTLS returns true if the connection is secured with TLS.
-func (s *session) IsTLS() bool {
+func (s *Session) IsTLS() bool {
 	return s.security.IsSecure()
 }

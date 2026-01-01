@@ -13,9 +13,11 @@ import (
 // Backend implements the smtp.Backend interface.
 // It manages SMTP connections and creates sessions for handling mail transactions.
 type Backend struct {
-	server      *Server
-	mailboxRepo repository.MailboxRepository
-	messageRepo repository.MessageRepository
+	server        *Server
+	mailboxRepo   repository.MailboxRepository
+	messageRepo   repository.MessageRepository
+	repo          repository.Repository
+	authenticator *Authenticator
 }
 
 // BackendOption is a functional option for configuring the Backend.
@@ -32,6 +34,14 @@ func WithMailboxRepository(repo repository.MailboxRepository) BackendOption {
 func WithMessageRepository(repo repository.MessageRepository) BackendOption {
 	return func(b *Backend) {
 		b.messageRepo = repo
+	}
+}
+
+// WithRepository sets the main repository for user authentication.
+func WithRepository(repo repository.Repository) BackendOption {
+	return func(b *Backend) {
+		b.repo = repo
+		b.authenticator = NewAuthenticator(repo)
 	}
 }
 
@@ -145,4 +155,15 @@ func (b *Backend) MaxRecipients() int {
 // AuthRequired returns true if authentication is required.
 func (b *Backend) AuthRequired() bool {
 	return b.server.config.AuthRequired
+}
+
+// Authenticator returns the authenticator for SMTP authentication.
+// Returns nil if no repository is configured.
+func (b *Backend) Authenticator() *Authenticator {
+	return b.authenticator
+}
+
+// AuthEnabled returns true if authentication is available (repository is configured).
+func (b *Backend) AuthEnabled() bool {
+	return b.authenticator != nil
 }

@@ -2,6 +2,7 @@ package smtp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -29,6 +30,13 @@ type Session struct {
 	recipients  []recipientInfo
 	messageSize int64
 
+	// Authentication state
+	authenticated bool
+	authUser      *domain.User
+
+	// TLS security state
+	security *ConnectionSecurity
+
 	// Context for cancellation
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -49,16 +57,19 @@ func NewSession(b *Backend, c *smtp.Conn, remoteAddr string) *Session {
 		remoteAddr: remoteAddr,
 		logger:     b.server.logger.With().Str("remoteAddr", remoteAddr).Logger(),
 		recipients: make([]recipientInfo, 0),
+		security:   NewConnectionSecurity(),
 		ctx:        ctx,
 		cancel:     cancel,
 	}
 }
 
 // AuthMechanisms returns the list of supported authentication mechanisms.
-// Returns an empty slice if authentication is not required.
+// Returns the supported mechanisms if authentication is enabled (required or optional).
+// Returns an empty slice if no authenticator is configured.
 func (s *Session) AuthMechanisms() []string {
-	if s.backend.AuthRequired() {
-		return []string{"PLAIN", "LOGIN"}
+	// Only advertise auth mechanisms if we have an authenticator configured
+	if s.backend.AuthEnabled() {
+		return SupportedAuthMechanisms()
 	}
 	return []string{}
 }
@@ -70,9 +81,98 @@ func (s *Session) Auth(mech string) (sasl.Server, error) {
 		Str("mechanism", mech).
 		Msg("auth attempt")
 
-	// For now, return auth unsupported as user service integration is pending
-	// This will be implemented when the user service is available
-	return nil, smtp.ErrAuthUnsupported
+	// Check if authentication is available
+	if !s.backend.AuthEnabled() {
+		s.logger.Warn().
+			Str("mechanism", mech).
+			Msg("auth attempted but no authenticator configured")
+		return nil, smtp.ErrAuthUnsupported
+	}
+
+	authenticator := s.backend.Authenticator()
+
+	switch AuthMechanism(mech) {
+	case AuthMechanismPlain:
+		return s.createPlainServer(authenticator), nil
+
+	case AuthMechanismLogin:
+		return s.createLoginServer(authenticator), nil
+
+	default:
+		s.logger.Warn().
+			Str("mechanism", mech).
+			Msg("unsupported auth mechanism")
+		return nil, smtp.ErrAuthUnsupported
+	}
+}
+
+// createPlainServer creates a PLAIN SASL server for authentication.
+func (s *Session) createPlainServer(authenticator *Authenticator) sasl.Server {
+	return NewPlainServer(func(identity, username, password string) error {
+		// If identity is provided and different from username, use identity
+		// This follows RFC 4616
+		authUsername := username
+		if identity != "" && identity != username {
+			// Some clients send identity, we'll use username for auth
+			s.logger.Debug().
+				Str("identity", identity).
+				Str("username", username).
+				Msg("PLAIN auth with identity")
+		}
+
+		result, err := authenticator.Authenticate(s.ctx, authUsername, password)
+		if err != nil {
+			s.logAuthFailure(authUsername, "PLAIN", err)
+			return err
+		}
+
+		s.authenticated = true
+		s.authUser = result.User
+		s.logAuthSuccess(authUsername, "PLAIN")
+		return nil
+	})
+}
+
+// createLoginServer creates a LOGIN SASL server for authentication.
+func (s *Session) createLoginServer(authenticator *Authenticator) sasl.Server {
+	return NewLoginServer(func(username, password string) error {
+		result, err := authenticator.Authenticate(s.ctx, username, password)
+		if err != nil {
+			s.logAuthFailure(username, "LOGIN", err)
+			return err
+		}
+
+		s.authenticated = true
+		s.authUser = result.User
+		s.logAuthSuccess(username, "LOGIN")
+		return nil
+	})
+}
+
+// logAuthSuccess logs a successful authentication attempt.
+func (s *Session) logAuthSuccess(username, mechanism string) {
+	s.logger.Info().
+		Str("username", username).
+		Str("mechanism", mechanism).
+		Str("remoteAddr", s.remoteAddr).
+		Msg("authentication successful")
+}
+
+// logAuthFailure logs a failed authentication attempt.
+// Uses structured logging to track failed attempts without leaking sensitive info.
+func (s *Session) logAuthFailure(username, mechanism string, err error) {
+	var authErr *AuthenticationError
+	reason := "unknown"
+	if errors.As(err, &authErr) {
+		reason = authErr.Reason
+	}
+
+	s.logger.Warn().
+		Str("username", username).
+		Str("mechanism", mechanism).
+		Str("remoteAddr", s.remoteAddr).
+		Str("reason", reason).
+		Msg("authentication failed")
 }
 
 // Mail handles the MAIL FROM command.
@@ -434,4 +534,14 @@ func (s *Session) RecipientCount() int {
 // Deadline returns the session deadline if set.
 func (s *Session) Deadline() (time.Time, bool) {
 	return s.ctx.Deadline()
+}
+
+// IsAuthenticated returns true if the session has been authenticated.
+func (s *Session) IsAuthenticated() bool {
+	return s.authenticated
+}
+
+// AuthenticatedUser returns the authenticated user, or nil if not authenticated.
+func (s *Session) AuthenticatedUser() *domain.User {
+	return s.authUser
 }
