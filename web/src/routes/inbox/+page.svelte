@@ -34,7 +34,10 @@
 		messagesStore.clearSearch();
 	}
 
-	function handleFilterChange(filters: { status?: 'read' | 'unread'; isStarred?: boolean }): void {
+	function handleFilterChange(filters: {
+		status?: 'read' | 'unread';
+		isStarred?: boolean;
+	}): void {
 		messagesStore.setFilters(filters);
 	}
 
@@ -69,8 +72,8 @@
 		if (message.status === 'unread') {
 			messagesStore.markAsRead(message.id);
 		}
-		// Navigate to message detail (placeholder for now)
-		// goto(`/inbox/${message.id}`);
+		// Navigate to message detail
+		goto(`/message/${message.id}`);
 	}
 
 	function handleToggleSelect(id: ID): void {
@@ -194,7 +197,9 @@
 		</header>
 
 		<!-- Filter Bar -->
-		<div class="flex items-center justify-between border-b border-secondary-200 bg-white px-4 py-2">
+		<div
+			class="flex items-center justify-between border-b border-secondary-200 bg-white px-4 py-2"
+		>
 			{#if messagesStore.hasSelection}
 				<!-- Bulk Actions -->
 				<BulkActions
@@ -221,7 +226,8 @@
 			<!-- Message Count -->
 			<div class="text-sm text-secondary-500">
 				{#if messagesStore.pagination}
-					{messagesStore.pagination.totalItems} message{messagesStore.pagination.totalItems === 1
+					{messagesStore.pagination.totalItems} message{messagesStore.pagination
+						.totalItems === 1
 						? ''
 						: 's'}
 				{/if}
@@ -233,7 +239,12 @@
 			<div class="border-b border-red-200 bg-red-50 px-4 py-3" role="alert">
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-2">
-						<svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<svg
+							class="h-5 w-5 text-red-500"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"

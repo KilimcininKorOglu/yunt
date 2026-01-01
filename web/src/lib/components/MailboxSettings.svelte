@@ -39,9 +39,9 @@
 	// Form validation
 	const isFormValid = $derived(
 		formData.name.trim().length > 0 &&
-		formData.address.trim().length > 0 &&
-		!nameError &&
-		!addressError
+			formData.address.trim().length > 0 &&
+			!nameError &&
+			!addressError
 	);
 
 	// Load mailboxes on mount
@@ -175,7 +175,11 @@
 	}
 
 	async function handleDelete(mailbox: Mailbox): Promise<void> {
-		if (!confirm(`Are you sure you want to delete the mailbox "${mailbox.name}"? All messages will be permanently deleted.`)) {
+		if (
+			!confirm(
+				`Are you sure you want to delete the mailbox "${mailbox.name}"? All messages will be permanently deleted.`
+			)
+		) {
 			return;
 		}
 
@@ -222,26 +226,34 @@
 	<div class="flex items-center justify-between">
 		<h3 class="text-lg font-semibold text-secondary-900">Mailboxes</h3>
 		<div class="flex items-center gap-2">
-			<button
-				class="btn-secondary text-sm"
-				onclick={loadMailboxes}
-				disabled={isLoading}
-			>
+			<button class="btn-secondary text-sm" onclick={loadMailboxes} disabled={isLoading}>
 				{#if isLoading}
 					<svg class="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						<circle
+							class="opacity-25"
+							cx="12"
+							cy="12"
+							r="10"
+							stroke="currentColor"
+							stroke-width="4"
+						></circle>
+						<path
+							class="opacity-75"
+							fill="currentColor"
+							d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+						></path>
 					</svg>
 				{/if}
 				Refresh
 			</button>
-			<button
-				class="btn-primary text-sm"
-				onclick={openCreateForm}
-				disabled={showCreateForm}
-			>
+			<button class="btn-primary text-sm" onclick={openCreateForm} disabled={showCreateForm}>
 				<svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 4v16m8-8H4"
+					/>
 				</svg>
 				New Mailbox
 			</button>
@@ -252,13 +264,32 @@
 	{#if error}
 		<div class="rounded-lg border border-red-200 bg-red-50 p-4" role="alert">
 			<div class="flex items-start gap-3">
-				<svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+				<svg
+					class="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+					/>
 				</svg>
 				<p class="text-sm text-red-700">{error}</p>
-				<button class="ml-auto text-red-500 hover:text-red-700" onclick={() => (error = null)} aria-label="Dismiss error">
+				<button
+					class="ml-auto text-red-500 hover:text-red-700"
+					onclick={() => (error = null)}
+					aria-label="Dismiss error"
+				>
 					<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						/>
 					</svg>
 				</button>
 			</div>
@@ -282,7 +313,10 @@
 				<div class="grid gap-4 sm:grid-cols-2">
 					<!-- Name Field -->
 					<div>
-						<label for="mailbox-name" class="mb-1 block text-sm font-medium text-secondary-700">
+						<label
+							for="mailbox-name"
+							class="mb-1 block text-sm font-medium text-secondary-700"
+						>
 							Name <span class="text-red-500">*</span>
 						</label>
 						<input
@@ -302,7 +336,10 @@
 
 					<!-- Address Field -->
 					<div>
-						<label for="mailbox-address" class="mb-1 block text-sm font-medium text-secondary-700">
+						<label
+							for="mailbox-address"
+							class="mb-1 block text-sm font-medium text-secondary-700"
+						>
 							Address <span class="text-red-500">*</span>
 						</label>
 						<input
@@ -318,14 +355,19 @@
 						{#if addressError}
 							<p class="mt-1 text-sm text-red-500">{addressError}</p>
 						{:else if editingMailbox}
-							<p class="mt-1 text-xs text-secondary-400">Address cannot be changed after creation</p>
+							<p class="mt-1 text-xs text-secondary-400">
+								Address cannot be changed after creation
+							</p>
 						{/if}
 					</div>
 				</div>
 
 				<!-- Description Field -->
 				<div>
-					<label for="mailbox-description" class="mb-1 block text-sm font-medium text-secondary-700">
+					<label
+						for="mailbox-description"
+						class="mb-1 block text-sm font-medium text-secondary-700"
+					>
 						Description
 					</label>
 					<textarea
@@ -340,7 +382,10 @@
 				<div class="grid gap-4 sm:grid-cols-2">
 					<!-- Retention Days -->
 					<div>
-						<label for="retention-days" class="mb-1 block text-sm font-medium text-secondary-700">
+						<label
+							for="retention-days"
+							class="mb-1 block text-sm font-medium text-secondary-700"
+						>
 							Retention (days)
 						</label>
 						<input
@@ -391,8 +436,19 @@
 						{#if isSubmitting}
 							<span class="flex items-center gap-2">
 								<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									<circle
+										class="opacity-25"
+										cx="12"
+										cy="12"
+										r="10"
+										stroke="currentColor"
+										stroke-width="4"
+									></circle>
+									<path
+										class="opacity-75"
+										fill="currentColor"
+										d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+									></path>
 								</svg>
 								Saving...
 							</span>
@@ -408,24 +464,31 @@
 	<!-- Loading State -->
 	{#if isLoading && mailboxes.length === 0}
 		<div class="flex items-center justify-center py-12">
-			<div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600"></div>
+			<div
+				class="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600"
+			></div>
 		</div>
 	{:else if mailboxes.length === 0}
 		<!-- Empty State -->
 		<div class="rounded-lg border border-dashed border-secondary-300 p-8 text-center">
-			<svg class="mx-auto h-12 w-12 text-secondary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+			<svg
+				class="mx-auto h-12 w-12 text-secondary-400"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+			>
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="1.5"
+					d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+				/>
 			</svg>
 			<h4 class="mt-4 text-lg font-medium text-secondary-900">No mailboxes</h4>
 			<p class="mt-2 text-sm text-secondary-500">
 				Create a mailbox to start receiving emails.
 			</p>
-			<button
-				class="btn-primary mt-4"
-				onclick={openCreateForm}
-			>
-				Create Mailbox
-			</button>
+			<button class="btn-primary mt-4" onclick={openCreateForm}> Create Mailbox </button>
 		</div>
 	{:else}
 		<!-- Mailbox List -->
@@ -435,46 +498,92 @@
 					<div class="flex items-start justify-between gap-4">
 						<div class="min-w-0 flex-1">
 							<div class="flex items-center gap-2">
-								<h4 class="font-medium text-secondary-900 truncate">{mailbox.name}</h4>
+								<h4 class="font-medium text-secondary-900 truncate">
+									{mailbox.name}
+								</h4>
 								{#if mailbox.isDefault}
-									<span class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
+									<span
+										class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700"
+									>
 										Default
 									</span>
 								{/if}
 								{#if mailbox.isCatchAll}
-									<span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+									<span
+										class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700"
+									>
 										Catch-all
 									</span>
 								{/if}
 							</div>
-							<p class="mt-1 text-sm text-secondary-500 truncate font-mono">{mailbox.address}</p>
+							<p class="mt-1 text-sm text-secondary-500 truncate font-mono">
+								{mailbox.address}
+							</p>
 							{#if mailbox.description}
-								<p class="mt-1 text-sm text-secondary-400 truncate">{mailbox.description}</p>
+								<p class="mt-1 text-sm text-secondary-400 truncate">
+									{mailbox.description}
+								</p>
 							{/if}
-							<div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-400">
+							<div
+								class="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-400"
+							>
 								<span class="flex items-center gap-1">
-									<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+									<svg
+										class="h-4 w-4"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+										/>
 									</svg>
 									{mailbox.messageCount} messages
 								</span>
 								{#if mailbox.unreadCount > 0}
 									<span class="flex items-center gap-1 text-primary-600">
-										<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+										<svg
+											class="h-4 w-4"
+											fill="currentColor"
+											viewBox="0 0 24 24"
+										>
 											<circle cx="12" cy="12" r="4" />
 										</svg>
 										{mailbox.unreadCount} unread
 									</span>
 								{/if}
 								<span class="flex items-center gap-1">
-									<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+									<svg
+										class="h-4 w-4"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
+										/>
 									</svg>
 									{formatSize(mailbox.totalSize)}
 								</span>
 								<span class="flex items-center gap-1">
-									<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+									<svg
+										class="h-4 w-4"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+										/>
 									</svg>
 									{mailbox.retentionDays} days retention
 								</span>
@@ -490,13 +599,38 @@
 									title="Set as default"
 								>
 									{#if settingDefaultId === mailbox.id}
-										<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
-											<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-											<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+										<svg
+											class="h-5 w-5 animate-spin"
+											fill="none"
+											viewBox="0 0 24 24"
+										>
+											<circle
+												class="opacity-25"
+												cx="12"
+												cy="12"
+												r="10"
+												stroke="currentColor"
+												stroke-width="4"
+											></circle>
+											<path
+												class="opacity-75"
+												fill="currentColor"
+												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+											></path>
 										</svg>
 									{:else}
-										<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+										<svg
+											class="h-5 w-5"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke="currentColor"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+											/>
 										</svg>
 									{/if}
 								</button>
@@ -508,8 +642,18 @@
 								onclick={() => openEditForm(mailbox)}
 								title="Edit mailbox"
 							>
-								<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+								<svg
+									class="h-5 w-5"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+									/>
 								</svg>
 							</button>
 
@@ -518,16 +662,43 @@
 								class="rounded-lg p-2 text-red-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
 								onclick={() => handleDelete(mailbox)}
 								disabled={deletingId === mailbox.id || mailbox.isDefault}
-								title={mailbox.isDefault ? 'Cannot delete default mailbox' : 'Delete mailbox'}
+								title={mailbox.isDefault
+									? 'Cannot delete default mailbox'
+									: 'Delete mailbox'}
 							>
 								{#if deletingId === mailbox.id}
-									<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									<svg
+										class="h-5 w-5 animate-spin"
+										fill="none"
+										viewBox="0 0 24 24"
+									>
+										<circle
+											class="opacity-25"
+											cx="12"
+											cy="12"
+											r="10"
+											stroke="currentColor"
+											stroke-width="4"
+										></circle>
+										<path
+											class="opacity-75"
+											fill="currentColor"
+											d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+										></path>
 									</svg>
 								{:else}
-									<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+									<svg
+										class="h-5 w-5"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+										/>
 									</svg>
 								{/if}
 							</button>

@@ -5,7 +5,13 @@
 	 * Handles both create and edit modes based on whether a user is provided.
 	 */
 
-	import type { UserProfile, UserCreateInput, UserUpdateInput, UserRole, UserStatus } from '$lib/api';
+	import type {
+		UserProfile,
+		UserCreateInput,
+		UserUpdateInput,
+		UserRole,
+		UserStatus
+	} from '$lib/api';
 
 	interface Props {
 		/** User to edit (null for create mode) */
@@ -15,18 +21,15 @@
 		/** Error message to display */
 		error?: string | null;
 		/** Callback when form is submitted */
-		onSubmit: (data: UserCreateInput | UserUpdateInput, isEdit: boolean) => void | Promise<void>;
+		onSubmit: (
+			data: UserCreateInput | UserUpdateInput,
+			isEdit: boolean
+		) => void | Promise<void>;
 		/** Callback when form is cancelled */
 		onCancel: () => void;
 	}
 
-	const {
-		user = null,
-		isLoading = false,
-		error = null,
-		onSubmit,
-		onCancel
-	}: Props = $props();
+	const { user = null, isLoading = false, error = null, onSubmit, onCancel }: Props = $props();
 
 	// Determine if we're in edit mode
 	const isEdit = $derived(user !== null);
@@ -157,10 +160,10 @@
 	// Check if form can be submitted
 	const canSubmit = $derived(
 		username.trim().length >= 3 &&
-		email.trim().length > 0 &&
-		(isEdit || password.length >= 8) &&
-		(!password || password === confirmPassword) &&
-		!isLoading
+			email.trim().length > 0 &&
+			(isEdit || password.length >= 8) &&
+			(!password || password === confirmPassword) &&
+			!isLoading
 	);
 
 	// Handle form submission
@@ -326,7 +329,8 @@
 		<!-- Password field -->
 		<div>
 			<label for="password" class="mb-2 block text-sm font-medium text-secondary-700">
-				{isEdit ? 'New Password' : 'Password'} {#if !isEdit}<span class="text-red-500">*</span>{/if}
+				{isEdit ? 'New Password' : 'Password'}
+				{#if !isEdit}<span class="text-red-500">*</span>{/if}
 			</label>
 			<input
 				type="password"
@@ -350,7 +354,10 @@
 		<!-- Confirm password field (only show when password is entered) -->
 		{#if password}
 			<div>
-				<label for="confirmPassword" class="mb-2 block text-sm font-medium text-secondary-700">
+				<label
+					for="confirmPassword"
+					class="mb-2 block text-sm font-medium text-secondary-700"
+				>
 					Confirm Password <span class="text-red-500">*</span>
 				</label>
 				<input
@@ -378,13 +385,7 @@
 				<label for="role" class="mb-2 block text-sm font-medium text-secondary-700">
 					Role
 				</label>
-				<select
-					id="role"
-					name="role"
-					bind:value={role}
-					class="input"
-					disabled={isLoading}
-				>
+				<select id="role" name="role" bind:value={role} class="input" disabled={isLoading}>
 					{#each roles as r}
 						<option value={r.value}>{r.label}</option>
 					{/each}
@@ -414,19 +415,10 @@
 
 		<!-- Form actions -->
 		<div class="flex justify-end gap-3 pt-4 border-t border-secondary-200">
-			<button
-				type="button"
-				class="btn-secondary"
-				onclick={onCancel}
-				disabled={isLoading}
-			>
+			<button type="button" class="btn-secondary" onclick={onCancel} disabled={isLoading}>
 				Cancel
 			</button>
-			<button
-				type="submit"
-				class="btn-primary"
-				disabled={!canSubmit}
-			>
+			<button type="submit" class="btn-primary" disabled={!canSubmit}>
 				{#if isLoading}
 					<span class="flex items-center gap-2">
 						<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">

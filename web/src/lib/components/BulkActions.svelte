@@ -187,7 +187,12 @@
 							onclick={() => handleMove(mailbox.id)}
 							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-secondary-700 hover:bg-secondary-50"
 						>
-							<svg class="h-4 w-4 text-secondary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<svg
+								class="h-4 w-4 text-secondary-400"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+							>
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"

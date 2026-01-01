@@ -1,3 +1,54 @@
+<script module lang="ts">
+	/**
+	 * Calculate page number for pagination display
+	 */
+	function getPageNumber(pagination: PaginationInfo, idx: number): number {
+		const { page, totalPages } = pagination;
+		const maxVisible = 7;
+
+		if (totalPages <= maxVisible) {
+			return idx + 1;
+		}
+
+		// Always show first and last, with ellipsis
+		if (idx === 0) return 1;
+		if (idx === maxVisible - 1) return totalPages;
+
+		// Show pages around current
+		const start = Math.max(2, page - 2);
+		const end = Math.min(totalPages - 1, page + 2);
+		const range = [];
+
+		for (let i = start; i <= end; i++) {
+			range.push(i);
+		}
+
+		// Pad to fill gaps
+		while (range.length < maxVisible - 2) {
+			if (range[0] > 2) {
+				range.unshift(range[0] - 1);
+			} else if (range[range.length - 1] < totalPages - 1) {
+				range.push(range[range.length - 1] + 1);
+			} else {
+				break;
+			}
+		}
+
+		// Add ellipsis indicators (-1)
+		const result: number[] = [1];
+		if (range[0] > 2) {
+			result.push(-1);
+		}
+		result.push(...range);
+		if (range[range.length - 1] < totalPages - 1) {
+			result.push(-1);
+		}
+		result.push(totalPages);
+
+		return result[idx] ?? -1;
+	}
+</script>
+
 <script lang="ts">
 	/**
 	 * MessageTable Component
@@ -289,8 +340,16 @@
 							<!-- Attachments -->
 							<td class="px-2 py-3">
 								{#if message.attachmentCount > 0}
-									<span class="text-secondary-400" title="{message.attachmentCount} attachment(s)">
-										<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<span
+										class="text-secondary-400"
+										title="{message.attachmentCount} attachment(s)"
+									>
+										<svg
+											class="h-4 w-4"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke="currentColor"
+										>
 											<path
 												stroke-linecap="round"
 												stroke-linejoin="round"
@@ -320,7 +379,9 @@
 
 	<!-- Pagination -->
 	{#if pagination && pagination.totalPages > 1}
-		<div class="flex items-center justify-between border-t border-secondary-200 bg-white px-4 py-3">
+		<div
+			class="flex items-center justify-between border-t border-secondary-200 bg-white px-4 py-3"
+		>
 			<div class="flex flex-1 items-center justify-between sm:hidden">
 				<button
 					type="button"
@@ -346,7 +407,9 @@
 				<div>
 					<p class="text-sm text-secondary-700">
 						Showing
-						<span class="font-medium">{(pagination.page - 1) * pagination.pageSize + 1}</span>
+						<span class="font-medium"
+							>{(pagination.page - 1) * pagination.pageSize + 1}</span
+						>
 						to
 						<span class="font-medium">
 							{Math.min(pagination.page * pagination.pageSize, pagination.totalItems)}
@@ -356,7 +419,10 @@
 						results
 					</p>
 				</div>
-				<nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+				<nav
+					class="isolate inline-flex -space-x-px rounded-md shadow-sm"
+					aria-label="Pagination"
+				>
 					<!-- Previous Button -->
 					<button
 						type="button"
@@ -365,7 +431,12 @@
 						class="relative inline-flex items-center rounded-l-md border border-secondary-300 bg-white px-2 py-2 text-sm font-medium text-secondary-500 hover:bg-secondary-50 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						<span class="sr-only">Previous</span>
-						<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+						<svg
+							class="h-5 w-5"
+							viewBox="0 0 20 20"
+							fill="currentColor"
+							aria-hidden="true"
+						>
 							<path
 								fill-rule="evenodd"
 								d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
@@ -405,7 +476,12 @@
 						class="relative inline-flex items-center rounded-r-md border border-secondary-300 bg-white px-2 py-2 text-sm font-medium text-secondary-500 hover:bg-secondary-50 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						<span class="sr-only">Next</span>
-						<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+						<svg
+							class="h-5 w-5"
+							viewBox="0 0 20 20"
+							fill="currentColor"
+							aria-hidden="true"
+						>
 							<path
 								fill-rule="evenodd"
 								d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
@@ -418,54 +494,3 @@
 		</div>
 	{/if}
 </div>
-
-<script module lang="ts">
-	/**
-	 * Calculate page number for pagination display
-	 */
-	function getPageNumber(pagination: PaginationInfo, idx: number): number {
-		const { page, totalPages } = pagination;
-		const maxVisible = 7;
-
-		if (totalPages <= maxVisible) {
-			return idx + 1;
-		}
-
-		// Always show first and last, with ellipsis
-		if (idx === 0) return 1;
-		if (idx === maxVisible - 1) return totalPages;
-
-		// Show pages around current
-		const start = Math.max(2, page - 2);
-		const end = Math.min(totalPages - 1, page + 2);
-		const range = [];
-
-		for (let i = start; i <= end; i++) {
-			range.push(i);
-		}
-
-		// Pad to fill gaps
-		while (range.length < maxVisible - 2) {
-			if (range[0] > 2) {
-				range.unshift(range[0] - 1);
-			} else if (range[range.length - 1] < totalPages - 1) {
-				range.push(range[range.length - 1] + 1);
-			} else {
-				break;
-			}
-		}
-
-		// Add ellipsis indicators (-1)
-		const result: number[] = [1];
-		if (range[0] > 2) {
-			result.push(-1);
-		}
-		result.push(...range);
-		if (range[range.length - 1] < totalPages - 1) {
-			result.push(-1);
-		}
-		result.push(totalPages);
-
-		return result[idx] ?? -1;
-	}
-</script>

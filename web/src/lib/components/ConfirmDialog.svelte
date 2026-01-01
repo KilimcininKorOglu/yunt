@@ -137,12 +137,7 @@
 
 			<!-- Actions -->
 			<div class="flex justify-end gap-3">
-				<button
-					type="button"
-					class="btn-secondary"
-					disabled={isLoading}
-					onclick={onCancel}
-				>
+				<button type="button" class="btn-secondary" disabled={isLoading} onclick={onCancel}>
 					{cancelText}
 				</button>
 				<button

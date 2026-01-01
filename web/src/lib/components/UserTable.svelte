@@ -181,7 +181,8 @@
 			<select
 				class="input w-auto"
 				value={roleFilter}
-				onchange={(e) => onRoleFilterChange?.((e.target as HTMLSelectElement).value as UserRole | '')}
+				onchange={(e) =>
+					onRoleFilterChange?.((e.target as HTMLSelectElement).value as UserRole | '')}
 				disabled={isLoading}
 			>
 				{#each roleOptions as opt}
@@ -192,7 +193,10 @@
 			<select
 				class="input w-auto"
 				value={statusFilter}
-				onchange={(e) => onStatusFilterChange?.((e.target as HTMLSelectElement).value as UserStatus | '')}
+				onchange={(e) =>
+					onStatusFilterChange?.(
+						(e.target as HTMLSelectElement).value as UserStatus | ''
+					)}
 				disabled={isLoading}
 			>
 				{#each statusOptions as opt}
@@ -206,7 +210,9 @@
 	<div class="card overflow-hidden">
 		<div class="overflow-x-auto">
 			<table class="w-full text-left text-sm">
-				<thead class="border-b border-secondary-200 bg-secondary-50 text-xs uppercase text-secondary-600">
+				<thead
+					class="border-b border-secondary-200 bg-secondary-50 text-xs uppercase text-secondary-600"
+				>
 					<tr>
 						<th class="px-4 py-3 font-medium">User</th>
 						<th class="px-4 py-3 font-medium">Role</th>
@@ -270,7 +276,9 @@
 									</svg>
 									<p class="text-secondary-500">No users found</p>
 									{#if searchQuery || roleFilter || statusFilter}
-										<p class="text-sm text-secondary-400">Try adjusting your filters</p>
+										<p class="text-sm text-secondary-400">
+											Try adjusting your filters
+										</p>
 									{/if}
 								</div>
 							</td>
@@ -282,7 +290,9 @@
 								<td class="px-4 py-3">
 									<div class="flex items-center gap-3">
 										<!-- Avatar -->
-										<div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-primary-600 font-medium">
+										<div
+											class="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-primary-600 font-medium"
+										>
 											{user.username.charAt(0).toUpperCase()}
 										</div>
 										<!-- Details -->
@@ -299,14 +309,18 @@
 
 								<!-- Role -->
 								<td class="px-4 py-3">
-									<span class={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getRoleBadgeClass(user.role)}`}>
+									<span
+										class={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getRoleBadgeClass(user.role)}`}
+									>
 										{formatRole(user.role)}
 									</span>
 								</td>
 
 								<!-- Status -->
 								<td class="px-4 py-3">
-									<span class={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadgeClass(user.status)}`}>
+									<span
+										class={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadgeClass(user.status)}`}
+									>
 										{formatStatus(user.status)}
 									</span>
 								</td>
@@ -330,7 +344,12 @@
 											onclick={() => onEdit(user)}
 											title="Edit user"
 										>
-											<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<svg
+												class="h-5 w-5"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+											>
 												<path
 													stroke-linecap="round"
 													stroke-linejoin="round"
@@ -346,7 +365,12 @@
 												onclick={() => onDelete(user)}
 												title="Delete user"
 											>
-												<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<svg
+													class="h-5 w-5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
 													<path
 														stroke-linecap="round"
 														stroke-linejoin="round"
@@ -360,7 +384,12 @@
 												class="rounded p-2 text-secondary-300 cursor-not-allowed"
 												title="Cannot delete your own account"
 											>
-												<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<svg
+													class="h-5 w-5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
 													<path
 														stroke-linecap="round"
 														stroke-linejoin="round"
@@ -384,7 +413,10 @@
 	{#if pagination && pagination.totalPages > 1}
 		<div class="flex items-center justify-between px-1">
 			<p class="text-sm text-secondary-600">
-				Showing {(pagination.page - 1) * pagination.pageSize + 1} to {Math.min(pagination.page * pagination.pageSize, pagination.totalItems)} of {pagination.totalItems} users
+				Showing {(pagination.page - 1) * pagination.pageSize + 1} to {Math.min(
+					pagination.page * pagination.pageSize,
+					pagination.totalItems
+				)} of {pagination.totalItems} users
 			</p>
 
 			<nav class="flex items-center gap-1" aria-label="Pagination">
@@ -396,7 +428,12 @@
 					aria-label="Previous page"
 				>
 					<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M15 19l-7-7 7-7"
+						/>
 					</svg>
 				</button>
 
@@ -431,7 +468,12 @@
 					aria-label="Next page"
 				>
 					<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M9 5l7 7-7 7"
+						/>
 					</svg>
 				</button>
 			</nav>

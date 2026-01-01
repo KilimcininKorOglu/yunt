@@ -61,20 +61,36 @@
 
 	// All available events
 	const availableEvents: { value: WebhookEvent; label: string; description: string }[] = [
-		{ value: 'message.received', label: 'Message Received', description: 'Triggered when a new email is received' },
-		{ value: 'message.deleted', label: 'Message Deleted', description: 'Triggered when an email is deleted' },
-		{ value: 'mailbox.created', label: 'Mailbox Created', description: 'Triggered when a new mailbox is created' },
-		{ value: 'mailbox.deleted', label: 'Mailbox Deleted', description: 'Triggered when a mailbox is deleted' }
+		{
+			value: 'message.received',
+			label: 'Message Received',
+			description: 'Triggered when a new email is received'
+		},
+		{
+			value: 'message.deleted',
+			label: 'Message Deleted',
+			description: 'Triggered when an email is deleted'
+		},
+		{
+			value: 'mailbox.created',
+			label: 'Mailbox Created',
+			description: 'Triggered when a new mailbox is created'
+		},
+		{
+			value: 'mailbox.deleted',
+			label: 'Mailbox Deleted',
+			description: 'Triggered when a mailbox is deleted'
+		}
 	];
 
 	// Form validation
 	const isFormValid = $derived(
 		name.trim().length > 0 &&
-		url.trim().length > 0 &&
-		events.length > 0 &&
-		!nameError &&
-		!urlError &&
-		!eventsError
+			url.trim().length > 0 &&
+			events.length > 0 &&
+			!nameError &&
+			!urlError &&
+			!eventsError
 	);
 
 	function validateName(): void {
@@ -208,8 +224,18 @@
 	{#if formError}
 		<div class="rounded-lg border border-red-200 bg-red-50 p-4" role="alert">
 			<div class="flex items-start gap-3">
-				<svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+				<svg
+					class="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+					/>
 				</svg>
 				<p class="text-sm text-red-700">{formError}</p>
 			</div>
@@ -259,7 +285,9 @@
 	<!-- Secret Field -->
 	<div>
 		<label for="secret" class="mb-2 block text-sm font-medium text-secondary-700">
-			Secret {#if isEditing}<span class="text-secondary-400">(leave blank to keep current)</span>{/if}
+			Secret {#if isEditing}<span class="text-secondary-400"
+					>(leave blank to keep current)</span
+				>{/if}
 		</label>
 		<input
 			type="password"
@@ -281,7 +309,13 @@
 		</legend>
 		<div class="space-y-2">
 			{#each availableEvents as event (event.value)}
-				<label class="flex items-start gap-3 rounded-lg border border-secondary-200 p-3 cursor-pointer hover:bg-secondary-50 transition-colors {events.includes(event.value) ? 'border-primary-500 bg-primary-50' : ''}">
+				<label
+					class="flex items-start gap-3 rounded-lg border border-secondary-200 p-3 cursor-pointer hover:bg-secondary-50 transition-colors {events.includes(
+						event.value
+					)
+						? 'border-primary-500 bg-primary-50'
+						: ''}"
+				>
 					<input
 						type="checkbox"
 						checked={events.includes(event.value)}
@@ -305,8 +339,18 @@
 	<details class="group">
 		<summary class="cursor-pointer list-none">
 			<div class="flex items-center gap-2 text-sm font-medium text-secondary-700">
-				<svg class="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+				<svg
+					class="h-4 w-4 transition-transform group-open:rotate-90"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M9 5l7 7-7 7"
+					/>
 				</svg>
 				Advanced Settings
 			</div>
@@ -334,7 +378,10 @@
 
 			<!-- Timeout -->
 			<div>
-				<label for="timeoutSeconds" class="mb-2 block text-sm font-medium text-secondary-700">
+				<label
+					for="timeoutSeconds"
+					class="mb-2 block text-sm font-medium text-secondary-700"
+				>
 					Timeout (seconds)
 				</label>
 				<input
@@ -346,9 +393,7 @@
 					class="input w-24"
 					disabled={isSubmitting}
 				/>
-				<p class="mt-1 text-xs text-secondary-500">
-					Request timeout in seconds (5-60)
-				</p>
+				<p class="mt-1 text-xs text-secondary-500">Request timeout in seconds (5-60)</p>
 			</div>
 
 			<!-- Custom Headers -->
@@ -390,8 +435,18 @@
 								disabled={isSubmitting}
 								aria-label="Remove header"
 							>
-								<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+								<svg
+									class="h-5 w-5"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M6 18L18 6M6 6l12 12"
+									/>
 								</svg>
 							</button>
 						</div>
@@ -406,24 +461,26 @@
 
 	<!-- Form Actions -->
 	<div class="flex items-center justify-end gap-3 pt-4 border-t border-secondary-200">
-		<button
-			type="button"
-			class="btn-secondary"
-			onclick={onCancel}
-			disabled={isSubmitting}
-		>
+		<button type="button" class="btn-secondary" onclick={onCancel} disabled={isSubmitting}>
 			Cancel
 		</button>
-		<button
-			type="submit"
-			class="btn-primary"
-			disabled={isSubmitting || !isFormValid}
-		>
+		<button type="submit" class="btn-primary" disabled={isSubmitting || !isFormValid}>
 			{#if isSubmitting}
 				<span class="flex items-center gap-2">
 					<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						<circle
+							class="opacity-25"
+							cx="12"
+							cy="12"
+							r="10"
+							stroke="currentColor"
+							stroke-width="4"
+						></circle>
+						<path
+							class="opacity-75"
+							fill="currentColor"
+							d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+						></path>
 					</svg>
 					Saving...
 				</span>
