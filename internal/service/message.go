@@ -1598,3 +1598,157 @@ func (s *MessageService) BulkUnstarForUser(ctx context.Context, messageIDs []dom
 
 	return result, nil
 }
+
+// ListAttachmentsForUser lists attachments for a user with optional filtering.
+// It ensures the user can only see attachments from their own mailboxes.
+func (s *MessageService) ListAttachmentsForUser(
+	ctx context.Context,
+	userID domain.ID,
+	filter *repository.AttachmentFilter,
+	opts *repository.ListOptions,
+) (*repository.ListResult[*domain.Attachment], error) {
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "list_attachments_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// Get user's mailbox IDs
+	mailboxIDs, err := s.getUserMailboxIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(mailboxIDs) == 0 {
+		return &repository.ListResult[*domain.Attachment]{
+			Items: []*domain.Attachment{},
+			Total: 0,
+		}, nil
+	}
+
+	// If a specific message is requested, verify ownership
+	if filter != nil && filter.MessageID != nil {
+		msg, err := s.repo.Messages().GetByID(ctx, *filter.MessageID)
+		if err != nil {
+			return nil, &MessageServiceError{
+				Op:      "list_attachments_for_user",
+				Message: "failed to get message",
+				Err:     err,
+			}
+		}
+
+		if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+			return nil, err
+		}
+	} else {
+		// Get all message IDs from user's mailboxes
+		msgFilter := &repository.MessageFilter{
+			MailboxIDs: mailboxIDs,
+		}
+		messages, err := s.repo.Messages().List(ctx, msgFilter, nil)
+		if err != nil {
+			return nil, &MessageServiceError{
+				Op:      "list_attachments_for_user",
+				Message: "failed to get messages",
+				Err:     err,
+			}
+		}
+
+		if len(messages.Items) == 0 {
+			return &repository.ListResult[*domain.Attachment]{
+				Items: []*domain.Attachment{},
+				Total: 0,
+			}, nil
+		}
+
+		// Create filter with message IDs
+		messageIDs := make([]domain.ID, len(messages.Items))
+		for i, msg := range messages.Items {
+			messageIDs[i] = msg.ID
+		}
+
+		if filter == nil {
+			filter = &repository.AttachmentFilter{}
+		}
+		filter.MessageIDs = messageIDs
+	}
+
+	result, err := s.repo.Attachments().List(ctx, filter, opts)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "list_attachments_for_user",
+			Message: "failed to list attachments",
+			Err:     err,
+		}
+	}
+
+	return result, nil
+}
+
+// GetAttachmentByIDForUser retrieves an attachment by ID verifying user ownership.
+func (s *MessageService) GetAttachmentByIDForUser(ctx context.Context, attachmentID, userID domain.ID) (*domain.Attachment, error) {
+	if attachmentID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_by_id_for_user",
+			Message: "attachment ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	if userID.IsEmpty() {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_by_id_for_user",
+			Message: "user ID is required",
+			Err:     domain.ErrInvalidInput,
+		}
+	}
+
+	// Get the attachment
+	attachment, err := s.repo.Attachments().GetByID(ctx, attachmentID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_by_id_for_user",
+			Message: "failed to get attachment",
+			Err:     err,
+		}
+	}
+
+	// Verify access to the message
+	msg, err := s.repo.Messages().GetByID(ctx, attachment.MessageID)
+	if err != nil {
+		return nil, &MessageServiceError{
+			Op:      "get_attachment_by_id_for_user",
+			Message: "failed to get message",
+			Err:     err,
+		}
+	}
+
+	if err := s.verifyMessageAccess(ctx, msg, userID); err != nil {
+		return nil, err
+	}
+
+	return attachment, nil
+}
+
+// GetAttachmentContentByIDForUser retrieves attachment content by ID verifying user ownership.
+func (s *MessageService) GetAttachmentContentByIDForUser(ctx context.Context, attachmentID, userID domain.ID) (*domain.Attachment, io.ReadCloser, error) {
+	// First get and verify the attachment
+	attachment, err := s.GetAttachmentByIDForUser(ctx, attachmentID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Get the content
+	content, err := s.repo.Attachments().GetContent(ctx, attachmentID)
+	if err != nil {
+		return nil, nil, &MessageServiceError{
+			Op:      "get_attachment_content_by_id_for_user",
+			Message: "failed to get attachment content",
+			Err:     err,
+		}
+	}
+
+	return attachment, content, nil
+}
