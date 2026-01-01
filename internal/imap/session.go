@@ -486,8 +486,58 @@ func (s *Session) Expunge(w *imapserver.ExpungeWriter, uids *imap.UIDSet) error 
 func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria, options *imap.SearchOptions) (*imap.SearchData, error) {
 	s.logger.Debug().Msg("SEARCH command")
 
-	// TODO: Implement search
-	return &imap.SearchData{}, nil
+	if !s.IsAuthenticated() {
+		return nil, &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "Not authenticated",
+		}
+	}
+
+	// Check if a mailbox is selected
+	if s.userSession == nil || s.userSession.SelectedMailbox == nil {
+		return nil, &imap.Error{
+			Type: imap.StatusResponseTypeNo,
+			Text: "No mailbox selected",
+		}
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create the search handler
+	handler := NewSearchHandler(
+		s.server.backend.Repository(),
+		s.userSession.User.ID,
+		s.userSession.SelectedMailbox,
+	)
+
+	// Execute the search
+	result, err := handler.Search(ctx, kind, criteria, options)
+	if err != nil {
+		s.logger.Warn().
+			Err(err).
+			Msg("SEARCH failed")
+		return nil, err
+	}
+
+	// Log search results
+	if result != nil && result.All != nil {
+		switch ns := result.All.(type) {
+		case imap.SeqSet:
+			s.logger.Debug().
+				Str("results", ns.String()).
+				Msg("SEARCH completed")
+		case imap.UIDSet:
+			s.logger.Debug().
+				Str("results", ns.String()).
+				Msg("UID SEARCH completed")
+		}
+	} else {
+		s.logger.Debug().Msg("SEARCH completed with no results")
+	}
+
+	return result, nil
 }
 
 // Fetch retrieves message data.
