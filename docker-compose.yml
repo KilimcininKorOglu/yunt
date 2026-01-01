@@ -1,0 +1,76 @@
+# Yunt Mail Server - Docker Compose (Standalone Mode)
+#
+# This configuration runs Yunt in standalone mode with SQLite database.
+# Ideal for development, testing, and single-instance deployments.
+#
+# Usage:
+#   docker-compose up -d          # Start Yunt in background
+#   docker-compose logs -f        # View logs
+#   docker-compose down           # Stop Yunt
+#   docker-compose down -v        # Stop and remove data volumes
+#
+# Access:
+#   Web UI:  http://localhost:8025
+#   SMTP:    localhost:1025
+#   IMAP:    localhost:1143
+
+services:
+  yunt:
+    image: yunt/yunt:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${YUNT_VERSION:-dev}
+        COMMIT: ${YUNT_COMMIT:-unknown}
+        BUILD_DATE: ${YUNT_BUILD_DATE:-unknown}
+    container_name: yunt
+    restart: unless-stopped
+    ports:
+      # SMTP server
+      - "${YUNT_SMTP_PORT:-1025}:1025"
+      # IMAP server
+      - "${YUNT_IMAP_PORT:-1143}:1143"
+      # Web UI and API
+      - "${YUNT_API_PORT:-8025}:8025"
+    volumes:
+      # SQLite database and mail storage
+      - yunt_data:/var/lib/yunt
+      # Optional: Mount custom configuration
+      # - ./configs/yunt.yaml:/etc/yunt/yunt.yaml:ro
+    environment:
+      # Server settings
+      - YUNT_SERVER_NAME=${YUNT_SERVER_NAME:-localhost}
+      - YUNT_SERVER_DOMAIN=${YUNT_SERVER_DOMAIN:-localhost}
+      # Database (SQLite by default)
+      - YUNT_DATABASE_DRIVER=${YUNT_DATABASE_DRIVER:-sqlite}
+      - YUNT_DATABASE_DSN=${YUNT_DATABASE_DSN:-/var/lib/yunt/yunt.db}
+      # Logging
+      - YUNT_LOGGING_LEVEL=${YUNT_LOGGING_LEVEL:-info}
+      - YUNT_LOGGING_FORMAT=${YUNT_LOGGING_FORMAT:-json}
+      - YUNT_LOGGING_OUTPUT=${YUNT_LOGGING_OUTPUT:-stdout}
+      # Authentication
+      - YUNT_AUTH_JWTSECRET=${YUNT_AUTH_JWTSECRET:-}
+      # Admin user
+      - YUNT_ADMIN_USERNAME=${YUNT_ADMIN_USERNAME:-admin}
+      - YUNT_ADMIN_PASSWORD=${YUNT_ADMIN_PASSWORD:-}
+      - YUNT_ADMIN_EMAIL=${YUNT_ADMIN_EMAIL:-admin@localhost}
+      # SMTP settings
+      - YUNT_SMTP_AUTHREQUIRED=${YUNT_SMTP_AUTHREQUIRED:-false}
+      - YUNT_SMTP_ALLOWRELAY=${YUNT_SMTP_ALLOWRELAY:-false}
+      # API settings
+      - YUNT_API_RATELIMIT=${YUNT_API_RATELIMIT:-100}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8025/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  yunt_data:
+    name: yunt_data
+
+networks:
+  default:
+    name: yunt_network
