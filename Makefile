@@ -35,6 +35,7 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 # Phony targets
 .PHONY: all build build-all test test-coverage test-race lint lint-fix fmt vet tidy clean run help
 .PHONY: release release-linux release-darwin release-windows install dev deps check
+.PHONY: web-install web-dev web-build web-lint web-check web-clean
 
 ## all: Build, lint, and test
 all: lint test build
@@ -191,3 +192,35 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@sed -n 's/^##//p' $(MAKEFILE_LIST) | column -t -s ':' | sed 's/^/ /'
+
+# Web UI Targets
+
+## web-install: Install web dependencies
+web-install:
+	@echo "Installing web dependencies..."
+	cd web && npm install
+
+## web-dev: Start web development server
+web-dev:
+	@echo "Starting web development server..."
+	cd web && npm run dev
+
+## web-build: Build web for production
+web-build:
+	@echo "Building web for production..."
+	cd web && npm run build
+
+## web-lint: Lint web code
+web-lint:
+	@echo "Linting web code..."
+	cd web && npm run lint && npm run format:check
+
+## web-check: Run web type checking
+web-check:
+	@echo "Running web type checking..."
+	cd web && npm run check
+
+## web-clean: Clean web build artifacts
+web-clean:
+	@echo "Cleaning web build artifacts..."
+	rm -rf web/build web/.svelte-kit web/node_modules

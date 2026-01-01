@@ -1,0 +1,12 @@
+# Ignore artifacts
+build
+.svelte-kit
+node_modules
+dist
+
+# Ignore package files
+package-lock.json
+
+# Ignore generated files
+*.min.js
+*.min.css
