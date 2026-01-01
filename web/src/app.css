@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	:root {
+		--color-primary: 14 165 233;
+		--color-secondary: 100 116 139;
+	}
+
+	html {
+		font-family:
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			'Helvetica Neue',
+			Arial,
+			sans-serif;
+	}
+
+	body {
+		@apply bg-secondary-50 text-secondary-900 antialiased;
+	}
+}
+
+@layer components {
+	.btn {
+		@apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2;
+	}
+
+	.btn-primary {
+		@apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+	}
+
+	.btn-secondary {
+		@apply btn bg-secondary-200 text-secondary-900 hover:bg-secondary-300 focus:ring-secondary-400;
+	}
+
+	.btn-danger {
+		@apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+	}
+
+	.input {
+		@apply block w-full rounded-lg border border-secondary-300 bg-white px-4 py-2 text-secondary-900 placeholder-secondary-400 transition-colors duration-150 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20;
+	}
+
+	.card {
+		@apply rounded-xl border border-secondary-200 bg-white shadow-sm;
+	}
+}
+
+@layer utilities {
+	.scrollbar-thin {
+		scrollbar-width: thin;
+	}
+
+	.scrollbar-thin::-webkit-scrollbar {
+		width: 6px;
+		height: 6px;
+	}
+
+	.scrollbar-thin::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.scrollbar-thin::-webkit-scrollbar-thumb {
+		@apply rounded-full bg-secondary-300;
+	}
+
+	.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+		@apply bg-secondary-400;
+	}
+}

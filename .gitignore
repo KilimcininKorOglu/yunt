@@ -35,6 +35,10 @@ __pycache__/
 build/
 out/
 
+# SvelteKit
+web/.svelte-kit/
+web/build/
+
 # Data directory
 /data/
 *.db
