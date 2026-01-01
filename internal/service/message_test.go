@@ -188,40 +188,128 @@ func (r *mockMailboxRepository) GetCatchAll(ctx context.Context, domainName stri
 	return nil, domain.ErrNotFound
 }
 func (r *mockMailboxRepository) GetDefault(ctx context.Context, userID domain.ID) (*domain.Mailbox, error) {
+	for _, m := range r.mailboxes {
+		if m.UserID == userID && m.IsDefault {
+			return m, nil
+		}
+	}
 	return nil, domain.ErrNotFound
 }
 func (r *mockMailboxRepository) List(ctx context.Context, filter *repository.MailboxFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.Mailbox], error) {
-	return nil, nil
+	var items []*domain.Mailbox
+	for _, m := range r.mailboxes {
+		items = append(items, m)
+	}
+	return &repository.ListResult[*domain.Mailbox]{Items: items, Total: int64(len(items))}, nil
 }
 func (r *mockMailboxRepository) ListByUser(ctx context.Context, userID domain.ID, opts *repository.ListOptions) (*repository.ListResult[*domain.Mailbox], error) {
-	return nil, nil
+	var items []*domain.Mailbox
+	for _, m := range r.mailboxes {
+		if m.UserID == userID {
+			items = append(items, m)
+		}
+	}
+	return &repository.ListResult[*domain.Mailbox]{Items: items, Total: int64(len(items))}, nil
 }
-func (r *mockMailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox) error   { return nil }
-func (r *mockMailboxRepository) Update(ctx context.Context, mailbox *domain.Mailbox) error   { return nil }
-func (r *mockMailboxRepository) Delete(ctx context.Context, id domain.ID) error              { return nil }
-func (r *mockMailboxRepository) DeleteWithMessages(ctx context.Context, id domain.ID) error  { return nil }
+func (r *mockMailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox) error {
+	if _, exists := r.addressIndex[mailbox.Address]; exists {
+		return domain.NewAlreadyExistsError("mailbox", "address", mailbox.Address)
+	}
+	r.mailboxes[mailbox.ID] = mailbox
+	r.addressIndex[mailbox.Address] = mailbox
+	return nil
+}
+func (r *mockMailboxRepository) Update(ctx context.Context, mailbox *domain.Mailbox) error {
+	if _, exists := r.mailboxes[mailbox.ID]; !exists {
+		return domain.NewNotFoundError("mailbox", mailbox.ID.String())
+	}
+	r.mailboxes[mailbox.ID] = mailbox
+	return nil
+}
+func (r *mockMailboxRepository) Delete(ctx context.Context, id domain.ID) error {
+	mailbox, exists := r.mailboxes[id]
+	if !exists {
+		return domain.NewNotFoundError("mailbox", id.String())
+	}
+	delete(r.mailboxes, id)
+	delete(r.addressIndex, mailbox.Address)
+	return nil
+}
+func (r *mockMailboxRepository) DeleteWithMessages(ctx context.Context, id domain.ID) error {
+	return r.Delete(ctx, id)
+}
 func (r *mockMailboxRepository) DeleteByUser(ctx context.Context, userID domain.ID) (int64, error) {
-	return 0, nil
+	var count int64
+	for id, m := range r.mailboxes {
+		if m.UserID == userID {
+			delete(r.mailboxes, id)
+			delete(r.addressIndex, m.Address)
+			count++
+		}
+	}
+	return count, nil
 }
-func (r *mockMailboxRepository) Exists(ctx context.Context, id domain.ID) (bool, error)            { return false, nil }
-func (r *mockMailboxRepository) ExistsByAddress(ctx context.Context, address string) (bool, error) { return false, nil }
+func (r *mockMailboxRepository) Exists(ctx context.Context, id domain.ID) (bool, error) {
+	_, ok := r.mailboxes[id]
+	return ok, nil
+}
+func (r *mockMailboxRepository) ExistsByAddress(ctx context.Context, address string) (bool, error) {
+	_, ok := r.addressIndex[address]
+	return ok, nil
+}
 func (r *mockMailboxRepository) Count(ctx context.Context, filter *repository.MailboxFilter) (int64, error) {
-	return 0, nil
+	return int64(len(r.mailboxes)), nil
 }
-func (r *mockMailboxRepository) CountByUser(ctx context.Context, userID domain.ID) (int64, error)  { return 0, nil }
-func (r *mockMailboxRepository) SetDefault(ctx context.Context, id domain.ID) error                { return nil }
-func (r *mockMailboxRepository) ClearDefault(ctx context.Context, userID domain.ID) error          { return nil }
-func (r *mockMailboxRepository) SetCatchAll(ctx context.Context, id domain.ID) error               { return nil }
-func (r *mockMailboxRepository) ClearCatchAll(ctx context.Context, id domain.ID) error             { return nil }
+func (r *mockMailboxRepository) CountByUser(ctx context.Context, userID domain.ID) (int64, error) {
+	var count int64
+	for _, m := range r.mailboxes {
+		if m.UserID == userID {
+			count++
+		}
+	}
+	return count, nil
+}
+func (r *mockMailboxRepository) SetDefault(ctx context.Context, id domain.ID) error {
+	mailbox, ok := r.mailboxes[id]
+	if !ok {
+		return domain.NewNotFoundError("mailbox", id.String())
+	}
+	mailbox.IsDefault = true
+	return nil
+}
+func (r *mockMailboxRepository) ClearDefault(ctx context.Context, userID domain.ID) error {
+	for _, m := range r.mailboxes {
+		if m.UserID == userID {
+			m.IsDefault = false
+		}
+	}
+	return nil
+}
+func (r *mockMailboxRepository) SetCatchAll(ctx context.Context, id domain.ID) error {
+	mailbox, ok := r.mailboxes[id]
+	if !ok {
+		return domain.NewNotFoundError("mailbox", id.String())
+	}
+	mailbox.IsCatchAll = true
+	return nil
+}
+func (r *mockMailboxRepository) ClearCatchAll(ctx context.Context, id domain.ID) error {
+	mailbox, ok := r.mailboxes[id]
+	if !ok {
+		return domain.NewNotFoundError("mailbox", id.String())
+	}
+	mailbox.IsCatchAll = false
+	return nil
+}
 func (r *mockMailboxRepository) UpdateStats(ctx context.Context, id domain.ID, stats *repository.MailboxStatsUpdate) error {
 	return nil
 }
 func (r *mockMailboxRepository) RecalculateStats(ctx context.Context, id domain.ID) error { return nil }
 func (r *mockMailboxRepository) GetStats(ctx context.Context, id domain.ID) (*domain.MailboxStats, error) {
-	return nil, nil
+	return &domain.MailboxStats{}, nil
 }
 func (r *mockMailboxRepository) GetStatsByUser(ctx context.Context, userID domain.ID) (*domain.MailboxStats, error) {
-	return nil, nil
+	return &domain.MailboxStats{}, nil
 }
 func (r *mockMailboxRepository) GetTotalStats(ctx context.Context) (*domain.MailboxStats, error) {
 	return nil, nil
