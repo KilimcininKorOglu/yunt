@@ -1,23 +1,46 @@
 # Hermes
 .hermes/
 
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+
+# Go build cache
+/bin/
+/dist/
+
+# Go vendor (if not checked in)
+/vendor/
+
+# Go test coverage
+coverage.out
+coverage.html
+*.coverprofile
+
 # Dependencies
 node_modules/
-vendor/
 .venv/
 venv/
 __pycache__/
 *.pyc
 
 # Build outputs
-dist/
 build/
 out/
-bin/
-*.exe
-*.dll
-*.so
-*.dylib
+
+# Data directory
+/data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
 
 # Environment
 .env
@@ -41,7 +64,6 @@ Thumbs.db
 logs/
 
 # Testing
-coverage/
 .coverage
 .nyc_output/
 
@@ -49,3 +71,6 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Air live reload
+tmp/
