@@ -75,9 +75,11 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("imap: server is already running")
 	}
 
-	// Load TLS configuration if needed
-	tlsConfig, err := s.config.LoadTLSConfig()
+	// Load TLS configuration if needed using the enhanced TLS loader
+	tlsLoader := NewTLSLoader(s.logger)
+	tlsConfig, err := tlsLoader.LoadTLSConfig(&s.config.TLS)
 	if err != nil {
+		s.logger.Error().Err(err).Msg("Failed to load TLS configuration")
 		return err
 	}
 
@@ -219,6 +221,12 @@ func (s *Server) buildCapabilities() imap.CapSet {
 	// Add STARTTLS capability if TLS config is available but not using implicit TLS
 	if s.config.TLS.StartTLS && !s.config.TLS.Enabled {
 		caps[imap.CapStartTLS] = struct{}{}
+
+		// RFC 3501: Advertise LOGINDISABLED when STARTTLS is available
+		// but connection is not yet encrypted (unless InsecureAuth is enabled)
+		if !s.config.InsecureAuth {
+			caps[imap.CapLoginDisabled] = struct{}{}
+		}
 	}
 
 	// Add authentication capabilities
