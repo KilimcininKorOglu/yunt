@@ -1,0 +1,83 @@
+# =============================================================================
+# Yunt Mail Server - SMTP Service
+# =============================================================================
+# This Service exposes the SMTP server for receiving emails.
+#
+# Service Type Options:
+# - ClusterIP (default): Internal access only
+# - NodePort: Expose on a static port on each node
+# - LoadBalancer: Cloud provider load balancer (AWS ELB, GCP LB, etc.)
+#
+# For production SMTP, consider:
+# - Using port 25 for inbound mail (requires privileged access)
+# - Using port 465 (implicit TLS) or 587 (submission/STARTTLS)
+# - Setting up external load balancer with static IP
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: yunt-smtp
+  labels:
+    app: yunt
+    app.kubernetes.io/name: yunt
+    app.kubernetes.io/component: smtp
+spec:
+  type: ClusterIP
+  selector:
+    app: yunt
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+      protocol: TCP
+
+---
+# Optional: NodePort service for direct node access
+# Uncomment to expose SMTP on node ports
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: yunt-smtp-nodeport
+#   labels:
+#     app: yunt
+#     app.kubernetes.io/name: yunt
+#     app.kubernetes.io/component: smtp
+# spec:
+#   type: NodePort
+#   selector:
+#     app: yunt
+#   ports:
+#     - name: smtp
+#       port: 1025
+#       targetPort: smtp
+#       nodePort: 31025  # Range: 30000-32767
+#       protocol: TCP
+
+---
+# Optional: LoadBalancer service for cloud environments
+# Uncomment for AWS/GCP/Azure load balancer
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: yunt-smtp-lb
+#   labels:
+#     app: yunt
+#     app.kubernetes.io/name: yunt
+#     app.kubernetes.io/component: smtp
+#   annotations:
+#     # AWS NLB (Network Load Balancer) for TCP traffic
+#     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+#     # GCP: Use TCP load balancing
+#     # cloud.google.com/l4-rbs: "enabled"
+# spec:
+#   type: LoadBalancer
+#   selector:
+#     app: yunt
+#   ports:
+#     - name: smtp
+#       port: 25
+#       targetPort: smtp
+#       protocol: TCP
+#   # Static IP assignment (cloud-specific)
+#   # loadBalancerIP: "1.2.3.4"
