@@ -115,11 +115,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_received_at ON messages(received_at);
 CREATE INDEX IF NOT EXISTS idx_messages_subject ON messages(subject);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 
--- Full-text search for messages (optional, requires FTS5)
--- CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
---     subject, text_body, from_address,
---     content=messages, content_rowid=rowid
--- );
+-- Full-text search for messages (managed by migration 003_full_text_search.sql)
+-- FTS5 virtual table and sync triggers are created via migrations.
 
 -- =============================================================================
 -- Message Recipients
