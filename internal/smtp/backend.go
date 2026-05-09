@@ -22,6 +22,7 @@ type Backend struct {
 	authenticator *Authenticator
 	relayService  *service.RelayService
 	mimeParser    *parser.Parser
+	notifyService *service.NotifyService
 }
 
 // BackendOption is a functional option for configuring the Backend.
@@ -172,6 +173,14 @@ func (b *Backend) storeMessage(ctx context.Context, msg *domain.Message) error {
 			Str("from", msg.From.Address).
 			Msg("failed to store message")
 		return err
+	}
+
+	if b.notifyService != nil && !msg.MailboxID.IsEmpty() {
+		var msgCount uint32
+		if count, err := b.messageRepo.CountByMailbox(ctx, msg.MailboxID); err == nil {
+			msgCount = uint32(count)
+		}
+		b.notifyService.NotifyNewMessage(msg.MailboxID, msg.MailboxID, msg.ID, 0, 0, msgCount)
 	}
 
 	return nil

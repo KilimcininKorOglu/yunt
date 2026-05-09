@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { authStore } from '$stores/auth';
 	import { isPublicRoute, isGuestOnlyRoute } from '$lib/guards/auth';
+	import { sseService } from '$lib/services/sse';
 	import { pollingService } from '$lib/services/polling';
 	import Toast from '$components/Toast.svelte';
 
@@ -46,16 +47,22 @@
 		}
 	});
 
-	// Start/stop polling based on authentication state
+	// Start/stop real-time updates based on authentication state
 	$effect(() => {
 		if (initialized && authStore.isAuthenticated) {
-			pollingService.start();
+			const token = authStore.getAccessToken();
+			if (token) {
+				sseService.start(token);
+			} else {
+				pollingService.start();
+			}
 		} else {
+			sseService.stop();
 			pollingService.stop();
 		}
 
-		// Cleanup on unmount
 		return () => {
+			sseService.stop();
 			pollingService.stop();
 		};
 	});

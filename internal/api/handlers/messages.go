@@ -21,6 +21,7 @@ type MessageHandler struct {
 	messageService *service.MessageService
 	mailboxService *service.MailboxService
 	authService    *service.AuthService
+	notifyService  *service.NotifyService
 }
 
 // NewMessageHandler creates a new MessageHandler.
@@ -34,6 +35,12 @@ func NewMessageHandler(
 		mailboxService: mailboxService,
 		authService:    authService,
 	}
+}
+
+// WithNotifyService sets the notification service for real-time events.
+func (h *MessageHandler) WithNotifyService(ns *service.NotifyService) *MessageHandler {
+	h.notifyService = ns
+	return h
 }
 
 // RegisterRoutes registers the message routes on the given group.

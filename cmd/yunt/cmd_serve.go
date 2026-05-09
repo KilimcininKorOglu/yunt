@@ -89,8 +89,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	webhookService := service.NewWebhookService(repo, nil)
 	notifyService := service.NewNotifyService()
 
-	_ = notifyService
-
 	// Context for coordinated shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -111,6 +109,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			smtpserver.WithRepo(repo),
 			smtpserver.WithMailboxRepo(repo.Mailboxes()),
 			smtpserver.WithMessageRepo(repo.Messages()),
+			smtpserver.WithNotifyService(notifyService),
 		)
 		if smtpErr != nil {
 			return fmt.Errorf("failed to create SMTP server: %w", smtpErr)
@@ -190,6 +189,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 		healthHandler := handlers.NewHealthHandler(repo, version)
 		healthHandler.RegisterRoutes(apiSrv.Echo())
+
+		eventHandler := handlers.NewEventHandler(notifyService, authService, repo.Mailboxes())
+		eventHandler.RegisterRoutes(v1)
 
 		systemHandler := handlers.NewSystemHandler(handlers.SystemHandlerConfig{
 			Repo:           repo,

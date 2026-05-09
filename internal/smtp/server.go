@@ -32,6 +32,9 @@ type Server struct {
 	// Relay service for forwarding messages
 	relayService *service.RelayService
 
+	// Notification service for real-time events
+	notifyService *service.NotifyService
+
 	// Rate limiter for connection and message throttling
 	rateLimiter *RateLimiter
 
@@ -65,6 +68,13 @@ func WithMessageRepo(repo repository.MessageRepository) ServerOption {
 func WithRepo(repo repository.Repository) ServerOption {
 	return func(s *Server) {
 		s.repo = repo
+	}
+}
+
+// WithNotifyService sets the notification service for real-time events.
+func WithNotifyService(ns *service.NotifyService) ServerOption {
+	return func(s *Server) {
+		s.notifyService = ns
 	}
 }
 
@@ -221,6 +231,7 @@ func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, err
 		backendOpts = append(backendOpts, WithRepository(s.repo))
 	}
 	backend := NewBackend(s, backendOpts...)
+	backend.notifyService = s.notifyService
 	s.backend = backend
 
 	// Create the go-smtp server
