@@ -7,6 +7,7 @@ import (
 	"github.com/emersion/go-smtp"
 
 	"yunt/internal/domain"
+	"yunt/internal/parser"
 	"yunt/internal/repository"
 	"yunt/internal/service"
 )
@@ -20,6 +21,7 @@ type Backend struct {
 	repo          repository.Repository
 	authenticator *Authenticator
 	relayService  *service.RelayService
+	mimeParser    *parser.Parser
 }
 
 // BackendOption is a functional option for configuring the Backend.
@@ -57,7 +59,8 @@ func WithRelayService(svc *service.RelayService) BackendOption {
 // NewBackend creates a new SMTP backend with the given options.
 func NewBackend(s *Server, opts ...BackendOption) *Backend {
 	b := &Backend{
-		server: s,
+		server:     s,
+		mimeParser: parser.NewParser(),
 	}
 	for _, opt := range opts {
 		opt(b)
@@ -145,6 +148,22 @@ func (b *Backend) storeMessage(ctx context.Context, msg *domain.Message) error {
 			Str("from", msg.From.Address).
 			Msg("message received but no repository configured to store it")
 		return nil
+	}
+
+	if len(msg.RawBody) > 0 && b.mimeParser != nil {
+		parsed, err := b.mimeParser.Parse(msg.RawBody)
+		if err != nil {
+			b.server.logger.Warn().
+				Err(err).
+				Str("from", msg.From.Address).
+				Msg("failed to parse MIME content, storing with envelope data only")
+		} else {
+			envelopeFrom := msg.From.Address
+			parsed.ApplyTo(msg)
+			if msg.From.Address == "" {
+				msg.From.Address = envelopeFrom
+			}
+		}
 	}
 
 	if err := b.messageRepo.Create(ctx, msg); err != nil {

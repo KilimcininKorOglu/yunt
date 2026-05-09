@@ -59,6 +59,44 @@ type ParsedMessage struct {
 	RawSize int64
 }
 
+// ApplyTo applies parsed MIME fields to an existing domain.Message.
+// Preserves the message's ID, MailboxID, and RawBody. Overwrites
+// content fields (subject, body, headers, etc.) with parsed values.
+func (p *ParsedMessage) ApplyTo(msg *domain.Message) {
+	msg.Subject = p.Subject
+	if p.From.Address != "" {
+		msg.From = p.From
+	} else if p.From.Name != "" {
+		msg.From.Name = p.From.Name
+	}
+	if len(p.To) > 0 {
+		msg.To = p.To
+	}
+	msg.Cc = p.Cc
+	msg.Bcc = p.Bcc
+	msg.ReplyTo = p.ReplyTo
+	msg.TextBody = p.TextBody
+	msg.HTMLBody = p.HTMLBody
+	msg.InReplyTo = p.InReplyTo
+	if len(p.References) > 0 {
+		msg.References = p.References
+	}
+	if len(p.Headers) > 0 {
+		msg.Headers = p.Headers
+	}
+	if p.ContentType != "" {
+		msg.ContentType = domain.ContentType(p.ContentType)
+	}
+	msg.AttachmentCount = len(p.Attachments)
+	if p.MessageID != "" {
+		msg.MessageID = p.MessageID
+	}
+	if p.Date != nil && !p.Date.IsZero() {
+		ts := domain.Timestamp{Time: *p.Date}
+		msg.SentAt = &ts
+	}
+}
+
 // Parser provides MIME message parsing functionality.
 type Parser struct {
 	// MaxAttachmentSize is the maximum allowed attachment size in bytes.

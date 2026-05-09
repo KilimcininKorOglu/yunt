@@ -300,8 +300,11 @@ func TestSendAndRetrieveMessage(t *testing.T) {
 	}
 
 	msg := items[0].(map[string]interface{})
-	// Note: SMTP session stores raw body but does not MIME-parse subject/body fields.
-	// Verify message exists with correct sender instead.
+
+	if subj, _ := msg["subject"].(string); subj != "E2E Test Subject" {
+		t.Errorf("expected subject 'E2E Test Subject', got %q", subj)
+	}
+
 	if from, ok := msg["from"].(map[string]interface{}); ok {
 		if addr, _ := from["address"].(string); addr != "sender@example.com" {
 			t.Errorf("expected from address 'sender@example.com', got %q", addr)
