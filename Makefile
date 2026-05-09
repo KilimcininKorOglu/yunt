@@ -12,6 +12,9 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# Go build tags (fts5 enables SQLite full-text search)
+GO_TAGS := -tags "fts5"
+
 # Go build flags
 LDFLAGS := -ldflags "-s -w \
 	-X main.version=$(VERSION) \
@@ -44,7 +47,7 @@ all: lint test build
 build:
 	@echo "Building $(BINARY_NAME) $(VERSION)..."
 	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	$(GOBUILD) $(GO_TAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Binary built: $(BUILD_DIR)/$(BINARY_NAME)"
 
 ## build-full: Build web UI and Go binary together
@@ -61,27 +64,27 @@ build-all: clean
 		output=$(DIST_DIR)/$(BINARY_NAME)-$$os-$$arch; \
 		if [ "$$os" = "windows" ]; then output=$$output.exe; fi; \
 		echo "Building $$os/$$arch..."; \
-		GOOS=$$os GOARCH=$$arch $(GOBUILD) $(LDFLAGS) -o $$output $(MAIN_PATH); \
+		GOOS=$$os GOARCH=$$arch $(GOBUILD) $(GO_TAGS) $(LDFLAGS) -o $$output $(MAIN_PATH); \
 	done
 	@echo "All binaries built in $(DIST_DIR)/"
 
 ## test: Run all tests
 test:
 	@echo "Running tests..."
-	$(GOTEST) -v ./...
+	$(GOTEST) $(GO_TAGS) -v ./...
 
 ## test-coverage: Run tests with coverage report
 test-coverage:
 	@echo "Running tests with coverage..."
 	@mkdir -p $(BUILD_DIR)
-	$(GOTEST) -v -coverprofile=$(BUILD_DIR)/coverage.out ./...
+	$(GOTEST) $(GO_TAGS) -v -coverprofile=$(BUILD_DIR)/coverage.out ./...
 	$(GO) tool cover -html=$(BUILD_DIR)/coverage.out -o $(BUILD_DIR)/coverage.html
 	@echo "Coverage report generated: $(BUILD_DIR)/coverage.html"
 
 ## test-race: Run tests with race detector
 test-race:
 	@echo "Running tests with race detector..."
-	$(GOTEST) -v -race ./...
+	$(GOTEST) $(GO_TAGS) -v -race ./...
 
 ## lint: Run static analysis with golangci-lint
 lint: vet
@@ -166,21 +169,21 @@ release:
 release-linux:
 	@echo "Building Linux releases..."
 	@mkdir -p $(DIST_DIR)
-	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
-	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-arm64 $(MAIN_PATH)
+	GOOS=linux GOARCH=amd64 $(GOBUILD) $(GO_TAGS) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
+	GOOS=linux GOARCH=arm64 $(GOBUILD) $(GO_TAGS) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-arm64 $(MAIN_PATH)
 
 ## release-darwin: Build release for macOS platforms
 release-darwin:
 	@echo "Building macOS releases..."
 	@mkdir -p $(DIST_DIR)
-	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
-	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(GO_TAGS) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(GO_TAGS) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
 
 ## release-windows: Build release for Windows platforms
 release-windows:
 	@echo "Building Windows releases..."
 	@mkdir -p $(DIST_DIR)
-	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
+	GOOS=windows GOARCH=amd64 $(GOBUILD) $(GO_TAGS) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
 
 ## version: Show version information
 version:

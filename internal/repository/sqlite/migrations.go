@@ -548,6 +548,7 @@ func splitStatements(sql string) []string {
 	var current strings.Builder
 	inString := false
 	stringChar := rune(0)
+	inBlock := 0
 
 	for i, char := range sql {
 		switch {
@@ -556,7 +557,6 @@ func splitStatements(sql string) []string {
 			stringChar = char
 			current.WriteRune(char)
 		case inString && char == stringChar:
-			// Check for escaped quote
 			if i+1 < len(sql) && rune(sql[i+1]) == stringChar {
 				current.WriteRune(char)
 			} else {
@@ -564,17 +564,30 @@ func splitStatements(sql string) []string {
 				current.WriteRune(char)
 			}
 		case !inString && char == ';':
-			stmt := strings.TrimSpace(current.String())
-			if stmt != "" {
-				statements = append(statements, stmt)
+			if inBlock > 0 {
+				current.WriteRune(char)
+			} else {
+				stmt := strings.TrimSpace(current.String())
+				if stmt != "" {
+					statements = append(statements, stmt)
+				}
+				current.Reset()
 			}
-			current.Reset()
 		default:
 			current.WriteRune(char)
+			if !inString {
+				built := current.String()
+				upper := strings.ToUpper(built)
+				if strings.HasSuffix(upper, " BEGIN") || strings.HasSuffix(upper, "\nBEGIN") || strings.HasSuffix(upper, "\tBEGIN") || upper == "BEGIN" {
+					inBlock++
+				}
+				if inBlock > 0 && (strings.HasSuffix(upper, "\nEND") || strings.HasSuffix(upper, " END") || strings.HasSuffix(upper, "\tEND")) {
+					inBlock--
+				}
+			}
 		}
 	}
 
-	// Add the last statement if it exists
 	stmt := strings.TrimSpace(current.String())
 	if stmt != "" {
 		statements = append(statements, stmt)
