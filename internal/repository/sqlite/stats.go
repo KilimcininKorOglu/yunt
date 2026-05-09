@@ -258,14 +258,14 @@ func (s *StatsRepository) GetMessageStats(ctx context.Context, filter *domain.St
 	}
 
 	var stats struct {
-		Count           int64        `db:"count"`
-		UnreadCount     int64        `db:"unread_count"`
-		StarredCount    int64        `db:"starred_count"`
-		SpamCount       int64        `db:"spam_count"`
-		TotalSize       int64        `db:"total_size"`
-		AttachmentCount int64        `db:"attachment_count"`
-		OldestMessage   sql.NullTime `db:"oldest_message"`
-		NewestMessage   sql.NullTime `db:"newest_message"`
+		Count           int64          `db:"count"`
+		UnreadCount     int64          `db:"unread_count"`
+		StarredCount    int64          `db:"starred_count"`
+		SpamCount       int64          `db:"spam_count"`
+		TotalSize       int64          `db:"total_size"`
+		AttachmentCount int64          `db:"attachment_count"`
+		OldestMessage   sql.NullString `db:"oldest_message"`
+		NewestMessage   sql.NullString `db:"newest_message"`
 	}
 
 	if err := s.repo.db().GetContext(ctx, &stats, query, args...); err != nil {
@@ -282,13 +282,17 @@ func (s *StatsRepository) GetMessageStats(ctx context.Context, filter *domain.St
 	}
 
 	if stats.OldestMessage.Valid {
-		ts := domain.Timestamp{Time: stats.OldestMessage.Time}
-		result.OldestMessage = &ts
+		if t, err := parseSQLiteTime(stats.OldestMessage.String); err == nil {
+			ts := domain.Timestamp{Time: t}
+			result.OldestMessage = &ts
+		}
 	}
 
 	if stats.NewestMessage.Valid {
-		ts := domain.Timestamp{Time: stats.NewestMessage.Time}
-		result.NewestMessage = &ts
+		if t, err := parseSQLiteTime(stats.NewestMessage.String); err == nil {
+			ts := domain.Timestamp{Time: t}
+			result.NewestMessage = &ts
+		}
 	}
 
 	return result, nil
@@ -382,8 +386,8 @@ func (s *StatsRepository) GetTopSenders(ctx context.Context, limit int) ([]domai
 		MessageCount int64          `db:"message_count"`
 		TotalSize    int64          `db:"total_size"`
 		SpamCount    int64          `db:"spam_count"`
-		FirstSeen    sql.NullTime   `db:"first_seen"`
-		LastSeen     sql.NullTime   `db:"last_seen"`
+		FirstSeen    sql.NullString `db:"first_seen"`
+		LastSeen     sql.NullString `db:"last_seen"`
 	}
 
 	if err := s.repo.db().SelectContext(ctx, &rows, query, limit); err != nil {
@@ -402,12 +406,16 @@ func (s *StatsRepository) GetTopSenders(ctx context.Context, limit int) ([]domai
 			stats[i].Name = row.Name.String
 		}
 		if row.FirstSeen.Valid {
-			ts := domain.Timestamp{Time: row.FirstSeen.Time}
-			stats[i].FirstSeen = &ts
+			if t, err := parseSQLiteTime(row.FirstSeen.String); err == nil {
+				ts := domain.Timestamp{Time: t}
+				stats[i].FirstSeen = &ts
+			}
 		}
 		if row.LastSeen.Valid {
-			ts := domain.Timestamp{Time: row.LastSeen.Time}
-			stats[i].LastSeen = &ts
+			if t, err := parseSQLiteTime(row.LastSeen.String); err == nil {
+				ts := domain.Timestamp{Time: t}
+				stats[i].LastSeen = &ts
+			}
 		}
 	}
 
@@ -662,4 +670,21 @@ func (s *StatsRepository) GetAttachmentStats(ctx context.Context) (*domain.Conte
 		Count:       stats.Count,
 		TotalSize:   stats.TotalSize,
 	}, nil
+}
+
+var sqliteTimeFormats = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+}
+
+func parseSQLiteTime(s string) (time.Time, error) {
+	for _, format := range sqliteTimeFormats {
+		if t, err := time.Parse(format, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot parse %q as time", s)
 }
