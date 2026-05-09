@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"yunt/internal/config"
+	"yunt/internal/repository"
+	"yunt/internal/repository/factory"
 )
 
 var (
@@ -104,4 +106,18 @@ func getLogger() *config.Logger {
 		return config.NewDefaultLogger()
 	}
 	return logger
+}
+
+// initRepo creates a repository instance from the current configuration.
+func initRepo() (repository.Repository, error) {
+	c := getConfig()
+	f, err := factory.New(&c.Database)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create repository factory: %w", err)
+	}
+	repo, err := f.Create()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create repository: %w", err)
+	}
+	return repo, nil
 }

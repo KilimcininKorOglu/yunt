@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -132,15 +133,32 @@ func runHealth(cmd *cobra.Command, args []string) error {
 func checkDatabase(cfg *config.Config) ComponentCheck {
 	start := time.Now()
 
-	// TODO: Implement actual database connectivity check
-	// For now, simulate a check based on configuration
-	check := ComponentCheck{
+	repo, err := initRepo()
+	if err != nil {
+		return ComponentCheck{
+			Status:  "unhealthy",
+			Message: fmt.Sprintf("Failed to connect to %s: %v", cfg.Database.Driver, err),
+			Latency: time.Since(start).String(),
+		}
+	}
+	defer repo.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := repo.Health(ctx); err != nil {
+		return ComponentCheck{
+			Status:  "unhealthy",
+			Message: fmt.Sprintf("Health check failed: %v", err),
+			Latency: time.Since(start).String(),
+		}
+	}
+
+	return ComponentCheck{
 		Status:  "healthy",
 		Message: fmt.Sprintf("Connected to %s database", cfg.Database.Driver),
 		Latency: time.Since(start).String(),
 	}
-
-	return check
 }
 
 func checkSMTP(cfg *config.Config) ComponentCheck {

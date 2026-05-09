@@ -1,19 +1,23 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
+
+	"yunt/internal/repository"
+	"yunt/internal/repository/postgres"
+	"yunt/internal/repository/sqlite"
 )
 
 var (
-	// Migrate command flags
 	migrateForce   bool
 	migrateVersion int
 	migrateDryRun  bool
 )
 
-// migrateCmd represents the migrate command.
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "Manage database migrations",
@@ -22,57 +26,38 @@ var migrateCmd = &cobra.Command{
 Use subcommands to run, rollback, or check migration status.`,
 }
 
-// migrateUpCmd runs pending migrations.
 var migrateUpCmd = &cobra.Command{
 	Use:   "up",
 	Short: "Run pending migrations",
 	Long: `Run all pending database migrations.
 
 Examples:
-  # Run all pending migrations
   yunt migrate up
-
-  # Run migrations in dry-run mode (no changes)
-  yunt migrate up --dry-run
-
-  # Force run even if database is locked
-  yunt migrate up --force`,
+  yunt migrate up --dry-run`,
 	RunE: runMigrateUp,
 }
 
-// migrateDownCmd rolls back migrations.
 var migrateDownCmd = &cobra.Command{
 	Use:   "down",
 	Short: "Rollback migrations",
 	Long: `Rollback database migrations.
 
 Examples:
-  # Rollback the last migration
   yunt migrate down
-
-  # Rollback to a specific version
-  yunt migrate down --version 5
-
-  # Preview changes without applying
-  yunt migrate down --dry-run`,
+  yunt migrate down --version 5`,
 	RunE: runMigrateDown,
 }
 
-// migrateStatusCmd shows migration status.
 var migrateStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show migration status",
 	Long: `Show the current status of database migrations.
 
-Displays which migrations have been applied and which are pending.
-
 Examples:
-  # Show migration status
   yunt migrate status`,
 	RunE: runMigrateStatus,
 }
 
-// migrateResetCmd resets the database.
 var migrateResetCmd = &cobra.Command{
 	Use:   "reset",
 	Short: "Reset database (rollback all and re-run)",
@@ -81,19 +66,16 @@ var migrateResetCmd = &cobra.Command{
 WARNING: This will delete all data in the database!
 
 Examples:
-  # Reset database (requires --force)
   yunt migrate reset --force`,
 	RunE: runMigrateReset,
 }
 
 func init() {
-	// Add subcommands to migrate
 	migrateCmd.AddCommand(migrateUpCmd)
 	migrateCmd.AddCommand(migrateDownCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateResetCmd)
 
-	// Common flags
 	migrateUpCmd.Flags().BoolVar(&migrateDryRun, "dry-run", false, "preview changes without applying")
 	migrateUpCmd.Flags().BoolVar(&migrateForce, "force", false, "force run even if database is locked")
 
@@ -101,6 +83,35 @@ func init() {
 	migrateDownCmd.Flags().IntVar(&migrateVersion, "version", 0, "target migration version to rollback to")
 
 	migrateResetCmd.Flags().BoolVar(&migrateForce, "force", false, "confirm database reset (required)")
+}
+
+func getMigrator() (repository.Migrator, func(), error) {
+	repo, err := initRepo()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cleanup := func() { repo.Close() }
+
+	switch r := repo.(type) {
+	case *sqlite.Repository:
+		m := r.Migrator()
+		if m == nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("SQLite migrator not available")
+		}
+		return m, cleanup, nil
+	case *postgres.Repository:
+		m := r.Migrator()
+		if m == nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("PostgreSQL migrator not available")
+		}
+		return m, cleanup, nil
+	default:
+		cleanup()
+		return nil, nil, fmt.Errorf("migration CLI not supported for this database driver; use auto-migrate in config instead")
+	}
 }
 
 func runMigrateUp(cmd *cobra.Command, args []string) error {
@@ -113,27 +124,46 @@ func runMigrateUp(cmd *cobra.Command, args []string) error {
 		Msg("Running database migrations")
 
 	if migrateDryRun {
-		fmt.Println("Dry-run mode: No changes will be applied")
-		fmt.Println()
+		migrator, cleanup, err := getMigrator()
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+
+		ctx := context.Background()
+		statuses, err := migrator.MigrationStatus(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get migration status: %w", err)
+		}
+
+		pending := 0
+		for _, s := range statuses {
+			if !s.Applied {
+				fmt.Printf("  Would apply: %03d_%s\n", s.Version, s.Name)
+				pending++
+			}
+		}
+		if pending == 0 {
+			fmt.Println("No pending migrations")
+		} else {
+			fmt.Printf("\n%d migration(s) would be applied\n", pending)
+		}
+		return nil
 	}
 
-	// TODO: Implement actual migration logic once repository layer is available
-	fmt.Println("Checking for pending migrations...")
-	fmt.Println()
-	fmt.Printf("Database driver: %s\n", cfg.Database.Driver)
-	fmt.Printf("Database: %s\n", cfg.Database.Name)
-	fmt.Println()
+	migrator, cleanup, err := getMigrator()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
-	if migrateDryRun {
-		fmt.Println("Would apply the following migrations:")
-		fmt.Println("  - 001_create_users_table")
-		fmt.Println("  - 002_create_mailboxes_table")
-		fmt.Println("  - 003_create_messages_table")
-	} else {
-		fmt.Println("No pending migrations")
+	ctx := context.Background()
+	if err := migrator.Migrate(ctx); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
 	}
 
-	log.Info().Msg("Migration check completed")
+	fmt.Println("All migrations applied successfully")
+	log.Info().Msg("Migrations completed")
 	return nil
 }
 
@@ -147,25 +177,47 @@ func runMigrateDown(cmd *cobra.Command, args []string) error {
 		Bool("dry_run", migrateDryRun).
 		Msg("Rolling back migrations")
 
+	migrator, cleanup, err := getMigrator()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	ctx := context.Background()
+
 	if migrateDryRun {
-		fmt.Println("Dry-run mode: No changes will be applied")
-		fmt.Println()
+		version, err := migrator.MigrationVersion(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get current version: %w", err)
+		}
+		if migrateVersion > 0 {
+			fmt.Printf("Would rollback from version %d to version %d\n", version, migrateVersion)
+		} else {
+			fmt.Printf("Would rollback version %d\n", version)
+		}
+		return nil
 	}
 
-	// TODO: Implement actual rollback logic
-	fmt.Println("Checking current migration status...")
-	fmt.Println()
-	fmt.Printf("Database driver: %s\n", cfg.Database.Driver)
-
+	steps := 1
 	if migrateVersion > 0 {
-		fmt.Printf("Target version: %d\n", migrateVersion)
-	} else {
-		fmt.Println("Rolling back last migration")
+		current, err := migrator.MigrationVersion(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get current version: %w", err)
+		}
+		steps = int(current) - migrateVersion
+		if steps <= 0 {
+			fmt.Println("Already at or below target version")
+			return nil
+		}
 	}
 
-	fmt.Println()
-	fmt.Println("No migrations to rollback")
+	if err := migrator.MigrateDown(ctx, steps); err != nil {
+		return fmt.Errorf("rollback failed: %w", err)
+	}
 
+	version, _ := migrator.MigrationVersion(ctx)
+	fmt.Printf("Rolled back to version %d\n", version)
+	log.Info().Int64("version", version).Msg("Rollback completed")
 	return nil
 }
 
@@ -177,22 +229,51 @@ func runMigrateStatus(cmd *cobra.Command, args []string) error {
 		Str("driver", cfg.Database.Driver).
 		Msg("Checking migration status")
 
-	// TODO: Implement actual status check
+	migrator, cleanup, err := getMigrator()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	ctx := context.Background()
+	statuses, err := migrator.MigrationStatus(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get migration status: %w", err)
+	}
+
+	version, _ := migrator.MigrationVersion(ctx)
+
 	fmt.Println("Migration Status")
 	fmt.Println("================")
+	fmt.Printf("Driver:          %s\n", cfg.Database.Driver)
+	fmt.Printf("Current version: %d\n", version)
 	fmt.Println()
-	fmt.Printf("Database driver: %s\n", cfg.Database.Driver)
-	fmt.Printf("Database: %s\n", cfg.Database.Name)
-	fmt.Println()
-	fmt.Println("Applied migrations:")
-	fmt.Println("  (none)")
-	fmt.Println()
-	fmt.Println("Pending migrations:")
-	fmt.Println("  - 001_create_users_table")
-	fmt.Println("  - 002_create_mailboxes_table")
-	fmt.Println("  - 003_create_messages_table")
-	fmt.Println("  - 004_create_attachments_table")
 
+	if len(statuses) == 0 {
+		fmt.Println("No migrations found")
+		return nil
+	}
+
+	fmt.Printf("%-8s %-30s %-10s %s\n", "VERSION", "NAME", "STATUS", "APPLIED AT")
+	fmt.Printf("%-8s %-30s %-10s %s\n", "-------", "----", "------", "----------")
+
+	applied, pending := 0, 0
+	for _, s := range statuses {
+		status := "pending"
+		appliedAt := ""
+		if s.Applied {
+			status = "applied"
+			applied++
+			if s.AppliedAt != nil {
+				appliedAt = *s.AppliedAt
+			}
+		} else {
+			pending++
+		}
+		fmt.Printf("%-8d %-30s %-10s %s\n", s.Version, s.Name, status, appliedAt)
+	}
+
+	fmt.Printf("\nTotal: %d | Applied: %d | Pending: %d\n", len(statuses), applied, pending)
 	return nil
 }
 
@@ -206,19 +287,36 @@ func runMigrateReset(cmd *cobra.Command, args []string) error {
 
 	log.Warn().
 		Str("driver", cfg.Database.Driver).
-		Msg("Resetting database - all data will be deleted!")
+		Msg("Resetting database — all data will be deleted!")
 
-	// TODO: Implement actual reset logic
-	fmt.Println("WARNING: This will delete all data in the database!")
-	fmt.Println()
-	fmt.Printf("Database driver: %s\n", cfg.Database.Driver)
-	fmt.Printf("Database: %s\n", cfg.Database.Name)
-	fmt.Println()
+	migrator, cleanup, err := getMigrator()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	ctx := context.Background()
+
 	fmt.Println("Rolling back all migrations...")
-	fmt.Println("Re-running all migrations...")
-	fmt.Println()
-	fmt.Println("Database reset completed")
+	version, _ := migrator.MigrationVersion(ctx)
+	if version > 0 {
+		if err := migrator.MigrateDown(ctx, int(version)); err != nil {
+			return fmt.Errorf("rollback failed: %w", err)
+		}
+	}
 
-	log.Info().Msg("Database reset completed")
+	fmt.Println("Re-running all migrations...")
+	if err := migrator.Migrate(ctx); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	newVersion, _ := migrator.MigrationVersion(ctx)
+	fmt.Printf("Database reset completed (version: %d)\n", newVersion)
+	log.Info().Int64("version", newVersion).Msg("Database reset completed")
 	return nil
+}
+
+// migrateTimeout returns a context with a reasonable timeout for migration operations.
+func migrateTimeout() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 5*time.Minute)
 }
