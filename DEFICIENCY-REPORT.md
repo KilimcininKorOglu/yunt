@@ -51,12 +51,21 @@ Task dosyaları ile mevcut kod tabanının karşılaştırmalı analizi.
 | A1 | `cmd_health.go` IPv6 uyumluluğu             | `daaaf42`     | `fmt.Sprintf` yerine `net.JoinHostPort` kullanıldı.                                          |
 | A2 | GoReleaser "hermes" referansları             | `4df8444`     | Build id, binary, main path "yunt" olarak güncellendi.                                        |
 
+## Ek Düzeltmeler (devam)
+
+| #  | Düzeltme                                    | Commit        | Detay                                                                                         |
+|----|---------------------------------------------|---------------|-----------------------------------------------------------------------------------------------|
+| A3 | Service testleri (user, webhook, notify)    | `b49f0a2`, `3903ac1` | 69+ test fonksiyonu eklendi.                                                    |
+| A4 | Health handler testleri                     | `b12dca8`     | Healthz, ready, health endpoint testleri.                                                     |
+| A5 | FTS5 build tag ve statement splitter        | `0fe7114`     | Makefile'a `-tags fts5` eklendi, `splitStatements` BEGIN...END desteği.                        |
+| A6 | CI FTS5 tag                                 | `f399933`     | CI workflow'una `-tags fts5` eklendi.                                                         |
+
 ## Kalan İşler
 
 | Öncelik | Madde                                                    |
 |---------|----------------------------------------------------------|
-| P1      | Service testleri: user, webhook, notify (devam ediyor)   |
 | P1      | Handler testleri (messages, users, mailboxes, vb.)       |
 | P2      | Swagger/OpenAPI endpoint implementasyonu                 |
 | P2      | E2E test suite'i (HTTP API, SMTP, IMAP)                  |
 | P3      | Webhook dispatch mekanizması doğrulaması                 |
+| P3      | SQLite stats sorgusu NULL handling bug'ı — `2741a17` ile kısmi düzeltme (SUM COALESCE). Zaman alanları hâlâ sorunlu. |
