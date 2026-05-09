@@ -394,6 +394,10 @@ func (s *Session) Data(r io.Reader) error {
 
 	s.backend.server.stats.MessageReceived()
 
+	if s.backend.server.rateLimiter != nil {
+		s.backend.server.rateLimiter.OnMessageSent(s.remoteAddr)
+	}
+
 	// Relay the message to external SMTP server if enabled
 	// This happens after local storage to ensure message is preserved
 	s.relayMessage(data, recipientAddresses)
