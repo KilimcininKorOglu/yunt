@@ -5,20 +5,28 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
+
+	"yunt/internal/api"
+	"yunt/internal/api/handlers"
+	"yunt/internal/api/middleware"
+	"yunt/internal/config"
+	imapserver "yunt/internal/imap"
+	"yunt/internal/repository/factory"
+	"yunt/internal/service"
+	smtpserver "yunt/internal/smtp"
+	"yunt/webui"
 )
 
 var (
-	// Serve command flags
 	smtpPort int
 	imapPort int
 	apiPort  int
 )
 
-// serveCmd represents the serve command.
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the Yunt mail server",
@@ -28,22 +36,13 @@ By default, all services are started according to the configuration file.
 You can override specific port settings using command-line flags.
 
 Examples:
-  # Start with default configuration
   yunt serve
-
-  # Start with a custom configuration file
   yunt serve --config /path/to/yunt.yaml
-
-  # Override specific ports
-  yunt serve --smtp-port 2525 --api-port 8080
-
-  # Start in foreground mode (default)
-  yunt serve`,
+  yunt serve --smtp-port 2525 --api-port 8080`,
 	RunE: runServe,
 }
 
 func init() {
-	// Serve command specific flags
 	serveCmd.Flags().IntVar(&smtpPort, "smtp-port", 0, "override SMTP server port")
 	serveCmd.Flags().IntVar(&imapPort, "imap-port", 0, "override IMAP server port")
 	serveCmd.Flags().IntVar(&apiPort, "api-port", 0, "override API server port")
@@ -53,7 +52,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	log := getLogger()
 	cfg := getConfig()
 
-	// Apply port overrides if specified
 	if smtpPort > 0 {
 		cfg.SMTP.Port = smtpPort
 	}
@@ -69,51 +67,186 @@ func runServe(cmd *cobra.Command, args []string) error {
 		Str("commit", commit).
 		Msg("Starting Yunt mail server")
 
-	// Log configuration summary
-	log.Info().
-		Str("server_name", cfg.Server.Name).
-		Str("domain", cfg.Server.Domain).
-		Msg("Server configuration loaded")
-
-	// Log enabled services
-	if cfg.SMTP.Enabled {
-		log.Info().
-			Str("host", cfg.SMTP.Host).
-			Int("port", cfg.SMTP.Port).
-			Bool("auth_required", cfg.SMTP.AuthRequired).
-			Bool("relay_enabled", cfg.SMTP.AllowRelay).
-			Msg("SMTP server configured")
+	// Initialize repository
+	repoFactory, err := factory.New(&cfg.Database)
+	if err != nil {
+		return fmt.Errorf("failed to create repository factory: %w", err)
 	}
 
-	if cfg.IMAP.Enabled {
-		log.Info().
-			Str("host", cfg.IMAP.Host).
-			Int("port", cfg.IMAP.Port).
-			Msg("IMAP server configured")
+	repo, err := repoFactory.Create()
+	if err != nil {
+		return fmt.Errorf("failed to create repository: %w", err)
 	}
+	defer repo.Close()
 
-	if cfg.API.Enabled {
-		log.Info().
-			Str("host", cfg.API.Host).
-			Int("port", cfg.API.Port).
-			Bool("swagger_enabled", cfg.API.EnableSwagger).
-			Msg("API server configured")
-	}
+	log.Info().Str("driver", cfg.Database.Driver).Msg("Database connected")
 
-	log.Info().
-		Str("driver", cfg.Database.Driver).
-		Msg("Database configured")
+	// Initialize services
+	authService := service.NewAuthService(cfg.Auth, repo.Users(), service.NewInMemorySessionStore())
+	userService := service.NewUserService(cfg.Auth, repo.Users())
+	mailboxService := service.NewMailboxService(repo, nil)
+	messageService := service.NewMessageService(repo, nil)
+	webhookService := service.NewWebhookService(repo, nil)
+	notifyService := service.NewNotifyService()
 
-	// Create context for graceful shutdown
+	_ = notifyService
+
+	// Context for coordinated shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start servers (placeholder for actual server implementation)
-	// TODO: Implement actual server startup once services are available
+	errChan := make(chan error, 3)
+
+	// Start SMTP server
+	if cfg.SMTP.Enabled {
+		smtpCfg, smtpErr := smtpserver.NewConfig(cfg)
+		if smtpErr != nil {
+			return fmt.Errorf("invalid SMTP config: %w", smtpErr)
+		}
+
+		smtpSrv, smtpErr := smtpserver.New(smtpCfg, log.Logger,
+			smtpserver.WithRepo(repo),
+			smtpserver.WithMailboxRepo(repo.Mailboxes()),
+			smtpserver.WithMessageRepo(repo.Messages()),
+		)
+		if smtpErr != nil {
+			return fmt.Errorf("failed to create SMTP server: %w", smtpErr)
+		}
+
+		go func() {
+			log.Info().Str("addr", fmt.Sprintf("%s:%d", cfg.SMTP.Host, cfg.SMTP.Port)).Msg("SMTP server starting")
+			if err := smtpSrv.Start(); err != nil {
+				errChan <- fmt.Errorf("SMTP server error: %w", err)
+			}
+		}()
+
+		defer func() {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Server.GracefulTimeout)
+			defer shutdownCancel()
+			_ = smtpSrv.Stop(shutdownCtx)
+		}()
+	}
+
+	// Start IMAP server
+	if cfg.IMAP.Enabled {
+		imapCfg := imapserver.NewConfigFromApp(cfg)
+		imapSrv, imapErr := imapserver.NewServer(imapCfg, log.Logger)
+		if imapErr != nil {
+			return fmt.Errorf("failed to create IMAP server: %w", imapErr)
+		}
+
+		imapBackendCfg := &imapserver.BackendConfig{}
+		imapBackend := imapserver.NewBackend(repo, log.Logger, imapBackendCfg)
+		imapSrv.SetBackend(imapBackend)
+
+		go func() {
+			log.Info().Str("addr", fmt.Sprintf("%s:%d", cfg.IMAP.Host, cfg.IMAP.Port)).Msg("IMAP server starting")
+			if err := imapSrv.Start(ctx); err != nil {
+				errChan <- fmt.Errorf("IMAP server error: %w", err)
+			}
+		}()
+
+		defer func() {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Server.GracefulTimeout)
+			defer shutdownCancel()
+			_ = imapSrv.Stop(shutdownCtx)
+		}()
+	}
+
+	// Start API server
+	if cfg.API.Enabled {
+		apiSrv := api.New(cfg.API, api.WithLogger(log))
+		api.SetVersion(version)
+
+		v1 := apiSrv.Router().V1()
+
+		authMiddleware := middleware.Auth(authService)
+
+		authHandler := handlers.NewAuthHandler(authService)
+		authHandler.RegisterRoutes(v1)
+
+		authed := v1.Group("", authMiddleware)
+
+		messageHandler := handlers.NewMessageHandler(messageService, mailboxService, authService)
+		messageHandler.RegisterRoutes(authed)
+
+		mailboxHandler := handlers.NewMailboxHandler(mailboxService, authService)
+		mailboxHandler.RegisterRoutes(authed)
+
+		userHandler := handlers.NewUsersHandler(userService, authService)
+		userHandler.RegisterRoutes(authed, authService)
+
+		webhookHandler := handlers.NewWebhookHandler(webhookService, authService)
+		webhookHandler.RegisterRoutes(authed)
+
+		attachmentHandler := handlers.NewAttachmentHandler(messageService, authService)
+		attachmentHandler.RegisterRoutes(authed)
+
+		searchHandler := handlers.NewSearchHandler(messageService, authService)
+		searchHandler.RegisterRoutes(authed)
+
+		healthHandler := handlers.NewHealthHandler(repo, version)
+		healthHandler.RegisterRoutes(apiSrv.Echo())
+
+		systemHandler := handlers.NewSystemHandler(handlers.SystemHandlerConfig{
+			Repo:           repo,
+			AuthService:    authService,
+			MessageService: messageService,
+			Config:         cfg,
+			Version:        version,
+		})
+		systemHandler.RegisterRoutes(authed)
+
+		if webui.IsAvailable() {
+			apiSrv.Echo().GET("/*", webui.Handler())
+			log.Info().Msg("Web UI enabled")
+		}
+
+		go func() {
+			if err := apiSrv.StartWithContext(ctx); err != nil {
+				errChan <- fmt.Errorf("API server error: %w", err)
+			}
+		}()
+
+		defer func() {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Server.GracefulTimeout)
+			defer shutdownCancel()
+			_ = apiSrv.Shutdown(shutdownCtx)
+		}()
+	}
+
+	// Print startup banner
+	printBanner(cfg)
+
+	// Wait for shutdown signal or server error
+	select {
+	case sig := <-sigChan:
+		log.Info().Str("signal", sig.String()).Msg("Received shutdown signal")
+	case err := <-errChan:
+		log.Error().Err(err).Msg("Server error")
+		cancel()
+		return err
+	}
+
+	log.Info().Dur("timeout", cfg.Server.GracefulTimeout).Msg("Initiating graceful shutdown")
+	cancel()
+
+	// Give deferred shutdown functions time to complete
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+	}()
+	wg.Wait()
+
+	log.Info().Msg("Server stopped successfully")
+	return nil
+}
+
+func printBanner(cfg *config.Config) {
 	fmt.Println()
 	fmt.Println("=================================================")
 	fmt.Println("  Yunt - Development Mail Server")
@@ -134,32 +267,4 @@ func runServe(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("  Press Ctrl+C to stop")
 	fmt.Println("=================================================")
-
-	// Wait for shutdown signal
-	select {
-	case sig := <-sigChan:
-		log.Info().Str("signal", sig.String()).Msg("Received shutdown signal")
-	case <-ctx.Done():
-		log.Info().Msg("Context cancelled")
-	}
-
-	// Begin graceful shutdown
-	log.Info().Dur("timeout", cfg.Server.GracefulTimeout).Msg("Initiating graceful shutdown")
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Server.GracefulTimeout)
-	defer shutdownCancel()
-
-	// TODO: Shutdown actual servers here
-	// For now, simulate graceful shutdown
-	select {
-	case <-shutdownCtx.Done():
-		if shutdownCtx.Err() == context.DeadlineExceeded {
-			log.Warn().Msg("Graceful shutdown timed out, forcing exit")
-		}
-	case <-time.After(100 * time.Millisecond):
-		// Quick shutdown for now since no actual servers
-	}
-
-	log.Info().Msg("Server stopped successfully")
-	return nil
 }
