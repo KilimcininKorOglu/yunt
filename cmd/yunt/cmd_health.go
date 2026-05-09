@@ -145,7 +145,7 @@ func checkDatabase(cfg *config.Config) ComponentCheck {
 
 func checkSMTP(cfg *config.Config) ComponentCheck {
 	start := time.Now()
-	addr := fmt.Sprintf("%s:%d", cfg.SMTP.Host, cfg.SMTP.Port)
+	addr := net.JoinHostPort(cfg.SMTP.Host, fmt.Sprintf("%d", cfg.SMTP.Port))
 
 	// Try to connect to SMTP port
 	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
@@ -167,7 +167,7 @@ func checkSMTP(cfg *config.Config) ComponentCheck {
 
 func checkIMAP(cfg *config.Config) ComponentCheck {
 	start := time.Now()
-	addr := fmt.Sprintf("%s:%d", cfg.IMAP.Host, cfg.IMAP.Port)
+	addr := net.JoinHostPort(cfg.IMAP.Host, fmt.Sprintf("%d", cfg.IMAP.Port))
 
 	// Try to connect to IMAP port
 	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
@@ -189,7 +189,7 @@ func checkIMAP(cfg *config.Config) ComponentCheck {
 
 func checkAPI(cfg *config.Config) ComponentCheck {
 	start := time.Now()
-	addr := fmt.Sprintf("%s:%d", cfg.API.Host, cfg.API.Port)
+	addr := net.JoinHostPort(cfg.API.Host, fmt.Sprintf("%d", cfg.API.Port))
 
 	// Try to connect to API port
 	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
