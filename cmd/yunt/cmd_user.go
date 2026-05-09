@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -9,10 +10,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
+
+	"yunt/internal/domain"
+	"yunt/internal/repository"
+	"yunt/internal/service"
 )
 
 var (
-	// User command flags
 	userEmail    string
 	userPassword string
 	userRole     string
@@ -21,7 +25,6 @@ var (
 	userForce    bool
 )
 
-// userCmd represents the user command.
 var userCmd = &cobra.Command{
 	Use:   "user",
 	Short: "Manage users",
@@ -30,116 +33,81 @@ var userCmd = &cobra.Command{
 Use subcommands to create, list, modify, or delete users.`,
 }
 
-// userListCmd lists all users.
 var userListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all users",
 	Long: `List all users registered in the system.
 
 Examples:
-  # List all users
   yunt user list
-
-  # List only active users
   yunt user list --active
-
-  # List only inactive users
   yunt user list --inactive`,
 	RunE: runUserList,
 }
 
-// userCreateCmd creates a new user.
 var userCreateCmd = &cobra.Command{
 	Use:   "create <username>",
 	Short: "Create a new user",
 	Long: `Create a new user account.
 
 Examples:
-  # Create a user interactively
   yunt user create john
-
-  # Create a user with email
   yunt user create john --email john@example.com
-
-  # Create a user with all options
-  yunt user create john --email john@example.com --role user`,
+  yunt user create john --email john@example.com --role admin`,
 	Args: cobra.ExactArgs(1),
 	RunE: runUserCreate,
 }
 
-// userDeleteCmd deletes a user.
 var userDeleteCmd = &cobra.Command{
 	Use:   "delete <username>",
 	Short: "Delete a user",
-	Long: `Delete a user account and all associated data.
-
-WARNING: This action is irreversible!
+	Long: `Delete a user account.
 
 Examples:
-  # Delete a user (requires confirmation)
   yunt user delete john
-
-  # Delete without confirmation
   yunt user delete john --force`,
 	Args: cobra.ExactArgs(1),
 	RunE: runUserDelete,
 }
 
-// userPasswordCmd changes a user's password.
 var userPasswordCmd = &cobra.Command{
 	Use:   "password <username>",
 	Short: "Change user password",
 	Long: `Change the password for a user account.
 
 Examples:
-  # Change password interactively
   yunt user password john
-
-  # Set password directly (not recommended for security)
   yunt user password john --password newpassword`,
 	Args: cobra.ExactArgs(1),
 	RunE: runUserPassword,
 }
 
-// userInfoCmd shows user details.
 var userInfoCmd = &cobra.Command{
 	Use:   "info <username>",
 	Short: "Show user details",
 	Long: `Display detailed information about a user.
 
 Examples:
-  # Show user info
   yunt user info john`,
 	Args: cobra.ExactArgs(1),
 	RunE: runUserInfo,
 }
 
-// userActivateCmd activates a user.
 var userActivateCmd = &cobra.Command{
 	Use:   "activate <username>",
 	Short: "Activate a user account",
-	Long: `Activate a disabled user account.
-
-Examples:
-  yunt user activate john`,
-	Args: cobra.ExactArgs(1),
-	RunE: runUserActivate,
+	Args:  cobra.ExactArgs(1),
+	RunE:  runUserActivate,
 }
 
-// userDeactivateCmd deactivates a user.
 var userDeactivateCmd = &cobra.Command{
 	Use:   "deactivate <username>",
 	Short: "Deactivate a user account",
-	Long: `Deactivate a user account without deleting it.
-
-Examples:
-  yunt user deactivate john`,
-	Args: cobra.ExactArgs(1),
-	RunE: runUserDeactivate,
+	Args:  cobra.ExactArgs(1),
+	RunE:  runUserDeactivate,
 }
 
 func init() {
-	// Add subcommands to user
 	userCmd.AddCommand(userListCmd)
 	userCmd.AddCommand(userCreateCmd)
 	userCmd.AddCommand(userDeleteCmd)
@@ -148,53 +116,69 @@ func init() {
 	userCmd.AddCommand(userActivateCmd)
 	userCmd.AddCommand(userDeactivateCmd)
 
-	// List flags
 	userListCmd.Flags().BoolVar(&userActive, "active", false, "show only active users")
 	userListCmd.Flags().BoolVar(&userInactive, "inactive", false, "show only inactive users")
 
-	// Create flags
 	userCreateCmd.Flags().StringVarP(&userEmail, "email", "e", "", "user email address")
 	userCreateCmd.Flags().StringVarP(&userPassword, "password", "p", "", "user password (prompted if not provided)")
 	userCreateCmd.Flags().StringVarP(&userRole, "role", "r", "user", "user role (admin, user)")
 
-	// Delete flags
 	userDeleteCmd.Flags().BoolVarP(&userForce, "force", "f", false, "skip confirmation prompt")
 
-	// Password flags
 	userPasswordCmd.Flags().StringVarP(&userPassword, "password", "p", "", "new password (prompted if not provided)")
 }
 
 func runUserList(cmd *cobra.Command, args []string) error {
 	log := getLogger()
-	cfg := getConfig()
 
 	log.Debug().
 		Bool("active_only", userActive).
 		Bool("inactive_only", userInactive).
 		Msg("Listing users")
 
-	// TODO: Implement actual user listing from database
-	fmt.Println("User List")
-	fmt.Println("=========")
-	fmt.Println()
-	fmt.Printf("Database: %s (%s)\n", cfg.Database.Name, cfg.Database.Driver)
-	fmt.Println()
+	repo, err := initRepo()
+	if err != nil {
+		return err
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+
+	var filter *repository.UserFilter
+	if userActive || userInactive {
+		filter = &repository.UserFilter{}
+		if userActive {
+			s := domain.StatusActive
+			filter.Status = &s
+		} else if userInactive {
+			s := domain.StatusInactive
+			filter.Status = &s
+		}
+	}
+
+	result, err := repo.Users().List(ctx, filter, &repository.ListOptions{
+		Pagination: &repository.PaginationOptions{Page: 1, PerPage: 100},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list users: %w", err)
+	}
+
 	fmt.Printf("%-20s %-30s %-10s %-10s\n", "USERNAME", "EMAIL", "ROLE", "STATUS")
 	fmt.Printf("%-20s %-30s %-10s %-10s\n", "--------", "-----", "----", "------")
-	fmt.Printf("%-20s %-30s %-10s %-10s\n", "admin", "admin@localhost", "admin", "active")
-	fmt.Println()
-	fmt.Println("Total: 1 user(s)")
+	for _, u := range result.Items {
+		fmt.Printf("%-20s %-30s %-10s %-10s\n", u.Username, u.Email, u.Role, u.Status)
+	}
+	fmt.Printf("\nTotal: %d user(s)\n", result.Total)
 
 	return nil
 }
 
 func runUserCreate(cmd *cobra.Command, args []string) error {
 	log := getLogger()
-	_ = getConfig()
+	cfg := getConfig()
 
 	username := args[0]
 
-	// Prompt for password if not provided
 	password := userPassword
 	if password == "" {
 		var err error
@@ -202,18 +186,15 @@ func runUserCreate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to read password: %w", err)
 		}
-
 		confirm, err := promptPassword("Confirm password: ")
 		if err != nil {
 			return fmt.Errorf("failed to read password confirmation: %w", err)
 		}
-
 		if password != confirm {
 			return fmt.Errorf("passwords do not match")
 		}
 	}
 
-	// Prompt for email if not provided
 	email := userEmail
 	if email == "" {
 		var err error
@@ -229,21 +210,33 @@ func runUserCreate(cmd *cobra.Command, args []string) error {
 		Str("role", userRole).
 		Msg("Creating user")
 
-	// TODO: Implement actual user creation
-	fmt.Println()
-	fmt.Printf("Creating user '%s'...\n", username)
-	fmt.Printf("  Email: %s\n", email)
-	fmt.Printf("  Role: %s\n", userRole)
-	fmt.Println()
-	fmt.Printf("User '%s' created successfully\n", username)
+	repo, err := initRepo()
+	if err != nil {
+		return err
+	}
+	defer repo.Close()
 
+	userSvc := service.NewUserService(cfg.Auth, repo.Users())
+	ctx := context.Background()
+
+	input := &domain.UserCreateInput{
+		Username: username,
+		Email:    email,
+		Password: password,
+		Role:     domain.UserRole(userRole),
+	}
+
+	user, err := userSvc.Create(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	fmt.Printf("User '%s' created successfully (ID: %s)\n", user.Username, user.ID)
 	return nil
 }
 
 func runUserDelete(cmd *cobra.Command, args []string) error {
 	log := getLogger()
-	_ = getConfig()
-
 	username := args[0]
 
 	if !userForce {
@@ -258,21 +251,31 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	log.Info().
-		Str("username", username).
-		Msg("Deleting user")
+	log.Info().Str("username", username).Msg("Deleting user")
 
-	// TODO: Implement actual user deletion
-	fmt.Printf("Deleting user '%s'...\n", username)
+	repo, err := initRepo()
+	if err != nil {
+		return err
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	user, err := repo.Users().GetByUsername(ctx, username)
+	if err != nil {
+		return fmt.Errorf("user '%s' not found: %w", username, err)
+	}
+
+	if err := repo.Users().SoftDelete(ctx, user.ID); err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
 	fmt.Printf("User '%s' deleted successfully\n", username)
-
 	return nil
 }
 
 func runUserPassword(cmd *cobra.Command, args []string) error {
 	log := getLogger()
-	_ = getConfig()
-
+	cfg := getConfig()
 	username := args[0]
 
 	password := userPassword
@@ -282,93 +285,124 @@ func runUserPassword(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to read password: %w", err)
 		}
-
 		confirm, err := promptPassword("Confirm new password: ")
 		if err != nil {
 			return fmt.Errorf("failed to read password confirmation: %w", err)
 		}
-
 		if password != confirm {
 			return fmt.Errorf("passwords do not match")
 		}
 	}
 
-	log.Info().
-		Str("username", username).
-		Msg("Changing user password")
+	log.Info().Str("username", username).Msg("Changing user password")
 
-	// TODO: Implement actual password change
-	fmt.Printf("Changing password for user '%s'...\n", username)
+	repo, err := initRepo()
+	if err != nil {
+		return err
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	user, err := repo.Users().GetByUsername(ctx, username)
+	if err != nil {
+		return fmt.Errorf("user '%s' not found: %w", username, err)
+	}
+
+	userSvc := service.NewUserService(cfg.Auth, repo.Users())
+	if err := userSvc.UpdatePassword(ctx, user.ID, password); err != nil {
+		return fmt.Errorf("failed to change password: %w", err)
+	}
+
 	fmt.Println("Password changed successfully")
-
 	return nil
 }
 
 func runUserInfo(cmd *cobra.Command, args []string) error {
-	log := getLogger()
-	_ = getConfig()
-
 	username := args[0]
 
-	log.Debug().
-		Str("username", username).
-		Msg("Fetching user info")
+	repo, err := initRepo()
+	if err != nil {
+		return err
+	}
+	defer repo.Close()
 
-	// TODO: Implement actual user info retrieval
+	ctx := context.Background()
+	user, err := repo.Users().GetByUsername(ctx, username)
+	if err != nil {
+		return fmt.Errorf("user '%s' not found: %w", username, err)
+	}
+
 	fmt.Println("User Information")
 	fmt.Println("================")
-	fmt.Println()
-	fmt.Printf("Username:    %s\n", username)
-	fmt.Printf("Email:       %s@localhost\n", username)
-	fmt.Printf("Role:        user\n")
-	fmt.Printf("Status:      active\n")
-	fmt.Printf("Created:     2024-01-01 12:00:00\n")
-	fmt.Printf("Last Login:  2024-01-15 09:30:00\n")
-	fmt.Println()
-	fmt.Println("Mailboxes:")
-	fmt.Println("  - INBOX (0 messages)")
-	fmt.Println("  - Sent (0 messages)")
-	fmt.Println("  - Drafts (0 messages)")
-	fmt.Println("  - Trash (0 messages)")
+	fmt.Printf("ID:          %s\n", user.ID)
+	fmt.Printf("Username:    %s\n", user.Username)
+	fmt.Printf("Email:       %s\n", user.Email)
+	fmt.Printf("Display:     %s\n", user.DisplayName)
+	fmt.Printf("Role:        %s\n", user.Role)
+	fmt.Printf("Status:      %s\n", user.Status)
+	fmt.Printf("Created:     %s\n", user.CreatedAt.Time.Format("2006-01-02 15:04:05"))
+	fmt.Printf("Updated:     %s\n", user.UpdatedAt.Time.Format("2006-01-02 15:04:05"))
+	if user.LastLoginAt != nil {
+		fmt.Printf("Last Login:  %s\n", user.LastLoginAt.Time.Format("2006-01-02 15:04:05"))
+	} else {
+		fmt.Printf("Last Login:  never\n")
+	}
 
 	return nil
 }
 
 func runUserActivate(cmd *cobra.Command, args []string) error {
 	log := getLogger()
-	_ = getConfig()
-
 	username := args[0]
 
-	log.Info().
-		Str("username", username).
-		Msg("Activating user")
+	log.Info().Str("username", username).Msg("Activating user")
 
-	// TODO: Implement actual user activation
-	fmt.Printf("Activating user '%s'...\n", username)
+	repo, err := initRepo()
+	if err != nil {
+		return err
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	user, err := repo.Users().GetByUsername(ctx, username)
+	if err != nil {
+		return fmt.Errorf("user '%s' not found: %w", username, err)
+	}
+
+	if err := repo.Users().UpdateStatus(ctx, user.ID, domain.StatusActive); err != nil {
+		return fmt.Errorf("failed to activate user: %w", err)
+	}
+
 	fmt.Printf("User '%s' activated successfully\n", username)
-
 	return nil
 }
 
 func runUserDeactivate(cmd *cobra.Command, args []string) error {
 	log := getLogger()
-	_ = getConfig()
-
 	username := args[0]
 
-	log.Info().
-		Str("username", username).
-		Msg("Deactivating user")
+	log.Info().Str("username", username).Msg("Deactivating user")
 
-	// TODO: Implement actual user deactivation
-	fmt.Printf("Deactivating user '%s'...\n", username)
+	repo, err := initRepo()
+	if err != nil {
+		return err
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	user, err := repo.Users().GetByUsername(ctx, username)
+	if err != nil {
+		return fmt.Errorf("user '%s' not found: %w", username, err)
+	}
+
+	if err := repo.Users().UpdateStatus(ctx, user.ID, domain.StatusInactive); err != nil {
+		return fmt.Errorf("failed to deactivate user: %w", err)
+	}
+
 	fmt.Printf("User '%s' deactivated successfully\n", username)
-
 	return nil
 }
 
-// promptPassword prompts for a password without echoing.
 func promptPassword(prompt string) (string, error) {
 	fmt.Print(prompt)
 	password, err := terminal.ReadPassword(int(syscall.Stdin))
@@ -379,7 +413,6 @@ func promptPassword(prompt string) (string, error) {
 	return string(password), nil
 }
 
-// promptInput prompts for text input.
 func promptInput(prompt string) (string, error) {
 	fmt.Print(prompt)
 	reader := bufio.NewReader(os.Stdin)
