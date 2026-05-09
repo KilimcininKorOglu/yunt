@@ -1160,10 +1160,10 @@ func (w *WebhookRepository) DeleteOldDeliveries(ctx context.Context, olderThanDa
 
 // GetDeliveryStats retrieves delivery statistics for a webhook.
 func (w *WebhookRepository) GetDeliveryStats(ctx context.Context, webhookID domain.ID) (*repository.WebhookDeliveryStats, error) {
-	query := `SELECT 
+	query := `SELECT
 		COUNT(*) as total_deliveries,
-		SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful_deliveries,
-		SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed_deliveries,
+		COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) as successful_deliveries,
+		COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) as failed_deliveries,
 		AVG(duration) as average_duration,
 		MAX(duration) as max_duration,
 		MIN(duration) as min_duration,
@@ -1173,15 +1173,15 @@ func (w *WebhookRepository) GetDeliveryStats(ctx context.Context, webhookID doma
 		FROM webhook_deliveries WHERE webhook_id = ?`
 
 	var stats struct {
-		TotalDeliveries      int64          `db:"total_deliveries"`
-		SuccessfulDeliveries int64          `db:"successful_deliveries"`
-		FailedDeliveries     int64          `db:"failed_deliveries"`
+		TotalDeliveries      int64           `db:"total_deliveries"`
+		SuccessfulDeliveries int64           `db:"successful_deliveries"`
+		FailedDeliveries     int64           `db:"failed_deliveries"`
 		AverageDuration      sql.NullFloat64 `db:"average_duration"`
-		MaxDuration          sql.NullInt64  `db:"max_duration"`
-		MinDuration          sql.NullInt64  `db:"min_duration"`
-		LastDeliveryAt       sql.NullTime   `db:"last_delivery_at"`
-		LastSuccessAt        sql.NullTime   `db:"last_success_at"`
-		LastFailureAt        sql.NullTime   `db:"last_failure_at"`
+		MaxDuration          sql.NullInt64   `db:"max_duration"`
+		MinDuration          sql.NullInt64   `db:"min_duration"`
+		LastDeliveryAt       sql.NullString  `db:"last_delivery_at"`
+		LastSuccessAt        sql.NullString  `db:"last_success_at"`
+		LastFailureAt        sql.NullString  `db:"last_failure_at"`
 	}
 
 	if err := w.repo.db().GetContext(ctx, &stats, query, string(webhookID)); err != nil {
@@ -1207,16 +1207,22 @@ func (w *WebhookRepository) GetDeliveryStats(ctx context.Context, webhookID doma
 		result.MinDuration = stats.MinDuration.Int64
 	}
 	if stats.LastDeliveryAt.Valid {
-		ts := domain.Timestamp{Time: stats.LastDeliveryAt.Time}
-		result.LastDeliveryAt = &ts
+		if t, err := parseSQLiteTime(stats.LastDeliveryAt.String); err == nil {
+			ts := domain.Timestamp{Time: t}
+			result.LastDeliveryAt = &ts
+		}
 	}
 	if stats.LastSuccessAt.Valid {
-		ts := domain.Timestamp{Time: stats.LastSuccessAt.Time}
-		result.LastSuccessAt = &ts
+		if t, err := parseSQLiteTime(stats.LastSuccessAt.String); err == nil {
+			ts := domain.Timestamp{Time: t}
+			result.LastSuccessAt = &ts
+		}
 	}
 	if stats.LastFailureAt.Valid {
-		ts := domain.Timestamp{Time: stats.LastFailureAt.Time}
-		result.LastFailureAt = &ts
+		if t, err := parseSQLiteTime(stats.LastFailureAt.String); err == nil {
+			ts := domain.Timestamp{Time: t}
+			result.LastFailureAt = &ts
+		}
 	}
 
 	return result, nil

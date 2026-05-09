@@ -29,7 +29,7 @@ func testRepo(t *testing.T) *Repository {
 		t.Fatalf("failed to create connection pool: %v", err)
 	}
 
-	repo, err := New(pool)
+	repo, err := NewWithOptions(pool, true, false)
 	if err != nil {
 		pool.Close()
 		t.Fatalf("failed to create repository: %v", err)
@@ -1129,7 +1129,11 @@ func TestSeeder(t *testing.T) {
 		t.Fatal("seeder should not be nil")
 	}
 
-	// Check if seeded (should be true after testRepo since auto-seed is enabled)
+	// Seed explicitly (testRepo does not auto-seed)
+	if err := seeder.Seed(ctx); err != nil {
+		t.Fatalf("failed to seed: %v", err)
+	}
+
 	isSeeded, err := seeder.IsSeeded(ctx)
 	if err != nil {
 		t.Fatalf("failed to check if seeded: %v", err)
