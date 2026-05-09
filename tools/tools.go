@@ -42,5 +42,4 @@ import (
 
 	// Utilities
 	_ "github.com/google/uuid"
-	_ "github.com/gorilla/websocket"
 )
