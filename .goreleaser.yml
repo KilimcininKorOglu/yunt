@@ -1,0 +1,40 @@
+builds:
+  - id: "yunt"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/yunt/
+    binary: yunt
+    ldflags:
+      - -s -w -X 'main.version={{.Version}}' -X 'main.commit={{.Commit}}' -X 'main.buildDate={{.Date}}'
+
+archives:
+  - id: "yunt"
+    format: tar.gz
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
