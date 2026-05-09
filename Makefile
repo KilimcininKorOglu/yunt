@@ -39,6 +39,7 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 .PHONY: all build build-all build-full test test-coverage test-race lint lint-fix fmt vet tidy clean run help
 .PHONY: release release-linux release-darwin release-windows install dev deps check
 .PHONY: web-install web-dev web-build web-lint web-check web-clean
+.PHONY: swagger
 
 ## all: Build, lint, and test
 all: lint test build
@@ -240,3 +241,14 @@ web-clean:
 	rm -rf web/build web/.svelte-kit web/node_modules
 	@find webui/dist -type f ! -name '.gitkeep' -delete 2>/dev/null || true
 	@find webui/dist -type d -empty -delete 2>/dev/null || true
+
+## swagger: Generate Swagger/OpenAPI documentation
+swagger:
+	@echo "Generating Swagger documentation..."
+	@if command -v swag >/dev/null 2>&1; then \
+		swag init --generalInfo cmd/yunt/main.go --output docs/swagger --parseDependency --parseInternal; \
+		echo "Swagger docs generated at docs/swagger/"; \
+	else \
+		echo "swag not installed. Install with:"; \
+		echo "  go install github.com/swaggo/swag/cmd/swag@latest"; \
+	fi

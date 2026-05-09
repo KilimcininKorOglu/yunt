@@ -16,6 +16,9 @@ go.work.sum
 /bin/
 /dist/
 
+# Generated Swagger docs
+docs/swagger/
+
 # Go vendor (if not checked in)
 /vendor/
 

@@ -7,9 +7,12 @@ import (
 
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
+	echoSwagger "github.com/swaggo/echo-swagger"
 
 	"yunt/internal/api/middleware"
 	"yunt/internal/config"
+
+	_ "yunt/docs/swagger"
 )
 
 // RouterConfig contains configuration for the API router.
@@ -103,7 +106,7 @@ func NewRouter(cfg RouterConfig) *Router {
 }
 
 // registerRoutes sets up all API routes.
-func registerRoutes(r *Router, _ RouterConfig) {
+func registerRoutes(r *Router, cfg RouterConfig) {
 	// Health check endpoints
 	r.GET("/health", healthHandler)
 	r.GET("/healthz", healthzHandler)
@@ -118,12 +121,10 @@ func registerRoutes(r *Router, _ RouterConfig) {
 	// Version endpoint
 	r.v1.GET("/version", versionHandler)
 
-	// Handler routes are registered by calling handler.RegisterRoutes(r.V1())
-	// This is done after the router is created in the application setup.
-	// Example:
-	//   router := api.NewRouter(cfg)
-	//   webhookHandler := handlers.NewWebhookHandler(webhookService, authService)
-	//   webhookHandler.RegisterRoutes(router.V1())
+	// Swagger UI
+	if cfg.EnableSwagger {
+		r.GET("/swagger/*", echoSwagger.WrapHandler)
+	}
 }
 
 // healthHandler returns detailed health information.
