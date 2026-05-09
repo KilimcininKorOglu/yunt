@@ -58,10 +58,10 @@ func (s *StatsRepository) GetStats(ctx context.Context) (*domain.Stats, error) {
 func (s *StatsRepository) GetUserStats(ctx context.Context) (*domain.UserStats, error) {
 	query := `SELECT 
 		COUNT(*) as total_users,
-		SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_users,
-		SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) as inactive_users,
-		SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_users,
-		SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) as admin_users
+		COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) as active_users,
+		COALESCE(SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END), 0) as inactive_users,
+		COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending_users,
+		COALESCE(SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END), 0) as admin_users
 		FROM users WHERE deleted_at IS NULL`
 
 	var stats struct {
@@ -89,10 +89,10 @@ func (s *StatsRepository) GetUserStats(ctx context.Context) (*domain.UserStats, 
 func (s *StatsRepository) GetMailboxAggregateStats(ctx context.Context) (*domain.MailboxAggregateStats, error) {
 	query := `SELECT 
 		COUNT(*) as total_mailboxes,
-		SUM(CASE WHEN message_count > 0 THEN 1 ELSE 0 END) as active_mailboxes,
-		SUM(CASE WHEN message_count = 0 THEN 1 ELSE 0 END) as empty_mailboxes,
-		SUM(CASE WHEN is_catch_all = 1 THEN 1 ELSE 0 END) as catch_all_mailboxes,
-		SUM(CASE WHEN is_default = 1 THEN 1 ELSE 0 END) as default_mailboxes,
+		COALESCE(SUM(CASE WHEN message_count > 0 THEN 1 ELSE 0 END), 0) as active_mailboxes,
+		COALESCE(SUM(CASE WHEN message_count = 0 THEN 1 ELSE 0 END), 0) as empty_mailboxes,
+		COALESCE(SUM(CASE WHEN is_catch_all = 1 THEN 1 ELSE 0 END), 0) as catch_all_mailboxes,
+		COALESCE(SUM(CASE WHEN is_default = 1 THEN 1 ELSE 0 END), 0) as default_mailboxes,
 		COALESCE(AVG(message_count), 0) as avg_messages
 		FROM mailboxes`
 
@@ -129,13 +129,13 @@ func (s *StatsRepository) GetMailboxAggregateStats(ctx context.Context) (*domain
 
 // GetMessageAggregateStats retrieves message-related aggregate statistics.
 func (s *StatsRepository) GetMessageAggregateStats(ctx context.Context) (*domain.MessageAggregateStats, error) {
-	query := `SELECT 
+	query := `SELECT
 		COUNT(*) as total_messages,
-		SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END) as unread_messages,
-		SUM(CASE WHEN status = 'read' THEN 1 ELSE 0 END) as read_messages,
-		SUM(CASE WHEN is_starred = 1 THEN 1 ELSE 0 END) as starred_messages,
-		SUM(CASE WHEN is_spam = 1 THEN 1 ELSE 0 END) as spam_messages,
-		SUM(CASE WHEN attachment_count > 0 THEN 1 ELSE 0 END) as messages_with_attachments,
+		COALESCE(SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END), 0) as unread_messages,
+		COALESCE(SUM(CASE WHEN status = 'read' THEN 1 ELSE 0 END), 0) as read_messages,
+		COALESCE(SUM(CASE WHEN is_starred = 1 THEN 1 ELSE 0 END), 0) as starred_messages,
+		COALESCE(SUM(CASE WHEN is_spam = 1 THEN 1 ELSE 0 END), 0) as spam_messages,
+		COALESCE(SUM(CASE WHEN attachment_count > 0 THEN 1 ELSE 0 END), 0) as messages_with_attachments,
 		COALESCE(SUM(attachment_count), 0) as total_attachments,
 		COALESCE(AVG(size), 0) as avg_message_size,
 		COALESCE(MAX(size), 0) as largest_message
@@ -213,9 +213,9 @@ func (s *StatsRepository) GetStorageStats(ctx context.Context) (*domain.StorageS
 func (s *StatsRepository) GetMessageStats(ctx context.Context, filter *domain.StatsFilter) (*domain.MessageStats, error) {
 	query := `SELECT 
 		COUNT(*) as count,
-		SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END) as unread_count,
-		SUM(CASE WHEN is_starred = 1 THEN 1 ELSE 0 END) as starred_count,
-		SUM(CASE WHEN is_spam = 1 THEN 1 ELSE 0 END) as spam_count,
+		COALESCE(SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END), 0) as unread_count,
+		COALESCE(SUM(CASE WHEN is_starred = 1 THEN 1 ELSE 0 END), 0) as starred_count,
+		COALESCE(SUM(CASE WHEN is_spam = 1 THEN 1 ELSE 0 END), 0) as spam_count,
 		COALESCE(SUM(size), 0) as total_size,
 		COALESCE(SUM(attachment_count), 0) as attachment_count,
 		MIN(received_at) as oldest_message,
@@ -328,7 +328,7 @@ func (s *StatsRepository) GetDailyStats(ctx context.Context, from, to time.Time)
 		DATE(received_at) as date,
 		COUNT(*) as received_count,
 		COALESCE(SUM(size), 0) as total_size,
-		SUM(CASE WHEN is_spam = 1 THEN 1 ELSE 0 END) as spam_count,
+		COALESCE(SUM(CASE WHEN is_spam = 1 THEN 1 ELSE 0 END), 0) as spam_count,
 		COALESCE(SUM(attachment_count), 0) as attachment_count
 		FROM messages
 		WHERE received_at >= ? AND received_at <= ?
@@ -368,7 +368,7 @@ func (s *StatsRepository) GetTopSenders(ctx context.Context, limit int) ([]domai
 		from_name as name,
 		COUNT(*) as message_count,
 		COALESCE(SUM(size), 0) as total_size,
-		SUM(CASE WHEN is_spam = 1 THEN 1 ELSE 0 END) as spam_count,
+		COALESCE(SUM(CASE WHEN is_spam = 1 THEN 1 ELSE 0 END), 0) as spam_count,
 		MIN(received_at) as first_seen,
 		MAX(received_at) as last_seen
 		FROM messages
