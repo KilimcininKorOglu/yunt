@@ -228,13 +228,16 @@ const (
 	WebhookEventMailboxCreated WebhookEvent = "mailbox.created"
 	// WebhookEventMailboxDeleted is triggered when a mailbox is deleted.
 	WebhookEventMailboxDeleted WebhookEvent = "mailbox.deleted"
+	// WebhookEventUserCreated is triggered when a new user is created.
+	WebhookEventUserCreated WebhookEvent = "user.created"
 )
 
 // IsValid returns true if the event is a recognized value.
 func (e WebhookEvent) IsValid() bool {
 	switch e {
 	case WebhookEventMessageReceived, WebhookEventMessageDeleted,
-		WebhookEventMailboxCreated, WebhookEventMailboxDeleted:
+		WebhookEventMailboxCreated, WebhookEventMailboxDeleted,
+		WebhookEventUserCreated:
 		return true
 	default:
 		return false

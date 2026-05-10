@@ -574,6 +574,18 @@ func (s *WebhookService) TriggerMailboxDeleted(ctx context.Context, mailboxID do
 	return s.TriggerEvent(ctx, domain.WebhookEventMailboxDeleted, data)
 }
 
+// TriggerUserCreated triggers webhooks for a user.created event.
+func (s *WebhookService) TriggerUserCreated(ctx context.Context, user *domain.User) error {
+	data := map[string]string{
+		"userId":   user.ID.String(),
+		"username": user.Username,
+		"email":    user.Email,
+		"role":     string(user.Role),
+	}
+
+	return s.TriggerEvent(ctx, domain.WebhookEventUserCreated, data)
+}
+
 // dispatchWebhook sends a webhook request and records the delivery.
 func (s *WebhookService) dispatchWebhook(ctx context.Context, webhook *domain.Webhook, payload *WebhookPayload) {
 	deliveryID := s.idGenerator.Generate()

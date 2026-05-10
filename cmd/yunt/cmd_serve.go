@@ -87,6 +87,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	mailboxService := service.NewMailboxService(repo, nil)
 	messageService := service.NewMessageService(repo, nil)
 	webhookService := service.NewWebhookService(repo, nil)
+	userService.WithWebhookService(webhookService)
 	notifyService := service.NewNotifyService()
 
 	// Context for coordinated shutdown

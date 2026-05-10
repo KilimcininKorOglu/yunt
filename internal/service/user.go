@@ -15,8 +15,9 @@ import (
 
 // UserService provides user management business logic.
 type UserService struct {
-	config   config.AuthConfig
-	userRepo repository.UserRepository
+	config         config.AuthConfig
+	userRepo       repository.UserRepository
+	webhookService *WebhookService
 }
 
 // NewUserService creates a new UserService.
@@ -25,6 +26,11 @@ func NewUserService(cfg config.AuthConfig, userRepo repository.UserRepository) *
 		config:   cfg,
 		userRepo: userRepo,
 	}
+}
+
+// WithWebhookService sets the webhook service for user event dispatch.
+func (s *UserService) WithWebhookService(ws *WebhookService) {
+	s.webhookService = ws
 }
 
 // UserListResponse represents a paginated list of users.
@@ -207,6 +213,10 @@ func (s *UserService) Create(ctx context.Context, input *domain.UserCreateInput)
 			return nil, err
 		}
 		return nil, domain.NewInternalError("failed to create user", err)
+	}
+
+	if s.webhookService != nil {
+		go s.webhookService.TriggerUserCreated(context.Background(), user)
 	}
 
 	return user, nil
