@@ -119,7 +119,7 @@ func (r *messageRow) toMessage() *domain.Message {
 func (m *MessageRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Message, error) {
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, in_reply_to, references_list, 
+		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
 		received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE id = ?`
 
@@ -176,7 +176,7 @@ func (m *MessageRepository) loadRecipients(ctx context.Context, msg *domain.Mess
 func (m *MessageRepository) GetByMessageID(ctx context.Context, messageID string) (*domain.Message, error) {
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, in_reply_to, references_list, 
+		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
 		received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE message_id = ?`
 
@@ -262,7 +262,7 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 	} else {
 		sb.WriteString(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 			text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-			status, is_starred, is_spam, in_reply_to, references_list, 
+			status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
 			received_at, sent_at, created_at, updated_at FROM messages WHERE 1=1`)
 	}
 
@@ -1113,7 +1113,7 @@ func (m *MessageRepository) GetThread(ctx context.Context, id domain.ID) ([]*dom
 
 	query := fmt.Sprintf(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, in_reply_to, references_list, 
+		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
 		received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE message_id IN (%s) OR in_reply_to IN (%s)
 		ORDER BY received_at ASC`,
@@ -1151,7 +1151,7 @@ func (m *MessageRepository) GetReplies(ctx context.Context, id domain.ID) ([]*do
 
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, in_reply_to, references_list, 
+		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
 		received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE in_reply_to = ? ORDER BY received_at ASC`
 
