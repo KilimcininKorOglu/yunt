@@ -217,6 +217,11 @@ func (r *Repository) db() sqlxDB {
 	return r.pool.DB()
 }
 
+// DB returns the underlying *sqlx.DB connection pool for direct use.
+func (r *Repository) DB() *sqlx.DB {
+	return r.pool.DB()
+}
+
 // sqlxDB is an interface that both *sqlx.DB and *sqlx.Tx implement.
 type sqlxDB interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
