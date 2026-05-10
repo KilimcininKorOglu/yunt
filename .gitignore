@@ -1,6 +1,9 @@
 # Hermes
 .hermes/
 
+# Build output
+/yunt
+
 # Go
 *.exe
 *.exe~
