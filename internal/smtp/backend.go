@@ -22,7 +22,8 @@ type Backend struct {
 	authenticator *Authenticator
 	relayService  *service.RelayService
 	mimeParser    *parser.Parser
-	notifyService *service.NotifyService
+	notifyService  *service.NotifyService
+	webhookService *service.WebhookService
 }
 
 // BackendOption is a functional option for configuring the Backend.
@@ -181,6 +182,10 @@ func (b *Backend) storeMessage(ctx context.Context, msg *domain.Message) error {
 			msgCount = uint32(count)
 		}
 		b.notifyService.NotifyNewMessage(msg.MailboxID, msg.MailboxID, msg.ID, 0, 0, msgCount)
+	}
+
+	if b.webhookService != nil {
+		go b.webhookService.TriggerMessageReceived(context.Background(), msg)
 	}
 
 	return nil

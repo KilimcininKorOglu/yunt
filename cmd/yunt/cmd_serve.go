@@ -110,6 +110,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			smtpserver.WithMailboxRepo(repo.Mailboxes()),
 			smtpserver.WithMessageRepo(repo.Messages()),
 			smtpserver.WithNotifyService(notifyService),
+			smtpserver.WithWebhookService(webhookService),
 		)
 		if smtpErr != nil {
 			return fmt.Errorf("failed to create SMTP server: %w", smtpErr)

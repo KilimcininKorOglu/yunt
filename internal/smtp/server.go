@@ -35,6 +35,9 @@ type Server struct {
 	// Notification service for real-time events
 	notifyService *service.NotifyService
 
+	// Webhook service for event dispatch
+	webhookService *service.WebhookService
+
 	// Rate limiter for connection and message throttling
 	rateLimiter *RateLimiter
 
@@ -75,6 +78,13 @@ func WithRepo(repo repository.Repository) ServerOption {
 func WithNotifyService(ns *service.NotifyService) ServerOption {
 	return func(s *Server) {
 		s.notifyService = ns
+	}
+}
+
+// WithWebhookService sets the webhook service for event dispatch on message receive.
+func WithWebhookService(ws *service.WebhookService) ServerOption {
+	return func(s *Server) {
+		s.webhookService = ws
 	}
 }
 
@@ -232,6 +242,7 @@ func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, err
 	}
 	backend := NewBackend(s, backendOpts...)
 	backend.notifyService = s.notifyService
+	backend.webhookService = s.webhookService
 	s.backend = backend
 
 	// Create the go-smtp server
