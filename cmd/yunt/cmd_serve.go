@@ -193,6 +193,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 		eventHandler := handlers.NewEventHandler(notifyService, authService, repo.Mailboxes())
 		eventHandler.RegisterRoutes(v1)
 
+		settingsHandler := handlers.NewSettingsHandler(repo.Settings(), authService)
+		settingsHandler.RegisterRoutes(v1)
+
 		systemHandler := handlers.NewSystemHandler(handlers.SystemHandlerConfig{
 			Repo:           repo,
 			AuthService:    authService,
