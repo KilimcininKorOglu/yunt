@@ -340,9 +340,8 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 		}
 
 		if filter.Search != "" {
-			sb.WriteString(" AND (subject LIKE ? OR from_address LIKE ? OR text_body LIKE ?)")
-			pattern := "%" + filter.Search + "%"
-			args = append(args, pattern, pattern, pattern)
+			sb.WriteString(" AND MATCH(subject, from_address, text_body) AGAINST(? IN NATURAL LANGUAGE MODE)")
+			args = append(args, filter.Search)
 		}
 
 		if filter.MessageID != "" {
