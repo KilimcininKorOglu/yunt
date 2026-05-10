@@ -443,14 +443,10 @@ func (s *Session) Status(mailbox string, options *imap.StatusOptions) (*imap.Sta
 func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.AppendOptions) (*imap.AppendData, error) {
 	s.logger.Debug().
 		Str("mailbox", mailbox).
+		Int64("size", r.Size()).
 		Msg("APPEND command")
 
-	// TODO: Implement append
-	return nil, &imap.Error{
-		Type: imap.StatusResponseTypeNo,
-		Code: imap.ResponseCodeTryCreate,
-		Text: "Mailbox does not exist",
-	}
+	return s.appendMessage(mailbox, r, options)
 }
 
 // Poll checks for mailbox updates (used for unilateral updates).
