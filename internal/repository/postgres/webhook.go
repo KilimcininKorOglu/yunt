@@ -331,7 +331,6 @@ func (w *WebhookRepository) buildListQuery(filter *repository.WebhookFilter, opt
 		if filter.CreatedBefore != nil {
 			sb.WriteString(fmt.Sprintf(" AND created_at < $%d", argIndex))
 			args = append(args, filter.CreatedBefore.Time)
-			argIndex++
 		}
 	}
 
@@ -1270,7 +1269,6 @@ func (w *WebhookRepository) GetDeliveryStatsByDateRange(ctx context.Context, web
 		if dateRange.To != nil {
 			sb.WriteString(fmt.Sprintf(" AND created_at <= $%d", argIndex))
 			args = append(args, dateRange.To.Time)
-			argIndex++
 		}
 	}
 
@@ -1329,7 +1327,6 @@ func (w *WebhookRepository) GetDailyDeliveryCounts(ctx context.Context, webhookI
 		if dateRange.To != nil {
 			sb.WriteString(fmt.Sprintf(" AND created_at <= $%d", argIndex))
 			args = append(args, dateRange.To.Time)
-			argIndex++
 		}
 	}
 

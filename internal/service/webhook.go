@@ -27,7 +27,6 @@ type WebhookService struct {
 	idGenerator IDGenerator
 	httpClient  *http.Client
 	logger      WebhookLogger
-	mu          sync.RWMutex
 }
 
 // WebhookLogger defines the interface for logging webhook operations.

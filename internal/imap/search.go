@@ -350,16 +350,6 @@ type SearchCommand struct {
 	repo         repository.Repository
 	userID       domain.ID
 	selectedMbox *domain.Mailbox
-	logger       interface {
-		Debug() interface {
-			Str(key, val string) interface {
-				Msg(msg string)
-			}
-			Int(key string, val int) interface {
-				Msg(msg string)
-			}
-		}
-	}
 }
 
 // NewSearchCommand creates a new SearchCommand.

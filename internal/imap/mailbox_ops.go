@@ -28,7 +28,7 @@ func NewMailboxOperator(repo repository.Repository, userID domain.ID) *MailboxOp
 
 // Select opens a mailbox for reading.
 // Returns SELECT data including message counts and UIDs.
-func (o *MailboxOperator) Select(ctx context.Context, name string, options *imap.SelectOptions) (*domain.Mailbox, *imap.SelectData, error) {
+func (o *MailboxOperator) Select(ctx context.Context, name string, _ *imap.SelectOptions) (*domain.Mailbox, *imap.SelectData, error) {
 	normalizedName := NormalizeMailboxName(name)
 
 	// Find the mailbox
@@ -62,7 +62,7 @@ func (o *MailboxOperator) Examine(ctx context.Context, name string, options *ima
 }
 
 // Create creates a new mailbox with the given name.
-func (o *MailboxOperator) Create(ctx context.Context, name string, options *imap.CreateOptions) error {
+func (o *MailboxOperator) Create(ctx context.Context, name string, _ *imap.CreateOptions) error {
 	normalizedName := NormalizeMailboxName(name)
 
 	// Validate the mailbox name
@@ -177,7 +177,7 @@ func (o *MailboxOperator) Delete(ctx context.Context, name string) error {
 
 // Rename renames a mailbox.
 // System mailboxes cannot be renamed (except INBOX which is a special case).
-func (o *MailboxOperator) Rename(ctx context.Context, oldName, newName string, options *imap.RenameOptions) error {
+func (o *MailboxOperator) Rename(ctx context.Context, oldName, newName string, _ *imap.RenameOptions) error {
 	normalizedOld := NormalizeMailboxName(oldName)
 	normalizedNew := NormalizeMailboxName(newName)
 

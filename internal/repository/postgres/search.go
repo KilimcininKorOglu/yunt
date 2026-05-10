@@ -126,8 +126,6 @@ func (s *SearchRepository) SearchMessages(ctx context.Context, query string, fil
 			args = append(args, filter.ReceivedBefore.Time)
 			countQueryBuilder.WriteString(fmt.Sprintf(" AND received_at < $%d", countArgIndex))
 			countArgs = append(countArgs, filter.ReceivedBefore.Time)
-			argIndex++
-			countArgIndex++
 		}
 	}
 
@@ -227,8 +225,6 @@ func (s *SearchRepository) SearchWithHighlights(ctx context.Context, query strin
 			args = append(args, string(*filter.MailboxID))
 			countQueryBuilder.WriteString(fmt.Sprintf(" AND mailbox_id = $%d", countArgIndex))
 			countArgs = append(countArgs, string(*filter.MailboxID))
-			argIndex++
-			countArgIndex++
 		}
 
 		if filter.ExcludeSpam {

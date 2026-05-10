@@ -3,7 +3,6 @@ package smtp
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 
@@ -284,8 +283,3 @@ func NewLoginServer(authenticator func(username, password string) error) sasl.Se
 	}
 }
 
-// constantTimeCompare performs a constant-time comparison of two strings.
-// This is used for comparing usernames to prevent timing attacks.
-func constantTimeCompare(a, b string) bool {
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
-}

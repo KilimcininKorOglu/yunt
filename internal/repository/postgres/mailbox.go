@@ -304,7 +304,6 @@ func (m *MailboxRepository) buildListQuery(filter *repository.MailboxFilter, opt
 			} else {
 				sb.WriteString(fmt.Sprintf(" AND retention_days = $%d", argIndex))
 				args = append(args, *filter.RetentionDays)
-				argIndex++
 			}
 		}
 	}

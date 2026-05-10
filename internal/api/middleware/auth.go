@@ -15,8 +15,6 @@ import (
 type contextKey string
 
 const (
-	// userContextKey is the context key for the authenticated user.
-	userContextKey contextKey = "user"
 	// claimsContextKey is the context key for the token claims.
 	claimsContextKey contextKey = "claims"
 	// sessionIDContextKey is the context key for the session ID.

@@ -13,12 +13,11 @@ import (
 // IMAPMessage wraps a domain.Message with IMAP-specific functionality.
 type IMAPMessage struct {
 	msg       *domain.Message
-	seqNum    uint32
-	uid       imap.UID
-	rawBody   []byte
-	flags     []imap.Flag
-	flagsSet  bool
-	uidValid  uint32
+	seqNum   uint32
+	uid      imap.UID
+	rawBody  []byte
+	flags    []imap.Flag
+	flagsSet bool
 }
 
 // NewIMAPMessage creates a new IMAPMessage from a domain.Message.

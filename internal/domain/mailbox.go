@@ -1,12 +1,8 @@
 package domain
 
 import (
-	"regexp"
 	"strings"
 )
-
-// mailboxNameRegex validates mailbox names (alphanumeric, dots, underscores, hyphens).
-var mailboxNameRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
 // Mailbox represents an email mailbox in the Yunt mail server.
 // A mailbox is a container for messages and is associated with a user.

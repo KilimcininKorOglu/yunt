@@ -409,7 +409,6 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 		if filter.ContentType != nil {
 			sb.WriteString(fmt.Sprintf(" AND content_type = $%d", argIndex))
 			args = append(args, string(*filter.ContentType))
-			argIndex++
 		}
 
 		if filter.ExcludeSpam {
@@ -1481,7 +1480,6 @@ func (m *MessageRepository) GetDailyCounts(ctx context.Context, dateRange *repos
 		if dateRange.To != nil {
 			sb.WriteString(fmt.Sprintf(" AND received_at <= $%d", argIndex))
 			args = append(args, dateRange.To.Time)
-			argIndex++
 		}
 	}
 

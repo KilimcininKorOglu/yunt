@@ -320,14 +320,6 @@ func (p *ConnectionPool) recordError(err error) {
 	p.metrics.lastError = err
 }
 
-// recordQuery records query execution metrics.
-func (p *ConnectionPool) recordQuery(duration time.Duration) {
-	p.metrics.mu.Lock()
-	defer p.metrics.mu.Unlock()
-	p.metrics.totalQueries++
-	p.metrics.totalExecTime += duration
-}
-
 // StartSession starts a new session for transaction support.
 func (p *ConnectionPool) StartSession(opts ...*options.SessionOptions) (mongo.Session, error) {
 	p.mu.RLock()

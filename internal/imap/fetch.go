@@ -293,7 +293,7 @@ func (h *FetchHandler) fetchBodySection(ctx context.Context, w *imapserver.Fetch
 }
 
 // extractSection extracts a specific section from the message.
-func (h *FetchHandler) extractSection(rawBody []byte, msg *domain.Message, section *imap.FetchItemBodySection) ([]byte, error) {
+func (h *FetchHandler) extractSection(rawBody []byte, _ *domain.Message, section *imap.FetchItemBodySection) ([]byte, error) {
 	switch section.Specifier {
 	case imap.PartSpecifierNone:
 		// Entire message or specific part

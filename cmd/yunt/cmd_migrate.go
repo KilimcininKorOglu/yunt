@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -316,7 +315,3 @@ func runMigrateReset(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// migrateTimeout returns a context with a reasonable timeout for migration operations.
-func migrateTimeout() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 5*time.Minute)
-}

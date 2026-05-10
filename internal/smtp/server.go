@@ -2,7 +2,6 @@ package smtp
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"sync"
@@ -28,9 +27,6 @@ type Server struct {
 	mailboxRepo repository.MailboxRepository
 	messageRepo repository.MessageRepository
 	repo        repository.Repository
-
-	// Relay service for forwarding messages
-	relayService *service.RelayService
 
 	// Notification service for real-time events
 	notifyService *service.NotifyService
@@ -425,20 +421,6 @@ func (s *Session) Security() *ConnectionSecurity {
 	return s.security
 }
 
-// updateTLSState updates the security state after STARTTLS handshake.
-// This is called internally when the connection is upgraded to TLS.
-func (s *Session) updateTLSState() {
-	if tlsConn, ok := s.conn.Conn().(*tls.Conn); ok {
-		tlsState := tlsConn.ConnectionState()
-		s.security.UpdateFromTLSState(tlsState, TLSStateStartTLS)
-		s.backend.server.stats.StartTLSUpgraded()
-		s.logger.Info().
-			Str("tlsState", s.security.TLSState().String()).
-			Str("tlsVersion", s.security.TLSVersion()).
-			Str("cipherSuite", s.security.CipherSuite()).
-			Msg("connection upgraded to TLS via STARTTLS")
-	}
-}
 
 // IsTLS returns true if the connection is secured with TLS.
 func (s *Session) IsTLS() bool {

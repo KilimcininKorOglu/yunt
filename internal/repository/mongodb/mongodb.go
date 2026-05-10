@@ -120,7 +120,7 @@ func (r *Repository) TransactionWithOptions(ctx context.Context, opts repository
 	}
 
 	// Execute the transaction
-	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+	_, err = session.WithTransaction(ctx, func(_ mongo.SessionContext) (interface{}, error) {
 		txRepo := r.withSession(session)
 		if txErr := fn(txRepo); txErr != nil {
 			return nil, txErr

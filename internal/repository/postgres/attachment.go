@@ -249,7 +249,6 @@ func (a *AttachmentRepository) buildListQuery(filter *repository.AttachmentFilte
 		if filter.CreatedBefore != nil {
 			sb.WriteString(fmt.Sprintf(" AND created_at < $%d", argIndex))
 			args = append(args, filter.CreatedBefore.Time)
-			argIndex++
 		}
 	}
 

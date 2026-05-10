@@ -255,7 +255,6 @@ func (u *UserRepository) buildListQuery(filter *repository.UserFilter, opts *rep
 		if filter.LastLoginAfter != nil {
 			sb.WriteString(fmt.Sprintf(" AND last_login_at > $%d", argIndex))
 			args = append(args, filter.LastLoginAfter.Time)
-			argIndex++
 		}
 
 		if filter.HasNeverLoggedIn != nil && *filter.HasNeverLoggedIn {

@@ -286,7 +286,7 @@ func (m *IdleManager) GetNotificationBridge() *NotificationBridge {
 }
 
 // Close closes all IDLE sessions and cleans up resources.
-func (m *IdleManager) Close(ctx context.Context) error {
+func (m *IdleManager) Close(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

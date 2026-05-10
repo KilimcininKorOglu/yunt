@@ -126,7 +126,7 @@ func (b *BodyStructureBuilder) buildMultipartFromRaw(rawBody []byte, contentType
 }
 
 // buildSinglePartFromRaw builds a single-part BodyStructure from raw data.
-func (b *BodyStructureBuilder) buildSinglePartFromRaw(rawBody []byte, contentType string, msg *domain.Message, extended bool) (imap.BodyStructure, error) {
+func (b *BodyStructureBuilder) buildSinglePartFromRaw(rawBody []byte, contentType string, _ *domain.Message, extended bool) (imap.BodyStructure, error) {
 	// Parse content type
 	mediaType := strings.ToLower(contentType)
 	typeStr := "text"
@@ -184,7 +184,7 @@ func (b *BodyStructureBuilder) buildFromMessage(ctx context.Context, repo reposi
 }
 
 // buildSinglePartFromMessage builds a single-part structure from message fields.
-func (b *BodyStructureBuilder) buildSinglePartFromMessage(msg *domain.Message, extended bool) (imap.BodyStructure, error) {
+func (b *BodyStructureBuilder) buildSinglePartFromMessage(msg *domain.Message, _ bool) (imap.BodyStructure, error) {
 	var typeStr, subtype, body string
 
 	if msg.HTMLBody != "" {

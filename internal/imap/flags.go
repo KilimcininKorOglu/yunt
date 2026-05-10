@@ -235,7 +235,7 @@ func IsStandardFlag(flag imap.Flag) bool {
 
 // IsPermanentFlag returns true if the flag can be permanently stored.
 // All flags except the wildcard flag can be stored permanently.
-func IsPermanentFlag(flag imap.Flag) bool {
+func IsPermanentFlag(_ imap.Flag) bool {
 	return true
 }
 

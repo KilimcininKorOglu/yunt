@@ -450,7 +450,7 @@ func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.App
 }
 
 // Poll checks for mailbox updates (used for unilateral updates).
-func (s *Session) Poll(w *imapserver.UpdateWriter, allowExpunge bool) error {
+func (s *Session) Poll(_ *imapserver.UpdateWriter, _ bool) error {
 	// No updates to send in this basic implementation
 	return nil
 }

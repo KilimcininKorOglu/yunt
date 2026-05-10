@@ -317,8 +317,7 @@ func (h *WebhookHandler) ActivateWebhook(c echo.Context) error {
 	}
 
 	// Verify ownership first
-	webhook, err := h.webhookService.GetWebhookForUser(c.Request().Context(), webhookID, userID)
-	if err != nil {
+	if _, err := h.webhookService.GetWebhookForUser(c.Request().Context(), webhookID, userID); err != nil {
 		return api.FromError(c, err)
 	}
 
@@ -327,7 +326,7 @@ func (h *WebhookHandler) ActivateWebhook(c echo.Context) error {
 	}
 
 	// Refresh webhook to return updated state
-	webhook, err = h.webhookService.GetWebhook(c.Request().Context(), webhookID)
+	webhook, err := h.webhookService.GetWebhook(c.Request().Context(), webhookID)
 	if err != nil {
 		return api.FromError(c, err)
 	}
@@ -359,8 +358,7 @@ func (h *WebhookHandler) DeactivateWebhook(c echo.Context) error {
 	}
 
 	// Verify ownership first
-	webhook, err := h.webhookService.GetWebhookForUser(c.Request().Context(), webhookID, userID)
-	if err != nil {
+	if _, err := h.webhookService.GetWebhookForUser(c.Request().Context(), webhookID, userID); err != nil {
 		return api.FromError(c, err)
 	}
 
@@ -369,7 +367,7 @@ func (h *WebhookHandler) DeactivateWebhook(c echo.Context) error {
 	}
 
 	// Refresh webhook to return updated state
-	webhook, err = h.webhookService.GetWebhook(c.Request().Context(), webhookID)
+	webhook, err := h.webhookService.GetWebhook(c.Request().Context(), webhookID)
 	if err != nil {
 		return api.FromError(c, err)
 	}

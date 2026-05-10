@@ -368,7 +368,7 @@ func (ns *NotifyService) GetSubscribersForUser(userID domain.ID) []string {
 }
 
 // Close closes all subscriptions and cleans up resources.
-func (ns *NotifyService) Close(ctx context.Context) error {
+func (ns *NotifyService) Close(_ context.Context) error {
 	ns.mu.Lock()
 	defer ns.mu.Unlock()
 

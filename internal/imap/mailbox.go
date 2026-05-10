@@ -87,7 +87,7 @@ func (m *MailboxInfo) ToIMAPListData() *imap.ListData {
 }
 
 // getMailboxAttributes returns the appropriate IMAP attributes for a mailbox.
-func getMailboxAttributes(name string, mailbox *domain.Mailbox) []imap.MailboxAttr {
+func getMailboxAttributes(name string, _ *domain.Mailbox) []imap.MailboxAttr {
 	var attrs []imap.MailboxAttr
 
 	// Add special-use attributes for system mailboxes

@@ -227,7 +227,7 @@ func (h *StoreHandler) persistFlagChanges(ctx context.Context, msg *domain.Messa
 }
 
 // writeFetchResponse writes the FETCH response with updated flags.
-func (h *StoreHandler) writeFetchResponse(w *imapserver.FetchWriter, seqNum uint32, flags *FlagSet, options *imap.StoreOptions) error {
+func (h *StoreHandler) writeFetchResponse(w *imapserver.FetchWriter, seqNum uint32, flags *FlagSet, _ *imap.StoreOptions) error {
 	respWriter := w.CreateMessage(seqNum)
 	defer respWriter.Close()
 

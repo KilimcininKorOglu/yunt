@@ -107,7 +107,7 @@ func (s *Seeder) SeedWithConfig(ctx context.Context, config *SeedConfig) error {
 }
 
 // SeedFromFile seeds data from a JSON file.
-func (s *Seeder) SeedFromFile(ctx context.Context, path string) error {
+func (s *Seeder) SeedFromFile(_ context.Context, _ string) error {
 	// This would require file system access
 	// For embedded migrations, we use SeedFromReader instead
 	return fmt.Errorf("SeedFromFile is not implemented for PostgreSQL; use SeedFromReader instead")
