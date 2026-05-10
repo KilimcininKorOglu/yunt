@@ -311,11 +311,15 @@ func (s *Session) Data(r io.Reader) error {
 	if s.backend.server.rateLimiter != nil {
 		if err := s.backend.server.rateLimiter.CheckMessage(s.ctx, s.remoteAddr); err != nil {
 			s.backend.server.stats.RateLimitRejected()
-			s.logger.Warn().
-				Err(err).
-				Str("from", s.from).
-				Msg("message rejected by rate limiter")
+			s.logger.Warn().Err(err).Str("from", s.from).Msg("message rejected by rate limiter")
 			return err
+		}
+		if s.authenticated && s.authUser != nil {
+			if err := s.backend.server.rateLimiter.CheckUserMessage(s.authUser.Username); err != nil {
+				s.backend.server.stats.RateLimitRejected()
+				s.logger.Warn().Err(err).Str("user", s.authUser.Username).Msg("user message rate limit exceeded")
+				return err
+			}
 		}
 	}
 
@@ -410,6 +414,9 @@ func (s *Session) Data(r io.Reader) error {
 
 	if s.backend.server.rateLimiter != nil {
 		s.backend.server.rateLimiter.OnMessageSent(s.remoteAddr)
+		if s.authenticated && s.authUser != nil {
+			s.backend.server.rateLimiter.OnUserMessageSent(s.authUser.Username)
+		}
 	}
 
 	// Relay the message to external SMTP server if enabled

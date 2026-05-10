@@ -35,6 +35,9 @@ type RateLimitConfig struct {
 	// MessagesPerConnection is the maximum number of messages per single connection.
 	MessagesPerConnection int
 
+	// UserMessagesPerHour is the maximum number of messages per authenticated user per hour.
+	UserMessagesPerHour int
+
 	// AuthFailuresPerMinute is the maximum number of auth failures per IP per minute before blocking.
 	AuthFailuresPerMinute int
 
@@ -52,6 +55,7 @@ func DefaultRateLimitConfig() *RateLimitConfig {
 		MaxGlobalConnections:     1000,
 		RecipientsPerMessage:     100,
 		MessagesPerConnection:    50,
+		UserMessagesPerHour:      50,
 		AuthFailuresPerMinute:    5,
 		CleanupInterval:          5 * time.Minute,
 	}
@@ -79,6 +83,9 @@ type RateLimiter struct {
 	// messagesPerConnection tracks messages sent in current connection.
 	messagesPerConnection map[string]int
 
+	// userMessageCount tracks messages per authenticated user in the current hour window.
+	userMessageCount map[string]*rateLimitEntry
+
 	// authFailures tracks authentication failures per IP in the current minute window.
 	authFailures map[string]*rateLimitEntry
 
@@ -105,6 +112,7 @@ func NewRateLimiter(config *RateLimitConfig, logger zerolog.Logger) *RateLimiter
 		connectionRate:        make(map[string]*rateLimitEntry),
 		concurrentConnections: make(map[string]int),
 		messagesPerConnection: make(map[string]int),
+		userMessageCount:      make(map[string]*rateLimitEntry),
 		authFailures:          make(map[string]*rateLimitEntry),
 		stopChan:              make(chan struct{}),
 	}
@@ -487,4 +495,55 @@ func (rl *RateLimiter) IsAuthBlocked(ip string) bool {
 	}
 
 	return entry.count >= rl.config.AuthFailuresPerMinute
+}
+
+// CheckUserMessage checks if an authenticated user has exceeded their hourly message limit.
+func (rl *RateLimiter) CheckUserMessage(username string) error {
+	if !rl.config.Enabled || rl.config.UserMessagesPerHour <= 0 || username == "" {
+		return nil
+	}
+
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+
+	entry, exists := rl.userMessageCount[username]
+	if !exists {
+		return nil
+	}
+
+	if time.Now().After(entry.windowEnd) {
+		return nil
+	}
+
+	if entry.count >= rl.config.UserMessagesPerHour {
+		return &smtp.SMTPError{
+			Code:         452,
+			EnhancedCode: smtp.EnhancedCode{4, 7, 1},
+			Message:      "user message rate limit exceeded, please try again later",
+		}
+	}
+
+	return nil
+}
+
+// OnUserMessageSent records a message sent by an authenticated user.
+func (rl *RateLimiter) OnUserMessageSent(username string) {
+	if !rl.config.Enabled || username == "" {
+		return
+	}
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	entry, exists := rl.userMessageCount[username]
+
+	if !exists || now.After(entry.windowEnd) {
+		rl.userMessageCount[username] = &rateLimitEntry{
+			count:     1,
+			windowEnd: now.Add(time.Hour),
+		}
+	} else {
+		entry.count++
+	}
 }
