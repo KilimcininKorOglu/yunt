@@ -1,182 +1,112 @@
-# GolangCI-Lint configuration for Yunt
-# See: https://golangci-lint.run/usage/configuration/
+version: "2"
 
 run:
-  # Timeout for analysis
   timeout: 5m
-  
-  # Include test files
   tests: true
-  
-  # Skip vendor, third_party, testdata
-  skip-dirs:
-    - vendor
-    - third_party
-    - testdata
-  
-  # Skip generated files
-  skip-files:
-    - ".*_gen\\.go$"
-    - ".*\\.pb\\.go$"
 
 output:
-  # Sort results by file, line, column
-  sort-results: true
+  sort-order:
+    - file
 
 linters:
-  # Disable all linters by default
-  disable-all: true
-  
-  # Enable specific linters
+  default: none
   enable:
-    # Default linters
-    - errcheck      # Check for unchecked errors
-    - gosimple      # Simplify code
-    - govet         # Report suspicious constructs
-    - ineffassign   # Detect ineffectual assignments
-    - staticcheck   # Static analysis
-    - unused        # Find unused code
-    
-    # Additional recommended linters
-    - bodyclose     # Check HTTP response body is closed
-    - dogsled       # Check for too many blank identifiers
-    - dupl          # Detect code duplication
-    - exportloopref # Check for pointers to loop variables
-    - gocognit      # Calculate cognitive complexity
-    - goconst       # Find repeated strings that could be constants
-    - gocritic      # Comprehensive Go code linter
-    - gocyclo       # Calculate cyclomatic complexity
-    - gofmt         # Check code formatting
-    - goimports     # Check import statements
-    - goprintffuncname # Check printf-like functions naming
-    - gosec         # Security checker
-    - misspell      # Detect common misspellings
-    - nakedret      # Find naked returns in functions
-    - noctx         # Check for net/http requests without context
-    - nolintlint    # Check nolint directives
-    - prealloc      # Find slice declarations that could be preallocated
-    - revive        # Fast, configurable linter
-    - stylecheck    # Stylecheck is a replacement for golint
-    - unconvert     # Remove unnecessary type conversions
-    - unparam       # Report unused function parameters
-    - whitespace    # Check for unnecessary whitespace
-
-linters-settings:
-  errcheck:
-    # Report about not checking errors in type assertions
-    check-type-assertions: true
-    # Report about assignment of errors to blank identifier
-    check-blank: true
-
-  govet:
-    # Enable all analyzers
-    enable-all: true
-    # Disable shadow checking (can be noisy)
-    disable:
-      - shadow
-
-  gocyclo:
-    # Minimal code complexity to report
-    min-complexity: 15
-
-  gocognit:
-    # Minimal code cognitive complexity to report
-    min-complexity: 20
-
-  dupl:
-    # Tokens count to trigger issue
-    threshold: 150
-
-  goconst:
-    # Minimal length of string constant
-    min-len: 3
-    # Minimum occurrences count to trigger
-    min-occurrences: 3
-
-  misspell:
-    locale: US
-
-  revive:
-    # Enable all available rules
-    enable-all-rules: false
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - dogsled
+    - dupl
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - goprintffuncname
+    - gosec
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+    - whitespace
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    govet:
+      disable:
+        - shadow
+    gocyclo:
+      min-complexity: 15
+    gocognit:
+      min-complexity: 20
+    dupl:
+      threshold: 150
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    gosec:
+      excludes:
+        - G104
+    nakedret:
+      max-func-lines: 30
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+  exclusions:
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-      - name: unreachable-code
-      - name: redefines-builtin-id
+      - path: _test\.go
+        linters:
+          - dupl
+          - gosec
+          - goconst
+          - errcheck
+          - gocognit
 
-  gosec:
-    # Available rules: https://github.com/securego/gosec#available-rules
-    excludes:
-      - G104 # Audit errors not checked (handled by errcheck)
-
-  stylecheck:
-    # Use the same checks as staticcheck
-    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
-
-  nakedret:
-    # Max lines of a function to trigger
-    max-func-lines: 30
-
-  prealloc:
-    # Report preallocation suggestions only on simple loops
-    simple: true
-    range-loops: true
-    for-loops: false
-
-issues:
-  # Maximum issues count per one linter
-  max-issues-per-linter: 50
-  
-  # Maximum count of issues with the same text
-  max-same-issues: 3
-  
-  # Show only new issues
-  new: false
-  
-  # Exclude certain patterns
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - dupl
-        - gosec
-        - goconst
-    
-    # Exclude lll issues for long lines with go:generate
-    - linters:
-        - lll
-      source: "^//go:generate "
-
-severity:
-  # Default severity for issues
-  default-severity: warning
-  
-  # Set severity for specific linters
-  rules:
-    - linters:
-        - gosec
-      severity: error
-    - linters:
-        - errcheck
-      severity: error
+formatters:
+  enable:
+    - gofmt
+    - goimports
