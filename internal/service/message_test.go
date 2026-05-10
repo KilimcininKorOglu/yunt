@@ -528,6 +528,12 @@ func (r *mockMessageRepository) MarkAsSpam(ctx context.Context, id domain.ID) er
 func (r *mockMessageRepository) MarkAsNotSpam(ctx context.Context, id domain.ID) error {
 	return nil
 }
+func (r *mockMessageRepository) MarkAsDeleted(ctx context.Context, id domain.ID) error {
+	return nil
+}
+func (r *mockMessageRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) error {
+	return nil
+}
 func (r *mockMessageRepository) Search(ctx context.Context, searchOpts *repository.SearchOptions, filter *repository.MessageFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
 	return nil, nil
 }

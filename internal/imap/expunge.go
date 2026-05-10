@@ -60,10 +60,7 @@ func (h *ExpungeHandler) Expunge(ctx context.Context, w *imapserver.ExpungeWrite
 		}
 	}
 
-	// Find messages marked for deletion
-	// In the current implementation, we don't have a dedicated \Deleted flag in the domain model.
-	// For now, we'll implement it based on messages in the Trash folder.
-	// TODO: When the domain model is extended to include a deleted flag, update this logic.
+	// Find messages marked with \Deleted flag
 	deletedMessages := h.findDeletedMessages(result.Items, uids)
 
 	if len(deletedMessages.seqNums) == 0 {
@@ -108,10 +105,7 @@ type deletedMessageSet struct {
 	seqNums  []uint32
 }
 
-// findDeletedMessages identifies messages that should be expunged.
-// In the current domain model, we don't have a dedicated deleted flag,
-// so this implementation uses the FlagSet to track deleted status.
-// For IMAP clients, messages are marked with \Deleted via STORE command.
+// findDeletedMessages identifies messages with \Deleted flag that should be expunged.
 func (h *ExpungeHandler) findDeletedMessages(allMessages []*domain.Message, uidFilter *imap.UIDSet) *deletedMessageSet {
 	result := &deletedMessageSet{
 		messages: make(map[uint32]*domain.Message),
@@ -127,20 +121,6 @@ func (h *ExpungeHandler) findDeletedMessages(allMessages []*domain.Message, uidF
 			continue
 		}
 
-		// Check if message is marked as deleted
-		// Since the current domain model doesn't have a deleted flag,
-		// we check the message's mailbox - if it's in Trash and the user
-		// explicitly requested expunge, we consider it deletable.
-		//
-		// In a full implementation, you would:
-		// 1. Add a 'IsDeleted' field to domain.Message
-		// 2. Update it via STORE command when \Deleted flag is set
-		// 3. Check that field here
-		//
-		// For now, we'll make all messages in the current mailbox eligible
-		// for deletion if they match the UID filter. This allows the EXPUNGE
-		// command to work after STORE +FLAGS (\Deleted) is called.
-		// The actual deleted flag tracking should be implemented with the domain model.
 		if h.isMessageDeleted(msg) {
 			result.messages[seqNum] = msg
 			result.seqNums = append(result.seqNums, seqNum)
@@ -151,21 +131,8 @@ func (h *ExpungeHandler) findDeletedMessages(allMessages []*domain.Message, uidF
 }
 
 // isMessageDeleted checks if a message has the \Deleted flag set.
-// Currently, this is a simplified implementation that considers messages
-// in the Trash folder as deleted. In a complete implementation, this would
-// check a dedicated 'IsDeleted' field on the message.
 func (h *ExpungeHandler) isMessageDeleted(msg *domain.Message) bool {
-	// TODO: Implement proper \Deleted flag tracking in domain.Message
-	// For now, we return false to prevent accidental data loss.
-	// Messages should only be expunged after being explicitly marked with \Deleted
-	// via the STORE command.
-	//
-	// The proper implementation would be:
-	// return msg.IsDeleted
-	//
-	// Until the domain model is updated, we'll return false here.
-	// This means EXPUNGE will be a no-op until the domain model supports the deleted flag.
-	return false
+	return msg.IsDeleted
 }
 
 // WriteExpungeNotifications sends EXPUNGE notifications to other sessions.

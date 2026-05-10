@@ -395,6 +395,20 @@ func (r *mockMsgRepo) MarkAsNotSpam(_ context.Context, id domain.ID) error {
 	return nil
 }
 
+func (r *mockMsgRepo) MarkAsDeleted(_ context.Context, id domain.ID) error {
+	if _, ok := r.messages[id]; !ok {
+		return domain.NewNotFoundError("message", id.String())
+	}
+	return nil
+}
+
+func (r *mockMsgRepo) UnmarkAsDeleted(_ context.Context, id domain.ID) error {
+	if _, ok := r.messages[id]; !ok {
+		return domain.NewNotFoundError("message", id.String())
+	}
+	return nil
+}
+
 func (r *mockMsgRepo) MoveToMailbox(_ context.Context, id domain.ID, targetID domain.ID) error {
 	if m, ok := r.messages[id]; ok {
 		m.MailboxID = targetID

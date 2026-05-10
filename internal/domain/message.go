@@ -69,6 +69,9 @@ type Message struct {
 	// IsSpam indicates if the message was marked as spam.
 	IsSpam bool `json:"isSpam"`
 
+	// IsDeleted indicates if the message is marked with \Deleted flag (pending EXPUNGE).
+	IsDeleted bool `json:"isDeleted"`
+
 	// InReplyTo is the Message-ID of the message this is replying to.
 	InReplyTo string `json:"inReplyTo,omitempty"`
 

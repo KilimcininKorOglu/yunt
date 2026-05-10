@@ -36,6 +36,7 @@ type messageRow struct {
 	Status          string         `db:"status"`
 	IsStarred       bool           `db:"is_starred"`
 	IsSpam          bool           `db:"is_spam"`
+	IsDeleted       bool           `db:"is_deleted"`
 	InReplyTo       sql.NullString `db:"in_reply_to"`
 	ReferencesList  sql.NullString `db:"references_list"`
 	ReceivedAt      time.Time      `db:"received_at"`
@@ -70,6 +71,7 @@ func (r *messageRow) toMessage() *domain.Message {
 		Status:          domain.MessageStatus(r.Status),
 		IsStarred:       r.IsStarred,
 		IsSpam:          r.IsSpam,
+		IsDeleted:       r.IsDeleted,
 		RawBody:         r.RawBody,
 		ReceivedAt:      domain.Timestamp{Time: r.ReceivedAt},
 		CreatedAt:       domain.Timestamp{Time: r.CreatedAt},
@@ -947,6 +949,44 @@ func (m *MessageRepository) MarkAsNotSpam(ctx context.Context, id domain.ID) err
 	result, err := m.repo.db().ExecContext(ctx, query, time.Now().UTC(), string(id))
 	if err != nil {
 		return fmt.Errorf("failed to mark as not spam: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
+
+	return nil
+}
+
+func (m *MessageRepository) MarkAsDeleted(ctx context.Context, id domain.ID) error {
+	query := `UPDATE messages SET is_deleted = 1, updated_at = ? WHERE id = ?`
+
+	result, err := m.repo.db().ExecContext(ctx, query, time.Now().UTC(), string(id))
+	if err != nil {
+		return fmt.Errorf("failed to mark as deleted: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
+
+	return nil
+}
+
+func (m *MessageRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) error {
+	query := `UPDATE messages SET is_deleted = 0, updated_at = ? WHERE id = ?`
+
+	result, err := m.repo.db().ExecContext(ctx, query, time.Now().UTC(), string(id))
+	if err != nil {
+		return fmt.Errorf("failed to unmark as deleted: %w", err)
 	}
 
 	rows, err := result.RowsAffected()

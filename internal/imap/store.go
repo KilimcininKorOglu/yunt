@@ -202,11 +202,26 @@ func (h *StoreHandler) persistFlagChanges(ctx context.Context, msg *domain.Messa
 		}
 	}
 
-	// Note: \Deleted, \Answered, and \Draft flags are not persisted
-	// in the current domain model. They would require schema changes
-	// to store additional flag fields.
-	// \Deleted messages are handled by EXPUNGE command
-	// \Answered and \Draft would need dedicated fields in domain.Message
+	// Handle \Deleted flag changes
+	if change.DeletedChanged() {
+		if change.IsNowDeleted() {
+			if err := h.repo.Messages().MarkAsDeleted(ctx, msg.ID); err != nil {
+				return &imap.Error{
+					Type: imap.StatusResponseTypeNo,
+					Text: "Failed to mark message as deleted",
+				}
+			}
+			msg.IsDeleted = true
+		} else if change.IsNowUndeleted() {
+			if err := h.repo.Messages().UnmarkAsDeleted(ctx, msg.ID); err != nil {
+				return &imap.Error{
+					Type: imap.StatusResponseTypeNo,
+					Text: "Failed to unmark message as deleted",
+				}
+			}
+			msg.IsDeleted = false
+		}
+	}
 
 	return nil
 }

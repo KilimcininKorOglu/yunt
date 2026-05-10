@@ -99,6 +99,12 @@ type MessageRepository interface {
 	// Returns domain.ErrNotFound if the message does not exist.
 	MarkAsNotSpam(ctx context.Context, id domain.ID) error
 
+	// MarkAsDeleted sets the \Deleted flag on a message (pending EXPUNGE).
+	MarkAsDeleted(ctx context.Context, id domain.ID) error
+
+	// UnmarkAsDeleted removes the \Deleted flag from a message.
+	UnmarkAsDeleted(ctx context.Context, id domain.ID) error
+
 	// MoveToMailbox moves a message to a different mailbox.
 	// This updates statistics for both source and destination mailboxes.
 	// Returns domain.ErrNotFound if the message or target mailbox does not exist.

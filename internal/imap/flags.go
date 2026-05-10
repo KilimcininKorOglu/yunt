@@ -60,8 +60,12 @@ func NewFlagSetFromMessage(msg *domain.Message) *FlagSet {
 		fs.Add(imap.FlagFlagged)
 	}
 
+	// \Deleted - maps to IsDeleted
+	if msg.IsDeleted {
+		fs.Add(imap.FlagDeleted)
+	}
+
 	// \Answered - simplified check using InReplyTo
-	// In a full implementation, this would be tracked explicitly
 	if msg.InReplyTo != "" {
 		fs.Add(imap.FlagAnswered)
 	}

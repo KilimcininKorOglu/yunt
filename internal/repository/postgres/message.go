@@ -980,6 +980,9 @@ func (m *MessageRepository) MarkAsNotSpam(ctx context.Context, id domain.ID) err
 	return nil
 }
 
+func (m *MessageRepository) MarkAsDeleted(_ context.Context, _ domain.ID) error   { return nil }
+func (m *MessageRepository) UnmarkAsDeleted(_ context.Context, _ domain.ID) error { return nil }
+
 // MoveToMailbox moves a message to a different mailbox.
 func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, targetMailboxID domain.ID) error {
 	msg, err := m.GetByID(ctx, id)

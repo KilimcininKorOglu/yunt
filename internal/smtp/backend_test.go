@@ -231,6 +231,12 @@ func (m *mockMessageRepository) MarkAsSpam(ctx context.Context, id domain.ID) er
 func (m *mockMessageRepository) MarkAsNotSpam(ctx context.Context, id domain.ID) error {
 	return nil
 }
+func (m *mockMessageRepository) MarkAsDeleted(ctx context.Context, id domain.ID) error {
+	return nil
+}
+func (m *mockMessageRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) error {
+	return nil
+}
 func (m *mockMessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, targetMailboxID domain.ID) error {
 	return nil
 }

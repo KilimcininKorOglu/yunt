@@ -296,6 +296,12 @@ func (m *messageMockRepository) MarkAsSpam(ctx context.Context, id domain.ID) er
 func (m *messageMockRepository) MarkAsNotSpam(ctx context.Context, id domain.ID) error {
 	return nil
 }
+func (m *messageMockRepository) MarkAsDeleted(ctx context.Context, id domain.ID) error {
+	return nil
+}
+func (m *messageMockRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) error {
+	return nil
+}
 func (m *messageMockRepository) Search(ctx context.Context, searchOpts *repository.SearchOptions, filter *repository.MessageFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
 	return &repository.ListResult[*domain.Message]{}, nil
 }
