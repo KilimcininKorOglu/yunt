@@ -370,10 +370,10 @@ func (f MessageSortField) String() string {
 // DateCount represents a count grouped by date.
 type DateCount struct {
 	// Date is the date (YYYY-MM-DD format).
-	Date string
+	Date string `json:"date"`
 
 	// Count is the number of items on that date.
-	Count int64
+	Count int64 `json:"count"`
 }
 
 // AddressCount represents a count grouped by email address.

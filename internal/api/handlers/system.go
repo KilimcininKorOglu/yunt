@@ -126,12 +126,12 @@ type MailboxStats struct {
 
 // MessageStats contains message-related statistics.
 type MessageStats struct {
-	// Total is the total number of messages.
-	Total int64 `json:"total"`
-	// Unread is the number of unread messages.
-	Unread int64 `json:"unread"`
-	// TotalSize is the total size of all messages in bytes.
-	TotalSize int64 `json:"totalSize"`
+	Total       int64                  `json:"total"`
+	Unread      int64                  `json:"unread"`
+	TotalSize   int64                  `json:"totalSize"`
+	TodayCount  int64                  `json:"todayCount"`
+	WeekCount   int64                  `json:"weekCount"`
+	DailyCounts []repository.DateCount `json:"dailyCounts"`
 }
 
 // GetStats returns system statistics.
@@ -236,20 +236,38 @@ func (h *SystemHandler) getMailboxStats(ctx context.Context) (*MailboxStats, err
 func (h *SystemHandler) getMessageStats(ctx context.Context) (*MessageStats, error) {
 	stats := &MessageStats{}
 
-	// Get total count
 	total, err := h.repo.Messages().Count(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	stats.Total = total
 
-	// Get total size
 	totalSize, err := h.repo.Messages().GetTotalSize(ctx)
-	if err != nil {
-		// If error, just return without size
-		return stats, nil
+	if err == nil {
+		stats.TotalSize = totalSize
 	}
-	stats.TotalSize = totalSize
+
+	now := time.Now().UTC()
+	weekAgo := now.AddDate(0, 0, -7)
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	todayStr := todayStart.Format("2006-01-02")
+
+	dailyCounts, err := h.repo.Messages().GetDailyCounts(ctx, &repository.DateRangeFilter{
+		From: &domain.Timestamp{Time: weekAgo},
+		To:   &domain.Timestamp{Time: now},
+	})
+	if err == nil {
+		stats.DailyCounts = dailyCounts
+		for _, dc := range dailyCounts {
+			stats.WeekCount += dc.Count
+			if dc.Date == todayStr {
+				stats.TodayCount = dc.Count
+			}
+		}
+	}
+	if stats.DailyCounts == nil {
+		stats.DailyCounts = []repository.DateCount{}
+	}
 
 	return stats, nil
 }

@@ -28,10 +28,8 @@
 	const totalMailboxes = $derived(stats?.mailboxes?.total ?? 0);
 	const mailboxSize = $derived(stats?.mailboxes?.totalSize ?? 0);
 
-	// Calculate today's and this week's messages
-	// These would ideally come from API, using derived estimates for now
-	const todayMessages = $derived(Math.floor(Math.random() * Math.max(1, totalMessages * 0.1)));
-	const weekMessages = $derived(Math.floor(Math.random() * Math.max(1, totalMessages * 0.3)));
+	const todayMessages = $derived(stats?.messages?.todayCount ?? 0);
+	const weekMessages = $derived(stats?.messages?.weekCount ?? 0);
 
 	/**
 	 * Fetch all dashboard data
@@ -61,8 +59,7 @@
 				receivedAt: msg.receivedAt
 			}));
 
-			// Generate activity data for last 7 days
-			activityData = generateActivityData();
+			activityData = mapActivityData();
 
 			lastRefresh = new Date();
 		} catch (error) {
@@ -73,29 +70,18 @@
 	}
 
 	/**
-	 * Generate mock activity data for the last 7 days
-	 * In production, this would come from the API
+	 * Map daily counts from API to activity chart data
 	 */
-	function generateActivityData(): { label: string; received: number; sent?: number }[] {
+	function mapActivityData(): { label: string; received: number; sent?: number }[] {
+		const dailyCounts = stats?.messages?.dailyCounts;
+		if (!dailyCounts || dailyCounts.length === 0) return [];
+
 		const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-		const today = new Date();
-		const data: { label: string; received: number; sent?: number }[] = [];
-
-		for (let i = 6; i >= 0; i--) {
-			const date = new Date(today);
-			date.setDate(date.getDate() - i);
-			const dayLabel = days[date.getDay()];
-
-			// Generate reasonable random values based on total messages
-			const baseReceived = Math.floor((totalMessages / 7) * (0.5 + Math.random()));
-			data.push({
-				label: dayLabel,
-				received: Math.max(0, baseReceived),
-				sent: undefined // Not tracking sent in this version
-			});
-		}
-
-		return data;
+		return dailyCounts.map((dc) => ({
+			label: days[new Date(dc.date + 'T00:00:00').getDay()],
+			received: dc.count,
+			sent: undefined
+		}));
 	}
 
 	/**
