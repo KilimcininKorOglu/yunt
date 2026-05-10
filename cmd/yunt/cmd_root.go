@@ -15,6 +15,12 @@ var (
 	// cfgFile is the path to the configuration file.
 	cfgFile string
 
+	// logLevel overrides the log level from config.
+	logLevel string
+
+	// verbose enables debug logging (shorthand for --log-level=debug).
+	verbose bool
+
 	// cfg holds the loaded configuration.
 	cfg *config.Config
 
@@ -54,6 +60,13 @@ Features:
 			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
+		// Apply CLI flag overrides
+		if verbose {
+			cfg.Logging.Level = "debug"
+		} else if logLevel != "" {
+			cfg.Logging.Level = logLevel
+		}
+
 		// Initialize logger
 		logger, err = config.NewLogger(cfg.Logging)
 		if err != nil {
@@ -79,6 +92,8 @@ func Execute() error {
 func init() {
 	// Persistent flags available to all subcommands
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default: ./yunt.yaml or /etc/yunt/yunt.yaml)")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "override log level (trace, debug, info, warn, error)")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable debug logging")
 
 	// Add subcommands
 	rootCmd.AddCommand(serveCmd)
