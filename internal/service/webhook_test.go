@@ -2,8 +2,18 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"yunt/internal/domain"
 	"yunt/internal/repository"
@@ -1456,5 +1466,445 @@ func TestWebhookServiceError_NilErr(t *testing.T) {
 	// Error() should still work
 	if err.Error() == "" {
 		t.Error("WebhookServiceError.Error() should not return empty string")
+	}
+}
+
+// --- Dispatch & Signature Tests ---
+
+func TestWebhookService_SignPayload(t *testing.T) {
+	svc, _ := newTestWebhookService()
+
+	payload := []byte(`{"event":"message.received","data":{}}`)
+	secret := "test-secret"
+
+	sig := svc.signPayload(payload, secret)
+
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write(payload)
+	expected := hex.EncodeToString(h.Sum(nil))
+
+	if sig != expected {
+		t.Errorf("signPayload() = %q, want %q", sig, expected)
+	}
+}
+
+func TestWebhookService_SignPayload_EmptyPayload(t *testing.T) {
+	svc, _ := newTestWebhookService()
+
+	sig := svc.signPayload([]byte{}, "secret")
+	if sig == "" {
+		t.Error("signPayload() should not return empty string for empty payload")
+	}
+
+	h := hmac.New(sha256.New, []byte("secret"))
+	h.Write([]byte{})
+	expected := hex.EncodeToString(h.Sum(nil))
+
+	if sig != expected {
+		t.Errorf("signPayload() = %q, want %q", sig, expected)
+	}
+}
+
+func TestWebhookService_Dispatch_Success(t *testing.T) {
+	var receivedBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	wh := &domain.Webhook{
+		ID:     "wh-dispatch",
+		UserID: whTestUserID,
+		Name:   "Test",
+		URL:    server.URL,
+		Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status: domain.WebhookStatusActive,
+		Secret: "my-secret",
+	}
+	repo.webhooks.addWebhook(wh)
+
+	payload := &WebhookPayload{
+		ID:        "delivery-1",
+		Event:     domain.WebhookEventMessageReceived,
+		Timestamp: time.Now(),
+		Data:      map[string]string{"key": "value"},
+	}
+
+	svc.dispatchWebhook(context.Background(), wh, payload)
+
+	if len(receivedBody) == 0 {
+		t.Fatal("expected server to receive request body")
+	}
+
+	if len(repo.webhooks.deliveries) == 0 {
+		t.Error("expected delivery to be recorded")
+	}
+
+	for _, d := range repo.webhooks.deliveries {
+		if d.StatusCode != 200 {
+			t.Errorf("expected delivery status 200, got %d", d.StatusCode)
+		}
+	}
+
+	if wh.SuccessCount == 0 {
+		t.Error("expected webhook success count to be incremented")
+	}
+}
+
+func TestWebhookService_Dispatch_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal error"))
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	wh := &domain.Webhook{
+		ID:     "wh-fail",
+		UserID: whTestUserID,
+		Name:   "Fail",
+		URL:    server.URL,
+		Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status: domain.WebhookStatusActive,
+	}
+	repo.webhooks.addWebhook(wh)
+
+	payload := &WebhookPayload{
+		ID:    "delivery-fail",
+		Event: domain.WebhookEventMessageReceived,
+		Data:  nil,
+	}
+
+	svc.dispatchWebhook(context.Background(), wh, payload)
+
+	if len(repo.webhooks.deliveries) == 0 {
+		t.Fatal("expected delivery to be recorded")
+	}
+
+	for _, d := range repo.webhooks.deliveries {
+		if d.StatusCode != 500 {
+			t.Errorf("expected delivery status 500, got %d", d.StatusCode)
+		}
+		if d.Success {
+			t.Error("expected delivery to not be successful")
+		}
+	}
+}
+
+func TestWebhookService_Dispatch_Headers(t *testing.T) {
+	var headers http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	wh := &domain.Webhook{
+		ID:     "wh-headers",
+		UserID: whTestUserID,
+		Name:   "Headers",
+		URL:    server.URL,
+		Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status: domain.WebhookStatusActive,
+		Secret: "sig-secret",
+	}
+	repo.webhooks.addWebhook(wh)
+
+	payload := &WebhookPayload{
+		ID:    "d-headers",
+		Event: domain.WebhookEventMessageReceived,
+		Data:  nil,
+	}
+
+	svc.dispatchWebhook(context.Background(), wh, payload)
+
+	if headers.Get("Content-Type") != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %q", headers.Get("Content-Type"))
+	}
+	if headers.Get("User-Agent") != "Yunt-Webhook/1.0" {
+		t.Errorf("expected User-Agent Yunt-Webhook/1.0, got %q", headers.Get("User-Agent"))
+	}
+	if headers.Get("X-Webhook-ID") != "wh-headers" {
+		t.Errorf("expected X-Webhook-ID wh-headers, got %q", headers.Get("X-Webhook-ID"))
+	}
+	if headers.Get("X-Webhook-Event") != "message.received" {
+		t.Errorf("expected X-Webhook-Event message.received, got %q", headers.Get("X-Webhook-Event"))
+	}
+	if headers.Get("X-Webhook-Signature") == "" {
+		t.Error("expected X-Webhook-Signature header when secret is set")
+	}
+	if headers.Get("X-Webhook-Signature-256") == "" {
+		t.Error("expected X-Webhook-Signature-256 header when secret is set")
+	}
+}
+
+func TestWebhookService_Dispatch_NoSignature(t *testing.T) {
+	var headers http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	wh := &domain.Webhook{
+		ID:     "wh-nosig",
+		UserID: whTestUserID,
+		Name:   "NoSig",
+		URL:    server.URL,
+		Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status: domain.WebhookStatusActive,
+		Secret: "",
+	}
+	repo.webhooks.addWebhook(wh)
+
+	payload := &WebhookPayload{ID: "d-nosig", Event: domain.WebhookEventMessageReceived}
+	svc.dispatchWebhook(context.Background(), wh, payload)
+
+	if headers.Get("X-Webhook-Signature") != "" {
+		t.Error("expected no X-Webhook-Signature header when secret is empty")
+	}
+}
+
+func TestWebhookService_Dispatch_CustomHeaders(t *testing.T) {
+	var headers http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	wh := &domain.Webhook{
+		ID:      "wh-custom",
+		UserID:  whTestUserID,
+		Name:    "Custom",
+		URL:     server.URL,
+		Events:  []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status:  domain.WebhookStatusActive,
+		Headers: map[string]string{"X-Custom-Header": "custom-value", "Authorization": "Bearer token123"},
+	}
+	repo.webhooks.addWebhook(wh)
+
+	payload := &WebhookPayload{ID: "d-custom", Event: domain.WebhookEventMessageReceived}
+	svc.dispatchWebhook(context.Background(), wh, payload)
+
+	if headers.Get("X-Custom-Header") != "custom-value" {
+		t.Errorf("expected X-Custom-Header custom-value, got %q", headers.Get("X-Custom-Header"))
+	}
+	if headers.Get("Authorization") != "Bearer token123" {
+		t.Errorf("expected Authorization Bearer token123, got %q", headers.Get("Authorization"))
+	}
+}
+
+func TestWebhookService_Dispatch_Signature_Verification(t *testing.T) {
+	var receivedBody []byte
+	var sigHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sigHeader = r.Header.Get("X-Webhook-Signature")
+		receivedBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	secret := "verify-me-secret"
+	wh := &domain.Webhook{
+		ID:     "wh-sigver",
+		UserID: whTestUserID,
+		Name:   "SigVer",
+		URL:    server.URL,
+		Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status: domain.WebhookStatusActive,
+		Secret: secret,
+	}
+	repo.webhooks.addWebhook(wh)
+
+	payload := &WebhookPayload{
+		ID:    "d-sigver",
+		Event: domain.WebhookEventMessageReceived,
+		Data:  map[string]string{"msg": "hello"},
+	}
+
+	svc.dispatchWebhook(context.Background(), wh, payload)
+
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write(receivedBody)
+	expectedSig := hex.EncodeToString(h.Sum(nil))
+
+	if sigHeader != expectedSig {
+		t.Errorf("signature mismatch: got %q, computed %q from body", sigHeader, expectedSig)
+	}
+}
+
+func TestWebhookService_TriggerEvent_DispatchSuccess(t *testing.T) {
+	var called atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	wh := &domain.Webhook{
+		ID:     "wh-trigger",
+		UserID: whTestUserID,
+		Name:   "Trigger",
+		URL:    server.URL,
+		Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status: domain.WebhookStatusActive,
+	}
+	repo.webhooks.addWebhook(wh)
+
+	err := svc.TriggerEvent(context.Background(), domain.WebhookEventMessageReceived, map[string]string{"id": "msg-1"})
+	if err != nil {
+		t.Fatalf("TriggerEvent() error = %v", err)
+	}
+
+	if called.Load() != 1 {
+		t.Errorf("expected 1 HTTP call, got %d", called.Load())
+	}
+
+	if len(repo.webhooks.deliveries) == 0 {
+		t.Error("expected delivery to be recorded")
+	}
+}
+
+func TestWebhookService_TriggerEvent_MultipleWebhooks(t *testing.T) {
+	var called atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	for i := 0; i < 3; i++ {
+		wh := &domain.Webhook{
+			ID:     domain.ID(fmt.Sprintf("wh-multi-%d", i)),
+			UserID: whTestUserID,
+			Name:   fmt.Sprintf("Multi%d", i),
+			URL:    server.URL,
+			Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+			Status: domain.WebhookStatusActive,
+		}
+		repo.webhooks.addWebhook(wh)
+	}
+
+	err := svc.TriggerEvent(context.Background(), domain.WebhookEventMessageReceived, nil)
+	if err != nil {
+		t.Fatalf("TriggerEvent() error = %v", err)
+	}
+
+	if called.Load() != 3 {
+		t.Errorf("expected 3 HTTP calls, got %d", called.Load())
+	}
+}
+
+func TestWebhookService_TriggerEvent_PayloadFormat(t *testing.T) {
+	var receivedBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(server.Client())
+
+	wh := &domain.Webhook{
+		ID:     "wh-payload",
+		UserID: whTestUserID,
+		Name:   "Payload",
+		URL:    server.URL,
+		Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status: domain.WebhookStatusActive,
+	}
+	repo.webhooks.addWebhook(wh)
+
+	testData := map[string]string{"messageId": "msg-123", "subject": "Hello"}
+	err := svc.TriggerEvent(context.Background(), domain.WebhookEventMessageReceived, testData)
+	if err != nil {
+		t.Fatalf("TriggerEvent() error = %v", err)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(receivedBody, &payload); err != nil {
+		t.Fatalf("failed to parse payload: %v", err)
+	}
+
+	if payload["event"] != "message.received" {
+		t.Errorf("expected event 'message.received', got %v", payload["event"])
+	}
+	if payload["id"] == nil || payload["id"] == "" {
+		t.Error("expected non-empty 'id' field in payload")
+	}
+	if payload["timestamp"] == nil {
+		t.Error("expected 'timestamp' field in payload")
+	}
+	if payload["data"] == nil {
+		t.Error("expected 'data' field in payload")
+	}
+
+	data, ok := payload["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data to be map, got %T", payload["data"])
+	}
+	if data["messageId"] != "msg-123" {
+		t.Errorf("expected data.messageId 'msg-123', got %v", data["messageId"])
+	}
+}
+
+func TestWebhookService_Dispatch_Timeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc, repo := newTestWebhookService()
+	svc.WithHTTPClient(&http.Client{Timeout: 100 * time.Millisecond})
+
+	wh := &domain.Webhook{
+		ID:     "wh-timeout",
+		UserID: whTestUserID,
+		Name:   "Timeout",
+		URL:    server.URL,
+		Events: []domain.WebhookEvent{domain.WebhookEventMessageReceived},
+		Status: domain.WebhookStatusActive,
+	}
+	repo.webhooks.addWebhook(wh)
+
+	payload := &WebhookPayload{ID: "d-timeout", Event: domain.WebhookEventMessageReceived}
+	svc.dispatchWebhook(context.Background(), wh, payload)
+
+	if len(repo.webhooks.deliveries) == 0 {
+		t.Fatal("expected delivery to be recorded even on timeout")
+	}
+
+	for _, d := range repo.webhooks.deliveries {
+		if d.Success {
+			t.Error("expected delivery to not be successful on timeout")
+		}
 	}
 }
