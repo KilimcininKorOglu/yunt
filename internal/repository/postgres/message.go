@@ -36,6 +36,7 @@ type messageRow struct {
 	Status          string         `db:"status"`
 	IsStarred       bool           `db:"is_starred"`
 	IsSpam          bool           `db:"is_spam"`
+	IsDeleted       bool           `db:"is_deleted"`
 	InReplyTo       sql.NullString `db:"in_reply_to"`
 	ReferencesList  []byte         `db:"references_list"`
 	ReceivedAt      time.Time      `db:"received_at"`
@@ -70,6 +71,7 @@ func (r *messageRow) toMessage() *domain.Message {
 		Status:          domain.MessageStatus(r.Status),
 		IsStarred:       r.IsStarred,
 		IsSpam:          r.IsSpam,
+		IsDeleted:       r.IsDeleted,
 		RawBody:         r.RawBody,
 		ReceivedAt:      domain.Timestamp{Time: r.ReceivedAt},
 		CreatedAt:       domain.Timestamp{Time: r.CreatedAt},
@@ -486,11 +488,11 @@ func (m *MessageRepository) ListSummaries(ctx context.Context, filter *repositor
 
 // Create creates a new message.
 func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) error {
-	query := `INSERT INTO messages (id, mailbox_id, message_id, from_name, from_address, 
-		subject, text_body, html_body, raw_body, headers, content_type, size, 
-		attachment_count, status, is_starred, is_spam, in_reply_to, references_list, 
+	query := `INSERT INTO messages (id, mailbox_id, message_id, from_name, from_address,
+		subject, text_body, html_body, raw_body, headers, content_type, size,
+		attachment_count, status, is_starred, is_spam, is_deleted, in_reply_to, references_list,
 		received_at, sent_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo sql.NullString
 	var refsList, headersJSON []byte
@@ -542,6 +544,7 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 		string(msg.Status),
 		msg.IsStarred,
 		msg.IsSpam,
+		msg.IsDeleted,
 		inReplyTo,
 		refsList,
 		msg.ReceivedAt.Time,
@@ -623,11 +626,11 @@ func (m *MessageRepository) Update(ctx context.Context, msg *domain.Message) err
 		return domain.NewNotFoundError("message", string(msg.ID))
 	}
 
-	query := `UPDATE messages SET mailbox_id = $1, message_id = $2, from_name = $3, 
-		from_address = $4, subject = $5, text_body = $6, html_body = $7, headers = $8, 
-		content_type = $9, size = $10, attachment_count = $11, status = $12, is_starred = $13, 
-		is_spam = $14, in_reply_to = $15, references_list = $16, received_at = $17, sent_at = $18, 
-		updated_at = $19 WHERE id = $20`
+	query := `UPDATE messages SET mailbox_id = $1, message_id = $2, from_name = $3,
+		from_address = $4, subject = $5, text_body = $6, html_body = $7, headers = $8,
+		content_type = $9, size = $10, attachment_count = $11, status = $12, is_starred = $13,
+		is_spam = $14, is_deleted = $15, in_reply_to = $16, references_list = $17, received_at = $18, sent_at = $19,
+		updated_at = $20 WHERE id = $21`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo sql.NullString
 	var refsList, headersJSON []byte
@@ -677,6 +680,7 @@ func (m *MessageRepository) Update(ctx context.Context, msg *domain.Message) err
 		string(msg.Status),
 		msg.IsStarred,
 		msg.IsSpam,
+		msg.IsDeleted,
 		inReplyTo,
 		refsList,
 		msg.ReceivedAt.Time,
@@ -980,8 +984,43 @@ func (m *MessageRepository) MarkAsNotSpam(ctx context.Context, id domain.ID) err
 	return nil
 }
 
-func (m *MessageRepository) MarkAsDeleted(_ context.Context, _ domain.ID) error   { return nil }
-func (m *MessageRepository) UnmarkAsDeleted(_ context.Context, _ domain.ID) error { return nil }
+func (m *MessageRepository) MarkAsDeleted(ctx context.Context, id domain.ID) error {
+	query := `UPDATE messages SET is_deleted = true, updated_at = $1 WHERE id = $2`
+
+	result, err := m.repo.db().ExecContext(ctx, query, time.Now().UTC(), string(id))
+	if err != nil {
+		return fmt.Errorf("failed to mark as deleted: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
+
+	return nil
+}
+
+func (m *MessageRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) error {
+	query := `UPDATE messages SET is_deleted = false, updated_at = $1 WHERE id = $2`
+
+	result, err := m.repo.db().ExecContext(ctx, query, time.Now().UTC(), string(id))
+	if err != nil {
+		return fmt.Errorf("failed to unmark as deleted: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
+
+	return nil
+}
 
 // MoveToMailbox moves a message to a different mailbox.
 func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, targetMailboxID domain.ID) error {

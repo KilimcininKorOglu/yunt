@@ -46,6 +46,7 @@ type messageDocument struct {
 	Status          string                 `bson:"status"`
 	IsStarred       bool                   `bson:"isStarred"`
 	IsSpam          bool                   `bson:"isSpam"`
+	IsDeleted       bool                   `bson:"isDeleted"`
 	InReplyTo       string                 `bson:"inReplyTo,omitempty"`
 	References      []string               `bson:"references,omitempty"`
 	ReceivedAt      time.Time              `bson:"receivedAt"`
@@ -82,6 +83,7 @@ func (m *MessageRepository) toDocument(msg *domain.Message) *messageDocument {
 		Status:          string(msg.Status),
 		IsStarred:       msg.IsStarred,
 		IsSpam:          msg.IsSpam,
+		IsDeleted:       msg.IsDeleted,
 		InReplyTo:       msg.InReplyTo,
 		References:      msg.References,
 		ReceivedAt:      msg.ReceivedAt.Time,
@@ -142,6 +144,7 @@ func (m *MessageRepository) toDomain(doc *messageDocument) *domain.Message {
 		Status:          domain.MessageStatus(doc.Status),
 		IsStarred:       doc.IsStarred,
 		IsSpam:          doc.IsSpam,
+		IsDeleted:       doc.IsDeleted,
 		InReplyTo:       doc.InReplyTo,
 		References:      doc.References,
 		ReceivedAt:      domain.Timestamp{Time: doc.ReceivedAt},
@@ -999,8 +1002,51 @@ func (m *MessageRepository) MarkAsNotSpam(ctx context.Context, id domain.ID) err
 	return nil
 }
 
-func (m *MessageRepository) MarkAsDeleted(_ context.Context, _ domain.ID) error   { return nil }
-func (m *MessageRepository) UnmarkAsDeleted(_ context.Context, _ domain.ID) error { return nil }
+func (m *MessageRepository) MarkAsDeleted(ctx context.Context, id domain.ID) error {
+	ctx = m.repo.getSessionContext(ctx)
+
+	filter := bson.M{"_id": string(id)}
+	update := bson.M{
+		"$set": bson.M{
+			"isDeleted": true,
+			"updatedAt": time.Now().UTC(),
+		},
+	}
+
+	result, err := m.collection().UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to mark message as deleted: %w", err)
+	}
+
+	if result.MatchedCount == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
+
+	return nil
+}
+
+func (m *MessageRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) error {
+	ctx = m.repo.getSessionContext(ctx)
+
+	filter := bson.M{"_id": string(id)}
+	update := bson.M{
+		"$set": bson.M{
+			"isDeleted": false,
+			"updatedAt": time.Now().UTC(),
+		},
+	}
+
+	result, err := m.collection().UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to unmark message as deleted: %w", err)
+	}
+
+	if result.MatchedCount == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
+
+	return nil
+}
 
 // MoveToMailbox moves a message to a different mailbox.
 func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, targetMailboxID domain.ID) error {
