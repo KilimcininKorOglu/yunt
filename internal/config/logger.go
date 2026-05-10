@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // Logger wraps zerolog.Logger with additional configuration capabilities.
@@ -102,7 +103,7 @@ func (l *Logger) setupWriter(cfg LoggingConfig) (io.Writer, error) {
 	}
 }
 
-// setupFileWriter creates a file writer for log output.
+// setupFileWriter creates a file writer for log output with rotation support.
 func (l *Logger) setupFileWriter(cfg LoggingConfig) (io.Writer, error) {
 	if cfg.FilePath == "" {
 		return nil, fmt.Errorf("file path is required when output is 'file'")
@@ -116,16 +117,30 @@ func (l *Logger) setupFileWriter(cfg LoggingConfig) (io.Writer, error) {
 		}
 	}
 
-	// Open the log file
-	file, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open log file %s: %w", cfg.FilePath, err)
+	maxSize := cfg.MaxSize
+	if maxSize <= 0 {
+		maxSize = 100
+	}
+	maxBackups := cfg.MaxBackups
+	if maxBackups <= 0 {
+		maxBackups = 5
+	}
+	maxAge := cfg.MaxAge
+	if maxAge <= 0 {
+		maxAge = 30
 	}
 
-	l.file = file
-	l.closers = append(l.closers, file)
+	rotator := &lumberjack.Logger{
+		Filename:   cfg.FilePath,
+		MaxSize:    maxSize,
+		MaxBackups: maxBackups,
+		MaxAge:     maxAge,
+		Compress:   true,
+	}
 
-	return file, nil
+	l.closers = append(l.closers, rotator)
+
+	return rotator, nil
 }
 
 // parseLevel converts a string log level to zerolog.Level.

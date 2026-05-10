@@ -218,11 +218,11 @@ func TestLoggerLogLevels(t *testing.T) {
 			logger.Close()
 
 			content, err := os.ReadFile(logPath)
-			if err != nil {
+			if err != nil && !os.IsNotExist(err) {
 				t.Fatalf("failed to read log file: %v", err)
 			}
 
-			contains := strings.Contains(string(content), testMsg)
+			contains := len(content) > 0 && strings.Contains(string(content), testMsg)
 			if contains != tt.shouldContain {
 				t.Errorf("log contains message = %v, want %v", contains, tt.shouldContain)
 			}
