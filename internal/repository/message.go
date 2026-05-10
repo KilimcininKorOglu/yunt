@@ -288,6 +288,9 @@ type MessageFilter struct {
 
 	// ExcludeSpam excludes spam messages from results.
 	ExcludeSpam bool
+
+	// ExcludeDeleted excludes messages marked with \Deleted flag from results.
+	ExcludeDeleted bool
 }
 
 // IsEmpty returns true if no filter criteria are set.

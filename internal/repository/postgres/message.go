@@ -415,6 +415,10 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 		if filter.ExcludeSpam {
 			sb.WriteString(" AND is_spam = false")
 		}
+
+		if filter.ExcludeDeleted {
+			sb.WriteString(" AND is_deleted = false")
+		}
 	}
 
 	if !countOnly {

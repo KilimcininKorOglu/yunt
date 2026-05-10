@@ -528,6 +528,10 @@ func (m *MessageRepository) buildFilter(filter *repository.MessageFilter) bson.M
 		f["isSpam"] = false
 	}
 
+	if filter.ExcludeDeleted {
+		f["isDeleted"] = bson.M{"$ne": true}
+	}
+
 	return f
 }
 

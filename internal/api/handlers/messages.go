@@ -1090,6 +1090,17 @@ func (h *MessageHandler) parseMessageFilter(c echo.Context, userID domain.ID) (*
 		filter.ReceivedBefore = &ts
 	}
 
+	// Exclude deleted messages by default (IMAP \Deleted flag)
+	if includeDeletedStr := c.QueryParam("includeDeleted"); includeDeletedStr != "" {
+		includeDeleted, err := strconv.ParseBool(includeDeletedStr)
+		if err != nil {
+			return nil, errorf("invalid includeDeleted value: %s", includeDeletedStr)
+		}
+		filter.ExcludeDeleted = !includeDeleted
+	} else {
+		filter.ExcludeDeleted = true
+	}
+
 	return filter, nil
 }
 
