@@ -120,8 +120,15 @@ func (s *Session) createPlainServer(authenticator *Authenticator) sasl.Server {
 				Msg("PLAIN auth with identity")
 		}
 
+		if s.backend.server.rateLimiter != nil && s.backend.server.rateLimiter.IsAuthBlocked(s.remoteAddr) {
+			return &smtp.SMTPError{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Too many authentication failures, try again later"}
+		}
+
 		result, err := authenticator.Authenticate(s.ctx, authUsername, password)
 		if err != nil {
+			if s.backend.server.rateLimiter != nil {
+				s.backend.server.rateLimiter.RecordAuthFailure(s.remoteAddr)
+			}
 			s.logAuthFailure(authUsername, "PLAIN", err)
 			return err
 		}
@@ -136,8 +143,15 @@ func (s *Session) createPlainServer(authenticator *Authenticator) sasl.Server {
 // createLoginServer creates a LOGIN SASL server for authentication.
 func (s *Session) createLoginServer(authenticator *Authenticator) sasl.Server {
 	return NewLoginServer(func(username, password string) error {
+		if s.backend.server.rateLimiter != nil && s.backend.server.rateLimiter.IsAuthBlocked(s.remoteAddr) {
+			return &smtp.SMTPError{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Too many authentication failures, try again later"}
+		}
+
 		result, err := authenticator.Authenticate(s.ctx, username, password)
 		if err != nil {
+			if s.backend.server.rateLimiter != nil {
+				s.backend.server.rateLimiter.RecordAuthFailure(s.remoteAddr)
+			}
 			s.logAuthFailure(username, "LOGIN", err)
 			return err
 		}

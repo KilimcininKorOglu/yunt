@@ -35,6 +35,9 @@ type RateLimitConfig struct {
 	// MessagesPerConnection is the maximum number of messages per single connection.
 	MessagesPerConnection int
 
+	// AuthFailuresPerMinute is the maximum number of auth failures per IP per minute before blocking.
+	AuthFailuresPerMinute int
+
 	// CleanupInterval is how often to clean up expired rate limit entries.
 	CleanupInterval time.Duration
 }
@@ -49,6 +52,7 @@ func DefaultRateLimitConfig() *RateLimitConfig {
 		MaxGlobalConnections:     1000,
 		RecipientsPerMessage:     100,
 		MessagesPerConnection:    50,
+		AuthFailuresPerMinute:    5,
 		CleanupInterval:          5 * time.Minute,
 	}
 }
@@ -75,6 +79,9 @@ type RateLimiter struct {
 	// messagesPerConnection tracks messages sent in current connection.
 	messagesPerConnection map[string]int
 
+	// authFailures tracks authentication failures per IP in the current minute window.
+	authFailures map[string]*rateLimitEntry
+
 	// stopChan signals the cleanup goroutine to stop.
 	stopChan chan struct{}
 }
@@ -98,6 +105,7 @@ func NewRateLimiter(config *RateLimitConfig, logger zerolog.Logger) *RateLimiter
 		connectionRate:        make(map[string]*rateLimitEntry),
 		concurrentConnections: make(map[string]int),
 		messagesPerConnection: make(map[string]int),
+		authFailures:          make(map[string]*rateLimitEntry),
 		stopChan:              make(chan struct{}),
 	}
 
@@ -439,4 +447,44 @@ func (rl *RateLimiter) IsEnabled() bool {
 // Config returns the rate limiter configuration.
 func (rl *RateLimiter) Config() *RateLimitConfig {
 	return rl.config
+}
+
+// RecordAuthFailure records a failed authentication attempt for an IP.
+func (rl *RateLimiter) RecordAuthFailure(ip string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	entry, exists := rl.authFailures[ip]
+	now := time.Now()
+
+	if !exists || now.After(entry.windowEnd) {
+		rl.authFailures[ip] = &rateLimitEntry{
+			count:     1,
+			windowEnd: now.Add(time.Minute),
+		}
+		return
+	}
+
+	entry.count++
+}
+
+// IsAuthBlocked returns true if the IP has exceeded the auth failure rate limit.
+func (rl *RateLimiter) IsAuthBlocked(ip string) bool {
+	if rl.config.AuthFailuresPerMinute <= 0 {
+		return false
+	}
+
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+
+	entry, exists := rl.authFailures[ip]
+	if !exists {
+		return false
+	}
+
+	if time.Now().After(entry.windowEnd) {
+		return false
+	}
+
+	return entry.count >= rl.config.AuthFailuresPerMinute
 }
