@@ -76,7 +76,10 @@ func (f *Factory) createSQLite() (repository.Repository, error) {
 		return nil, fmt.Errorf("failed to create SQLite connection pool: %w", err)
 	}
 
-	repo, err := sqlite.New(pool)
+	autoMigrate := f.config.AutoMigrate
+	autoSeed := autoMigrate
+
+	repo, err := sqlite.NewWithOptions(pool, autoMigrate, autoSeed)
 	if err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("failed to create SQLite repository: %w", err)

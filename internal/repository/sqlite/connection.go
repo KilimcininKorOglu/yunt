@@ -97,10 +97,19 @@ func NewConnectionConfig(cfg *config.DatabaseConfig) *ConnectionConfig {
 		dsn = "file:yunt.db?mode=rwc"
 	}
 
+	maxOpen := cfg.MaxOpenConns
+	maxIdle := cfg.MaxIdleConns
+	if maxOpen <= 0 {
+		maxOpen = 1
+	}
+	if maxIdle <= 0 {
+		maxIdle = 1
+	}
+
 	return &ConnectionConfig{
 		DSN:               dsn,
-		MaxOpenConns:      cfg.MaxOpenConns,
-		MaxIdleConns:      cfg.MaxIdleConns,
+		MaxOpenConns:      maxOpen,
+		MaxIdleConns:      maxIdle,
 		ConnMaxLifetime:   cfg.ConnMaxLifetime,
 		ConnMaxIdleTime:   cfg.ConnMaxIdleTime,
 		BusyTimeout:       5000,
