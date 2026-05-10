@@ -126,12 +126,14 @@ type MailboxStats struct {
 
 // MessageStats contains message-related statistics.
 type MessageStats struct {
-	Total       int64                  `json:"total"`
-	Unread      int64                  `json:"unread"`
-	TotalSize   int64                  `json:"totalSize"`
-	TodayCount  int64                  `json:"todayCount"`
-	WeekCount   int64                  `json:"weekCount"`
-	DailyCounts []repository.DateCount `json:"dailyCounts"`
+	Total        int64                   `json:"total"`
+	Unread       int64                   `json:"unread"`
+	TotalSize    int64                   `json:"totalSize"`
+	TodayCount   int64                   `json:"todayCount"`
+	WeekCount    int64                   `json:"weekCount"`
+	RelayedTotal int64                   `json:"relayedTotal"`
+	DailyCounts  []repository.DateCount  `json:"dailyCounts"`
+	HourlyCounts []repository.HourCount  `json:"hourlyCounts"`
 }
 
 // GetStats returns system statistics.
@@ -267,6 +269,18 @@ func (h *SystemHandler) getMessageStats(ctx context.Context) (*MessageStats, err
 	}
 	if stats.DailyCounts == nil {
 		stats.DailyCounts = []repository.DateCount{}
+	}
+
+	dayAgo := now.Add(-24 * time.Hour)
+	hourlyCounts, err := h.repo.Messages().GetHourlyCounts(ctx, &repository.DateRangeFilter{
+		From: &domain.Timestamp{Time: dayAgo},
+		To:   &domain.Timestamp{Time: now},
+	})
+	if err == nil {
+		stats.HourlyCounts = hourlyCounts
+	}
+	if stats.HourlyCounts == nil {
+		stats.HourlyCounts = []repository.HourCount{}
 	}
 
 	return stats, nil

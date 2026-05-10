@@ -429,7 +429,9 @@ export interface SystemStats {
 		totalSize: number;
 		todayCount: number;
 		weekCount: number;
+		relayedTotal: number;
 		dailyCounts: { date: string; count: number }[];
+		hourlyCounts: { hour: string; count: number }[];
 	};
 	uptime: number;
 	timestamp: Timestamp;

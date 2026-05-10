@@ -197,6 +197,9 @@ type MessageRepository interface {
 	// GetDailyCounts returns message counts grouped by day within a date range.
 	GetDailyCounts(ctx context.Context, dateRange *DateRangeFilter) ([]DateCount, error)
 
+	// GetHourlyCounts returns message counts grouped by hour within a date range.
+	GetHourlyCounts(ctx context.Context, dateRange *DateRangeFilter) ([]HourCount, error)
+
 	// GetSenderCounts returns message counts grouped by sender address.
 	GetSenderCounts(ctx context.Context, limit int) ([]AddressCount, error)
 
@@ -373,6 +376,15 @@ type DateCount struct {
 	Date string `json:"date"`
 
 	// Count is the number of items on that date.
+	Count int64 `json:"count"`
+}
+
+// HourCount represents a count grouped by hour.
+type HourCount struct {
+	// Hour is the hour timestamp (YYYY-MM-DD HH:00 format).
+	Hour string `json:"hour"`
+
+	// Count is the number of items in that hour.
 	Count int64 `json:"count"`
 }
 

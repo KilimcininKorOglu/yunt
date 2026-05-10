@@ -317,6 +317,9 @@ func (m *mockMessageRepository) GetTotalSize(ctx context.Context) (int64, error)
 func (m *mockMessageRepository) GetDailyCounts(ctx context.Context, dateRange *repository.DateRangeFilter) ([]repository.DateCount, error) {
 	return nil, nil
 }
+func (m *mockMessageRepository) GetHourlyCounts(ctx context.Context, dateRange *repository.DateRangeFilter) ([]repository.HourCount, error) {
+	return nil, nil
+}
 func (m *mockMessageRepository) GetSenderCounts(ctx context.Context, limit int) ([]repository.AddressCount, error) {
 	return nil, nil
 }

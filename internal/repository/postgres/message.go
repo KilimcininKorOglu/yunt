@@ -1493,9 +1493,39 @@ func (m *MessageRepository) GetDailyCounts(ctx context.Context, dateRange *repos
 	return counts, nil
 }
 
+// GetHourlyCounts returns message counts grouped by hour within a date range.
+func (m *MessageRepository) GetHourlyCounts(ctx context.Context, dateRange *repository.DateRangeFilter) ([]repository.HourCount, error) {
+	var sb strings.Builder
+	args := make([]interface{}, 0)
+	argIndex := 1
+
+	sb.WriteString(`SELECT to_char(received_at, 'YYYY-MM-DD HH24:00') as hour, COUNT(*) as count FROM messages WHERE 1=1`)
+
+	if dateRange != nil {
+		if dateRange.From != nil {
+			sb.WriteString(fmt.Sprintf(" AND received_at >= $%d", argIndex))
+			args = append(args, dateRange.From.Time)
+			argIndex++
+		}
+		if dateRange.To != nil {
+			sb.WriteString(fmt.Sprintf(" AND received_at <= $%d", argIndex))
+			args = append(args, dateRange.To.Time)
+		}
+	}
+
+	sb.WriteString(" GROUP BY to_char(received_at, 'YYYY-MM-DD HH24:00') ORDER BY hour")
+
+	var counts []repository.HourCount
+	if err := m.repo.db().SelectContext(ctx, &counts, sb.String(), args...); err != nil {
+		return nil, fmt.Errorf("failed to get hourly counts: %w", err)
+	}
+
+	return counts, nil
+}
+
 // GetSenderCounts returns message counts grouped by sender address.
 func (m *MessageRepository) GetSenderCounts(ctx context.Context, limit int) ([]repository.AddressCount, error) {
-	query := `SELECT from_address as address, from_name as name, COUNT(*) as count 
+	query := `SELECT from_address as address, from_name as name, COUNT(*) as count
 		FROM messages GROUP BY from_address, from_name ORDER BY count DESC LIMIT $1`
 
 	var counts []repository.AddressCount

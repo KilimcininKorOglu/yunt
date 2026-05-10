@@ -507,6 +507,9 @@ func (r *mockMsgRepo) GetTotalSize(_ context.Context) (int64, error)            
 func (r *mockMsgRepo) GetDailyCounts(_ context.Context, _ *repository.DateRangeFilter) ([]repository.DateCount, error) {
 	return nil, nil
 }
+func (r *mockMsgRepo) GetHourlyCounts(_ context.Context, _ *repository.DateRangeFilter) ([]repository.HourCount, error) {
+	return nil, nil
+}
 func (r *mockMsgRepo) GetSenderCounts(_ context.Context, _ int) ([]repository.AddressCount, error) {
 	return nil, nil
 }

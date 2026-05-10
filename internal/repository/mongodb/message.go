@@ -1549,6 +1549,59 @@ func (m *MessageRepository) GetDailyCounts(ctx context.Context, dateRange *repos
 	return counts, nil
 }
 
+// GetHourlyCounts returns message counts grouped by hour within a date range.
+func (m *MessageRepository) GetHourlyCounts(ctx context.Context, dateRange *repository.DateRangeFilter) ([]repository.HourCount, error) {
+	ctx = m.repo.getSessionContext(ctx)
+
+	matchStage := bson.M{}
+	if dateRange != nil {
+		if dateRange.From != nil {
+			matchStage["receivedAt"] = bson.M{"$gte": dateRange.From.Time}
+		}
+		if dateRange.To != nil {
+			if _, exists := matchStage["receivedAt"]; exists {
+				matchStage["receivedAt"].(bson.M)["$lte"] = dateRange.To.Time
+			} else {
+				matchStage["receivedAt"] = bson.M{"$lte": dateRange.To.Time}
+			}
+		}
+	}
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: matchStage}},
+		{{Key: "$group", Value: bson.M{
+			"_id": bson.M{
+				"$dateToString": bson.M{"format": "%Y-%m-%d %H:00", "date": "$receivedAt"},
+			},
+			"count": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$sort", Value: bson.M{"_id": 1}}},
+	}
+
+	cursor, err := m.collection().Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hourly counts: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var counts []repository.HourCount
+	for cursor.Next(ctx) {
+		var doc struct {
+			Hour  string `bson:"_id"`
+			Count int64  `bson:"count"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			continue
+		}
+		counts = append(counts, repository.HourCount{
+			Hour:  doc.Hour,
+			Count: doc.Count,
+		})
+	}
+
+	return counts, nil
+}
+
 // GetSenderCounts returns message counts grouped by sender address.
 func (m *MessageRepository) GetSenderCounts(ctx context.Context, limit int) ([]repository.AddressCount, error) {
 	ctx = m.repo.getSessionContext(ctx)

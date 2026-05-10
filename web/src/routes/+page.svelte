@@ -70,18 +70,20 @@
 	}
 
 	/**
-	 * Map daily counts from API to activity chart data
+	 * Map hourly counts from API to activity chart data (last 24 hours)
 	 */
 	function mapActivityData(): { label: string; received: number; sent?: number }[] {
-		const dailyCounts = stats?.messages?.dailyCounts;
-		if (!dailyCounts || dailyCounts.length === 0) return [];
+		const hourlyCounts = stats?.messages?.hourlyCounts;
+		if (!hourlyCounts || hourlyCounts.length === 0) return [];
 
-		const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-		return dailyCounts.map((dc) => ({
-			label: days[new Date(dc.date + 'T00:00:00').getDay()],
-			received: dc.count,
-			sent: undefined
-		}));
+		return hourlyCounts.map((hc) => {
+			const hour = hc.hour.split(' ')[1] ?? hc.hour;
+			return {
+				label: hour,
+				received: hc.count,
+				sent: undefined
+			};
+		});
 	}
 
 	/**
