@@ -23,9 +23,12 @@ import (
 )
 
 var (
-	smtpPort int
-	imapPort int
-	apiPort  int
+	smtpPort    int
+	imapPort    int
+	apiPort     int
+	enableSMTP  bool
+	enableIMAP  bool
+	enableAPI   bool
 )
 
 var serveCmd = &cobra.Command{
@@ -47,6 +50,9 @@ func init() {
 	serveCmd.Flags().IntVar(&smtpPort, "smtp-port", 0, "override SMTP server port")
 	serveCmd.Flags().IntVar(&imapPort, "imap-port", 0, "override IMAP server port")
 	serveCmd.Flags().IntVar(&apiPort, "api-port", 0, "override API server port")
+	serveCmd.Flags().BoolVar(&enableSMTP, "smtp", false, "start only SMTP server")
+	serveCmd.Flags().BoolVar(&enableIMAP, "imap", false, "start only IMAP server")
+	serveCmd.Flags().BoolVar(&enableAPI, "api", false, "start only API/Web UI server")
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
@@ -61,6 +67,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	if apiPort > 0 {
 		cfg.API.Port = apiPort
+	}
+
+	// Selective service flags: if any --smtp/--imap/--api flag is set,
+	// only start those services (disable the rest)
+	if enableSMTP || enableIMAP || enableAPI {
+		cfg.SMTP.Enabled = enableSMTP
+		cfg.IMAP.Enabled = enableIMAP
+		cfg.API.Enabled = enableAPI
 	}
 
 	log.Info().
