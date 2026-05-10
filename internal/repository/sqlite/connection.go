@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 
 	"yunt/internal/config"
 )
@@ -131,7 +131,7 @@ func NewConnectionPool(cfg *ConnectionConfig) (*ConnectionPool, error) {
 
 // connect establishes the database connection and configures the pool.
 func (p *ConnectionPool) connect() error {
-	db, err := sqlx.Open("sqlite3", p.config.DSN)
+	db, err := sqlx.Open("sqlite", p.config.DSN)
 	if err != nil {
 		return fmt.Errorf("failed to open SQLite database: %w", err)
 	}

@@ -24,7 +24,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 
 	// Database - MongoDB
 	_ "go.mongodb.org/mongo-driver/mongo"

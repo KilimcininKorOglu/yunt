@@ -35,15 +35,12 @@ RUN mkdir -p /webui/dist && \
 FROM golang:1.24-alpine AS go-builder
 
 # Install build dependencies
-# gcc, musl-dev: required for CGO (SQLite support via go-sqlite3)
 # git: for go mod operations
 # ca-certificates, tzdata: for TLS and timezone support
 RUN apk add --no-cache \
     git \
     ca-certificates \
-    tzdata \
-    gcc \
-    musl-dev
+    tzdata
 
 WORKDIR /app
 
@@ -70,11 +67,9 @@ ARG BUILD_DATE=unknown
 # Build the binary with optimizations
 # -s: omit symbol table
 # -w: omit DWARF debugging info
-# CGO_ENABLED=1: required for SQLite support (go-sqlite3)
-# -linkmode external: link with external C libraries
-# -extldflags "-static": create fully static binary
-RUN CGO_ENABLED=1 GOOS=linux go build \
-    -ldflags "-s -w -linkmode external -extldflags '-static' \
+# CGO_ENABLED=0: pure-Go build (modernc.org/sqlite, no CGO needed)
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags "-s -w \
         -X main.version=${VERSION} \
         -X main.commit=${COMMIT} \
         -X main.buildDate=${BUILD_DATE}" \

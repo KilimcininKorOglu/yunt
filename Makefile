@@ -12,8 +12,8 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Go build tags (fts5 enables SQLite full-text search)
-GO_TAGS := -tags "fts5"
+# Go build tags (empty — modernc.org/sqlite includes FTS5 by default)
+GO_TAGS :=
 
 # Go build flags
 LDFLAGS := -ldflags "-s -w \
