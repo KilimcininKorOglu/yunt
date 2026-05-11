@@ -220,9 +220,6 @@ func (h *OptimizedSearchHandler) canOptimize(criteria *imap.SearchCriteria) bool
 	if len(criteria.SeqNum) > 0 || len(criteria.UID) > 0 {
 		return false
 	}
-	if len(criteria.Body) > 0 || len(criteria.Text) > 0 {
-		return false
-	}
 	if len(criteria.Not) > 0 || len(criteria.Or) > 0 {
 		return false
 	}
@@ -339,6 +336,14 @@ func (h *OptimizedSearchHandler) buildMessageFilter(criteria *imap.SearchCriteri
 		case "subject":
 			filter.SubjectContains = hdr.Value
 		}
+	}
+
+	// Body/Text filters
+	if len(criteria.Body) > 0 {
+		filter.BodyContains = criteria.Body[0]
+	}
+	if len(criteria.Text) > 0 {
+		filter.Search = criteria.Text[0]
 	}
 
 	return filter
