@@ -2,11 +2,15 @@ package imap
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
 	"github.com/rs/zerolog"
+
+	"yunt/internal/domain"
+	"yunt/internal/service"
 )
 
 // SessionState represents the current state of an IMAP session.
@@ -53,12 +57,19 @@ type Session struct {
 	// Authentication and session state
 	state       SessionState
 	userSession *UserSession
+
+	// Poll notification queue
+	pollNotifications  chan *service.Notification
+	pollSubscriptionID string
+	pollMu             sync.Mutex
 }
 
 // Close is called when the session is closed.
 func (s *Session) Close() error {
 	s.state = SessionStateLogout
 	duration := time.Since(s.createdAt)
+
+	s.unsubscribePollNotifications()
 
 	// Clean up user session if authenticated
 	if s.userSession != nil && s.server.backend != nil {
@@ -185,6 +196,8 @@ func (s *Session) Select(mailbox string, options *imap.SelectOptions) (*imap.Sel
 		Int64("unseen", domainMailbox.UnreadCount).
 		Bool("readOnly", readOnly).
 		Msg("Mailbox selected")
+
+	s.subscribePollNotifications(domainMailbox.ID, s.userSession.User.ID)
 
 	return selectData, nil
 }
@@ -449,10 +462,80 @@ func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.App
 	return s.appendMessage(mailbox, r, options)
 }
 
-// Poll checks for mailbox updates (used for unilateral updates).
-func (s *Session) Poll(_ *imapserver.UpdateWriter, _ bool) error {
-	// No updates to send in this basic implementation
-	return nil
+// Poll checks for mailbox updates and sends unilateral notifications.
+func (s *Session) Poll(w *imapserver.UpdateWriter, allowExpunge bool) error {
+	s.pollMu.Lock()
+	defer s.pollMu.Unlock()
+
+	if s.pollNotifications == nil {
+		return nil
+	}
+
+	for {
+		select {
+		case notification := <-s.pollNotifications:
+			if notification.Type == service.NotificationMessageExpunged && !allowExpunge {
+				continue
+			}
+			if err := WriteUpdate(w, notification, s.logger); err != nil {
+				s.logger.Error().Err(err).Msg("Failed to write poll update")
+			}
+		default:
+			return nil
+		}
+	}
+}
+
+func (s *Session) subscribePollNotifications(mailboxID, userID domain.ID) {
+	s.pollMu.Lock()
+	defer s.pollMu.Unlock()
+
+	if s.pollNotifications != nil {
+		s.unsubscribePollNotificationsLocked()
+	}
+
+	idleManager := s.server.IdleManager()
+	if idleManager == nil {
+		return
+	}
+
+	ns := idleManager.GetNotificationBridge().GetNotifyService()
+	ch := make(chan *service.Notification, 100)
+	subID := "poll-" + s.sessionID
+
+	ns.Subscribe(subID, mailboxID, userID, func(n *service.Notification) {
+		select {
+		case ch <- n:
+		default:
+		}
+	})
+
+	s.pollNotifications = ch
+	s.pollSubscriptionID = subID
+}
+
+func (s *Session) unsubscribePollNotifications() {
+	s.pollMu.Lock()
+	defer s.pollMu.Unlock()
+	s.unsubscribePollNotificationsLocked()
+}
+
+func (s *Session) unsubscribePollNotificationsLocked() {
+	if s.pollNotifications == nil {
+		return
+	}
+
+	if s.userSession != nil && s.userSession.SelectedMailbox != nil {
+		idleManager := s.server.IdleManager()
+		if idleManager != nil {
+			ns := idleManager.GetNotificationBridge().GetNotifyService()
+			ns.Unsubscribe(s.pollSubscriptionID, s.userSession.SelectedMailbox.ID)
+		}
+	}
+
+	close(s.pollNotifications)
+	s.pollNotifications = nil
+	s.pollSubscriptionID = ""
 }
 
 // Idle waits for mailbox updates using the IMAP IDLE extension (RFC 2177).
