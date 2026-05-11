@@ -72,6 +72,12 @@ type Message struct {
 	// IsDeleted indicates if the message is marked with \Deleted flag (pending EXPUNGE).
 	IsDeleted bool `json:"isDeleted"`
 
+	// IsDraft indicates if the message is marked with \Draft flag.
+	IsDraft bool `json:"isDraft"`
+
+	// IsAnswered indicates if the message is marked with \Answered flag.
+	IsAnswered bool `json:"isAnswered"`
+
 	// InReplyTo is the Message-ID of the message this is replying to.
 	InReplyTo string `json:"inReplyTo,omitempty"`
 

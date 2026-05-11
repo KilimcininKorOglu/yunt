@@ -53,6 +53,12 @@ func (s *Session) appendMessage(mailbox string, r imap.LiteralReader, options *i
 				msg.Status = domain.MessageRead
 			case imap.FlagFlagged:
 				msg.IsStarred = true
+			case imap.FlagDeleted:
+				msg.IsDeleted = true
+			case imap.FlagDraft:
+				msg.IsDraft = true
+			case imap.FlagAnswered:
+				msg.IsAnswered = true
 			}
 		}
 		if !options.Time.IsZero() {

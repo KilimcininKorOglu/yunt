@@ -37,6 +37,8 @@ type messageRow struct {
 	IsStarred       bool           `db:"is_starred"`
 	IsSpam          bool           `db:"is_spam"`
 	IsDeleted       bool           `db:"is_deleted"`
+	IsDraft         bool           `db:"is_draft"`
+	IsAnswered      bool           `db:"is_answered"`
 	InReplyTo       sql.NullString `db:"in_reply_to"`
 	ReferencesList  []byte         `db:"references_list"`
 	ReceivedAt      time.Time      `db:"received_at"`
@@ -72,6 +74,8 @@ func (r *messageRow) toMessage() *domain.Message {
 		IsStarred:       r.IsStarred,
 		IsSpam:          r.IsSpam,
 		IsDeleted:       r.IsDeleted,
+		IsDraft:         r.IsDraft,
+		IsAnswered:      r.IsAnswered,
 		RawBody:         r.RawBody,
 		ReceivedAt:      domain.Timestamp{Time: r.ReceivedAt},
 		CreatedAt:       domain.Timestamp{Time: r.CreatedAt},
@@ -117,10 +121,10 @@ func (r *messageRow) toMessage() *domain.Message {
 
 // GetByID retrieves a message by its unique identifier.
 func (m *MessageRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Message, error) {
-	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
-		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
-		received_at, sent_at, created_at, updated_at 
+	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject,
+		text_body, html_body, raw_body, headers, content_type, size, attachment_count,
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
+		received_at, sent_at, created_at, updated_at
 		FROM messages WHERE id = $1`
 
 	var row messageRow
@@ -174,10 +178,10 @@ func (m *MessageRepository) loadRecipients(ctx context.Context, msg *domain.Mess
 
 // GetByMessageID retrieves a message by its email Message-ID header.
 func (m *MessageRepository) GetByMessageID(ctx context.Context, messageID string) (*domain.Message, error) {
-	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
-		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
-		received_at, sent_at, created_at, updated_at 
+	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject,
+		text_body, html_body, raw_body, headers, content_type, size, attachment_count,
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
+		received_at, sent_at, created_at, updated_at
 		FROM messages WHERE message_id = $1`
 
 	var row messageRow
@@ -263,8 +267,8 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 	} else {
 		sb.WriteString(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 			text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-			status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
-			received_at, sent_at, created_at, updated_at FROM messages WHERE 1=1`)
+			status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
+			received_at, sent_at, created_at, updated_atFROM messages WHERE 1=1`)
 	}
 
 	if filter != nil {
@@ -493,9 +497,9 @@ func (m *MessageRepository) ListSummaries(ctx context.Context, filter *repositor
 func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) error {
 	query := `INSERT INTO messages (id, mailbox_id, message_id, from_name, from_address,
 		subject, text_body, html_body, raw_body, headers, content_type, size,
-		attachment_count, status, is_starred, is_spam, is_deleted, in_reply_to, references_list,
-		received_at, sent_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`
+		attachment_count, status, is_starred, is_spam, is_deleted, is_draft, is_answered,
+		in_reply_to, references_list, received_at, sent_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo sql.NullString
 	var refsList, headersJSON []byte
@@ -548,6 +552,8 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 		msg.IsStarred,
 		msg.IsSpam,
 		msg.IsDeleted,
+		msg.IsDraft,
+		msg.IsAnswered,
 		inReplyTo,
 		refsList,
 		msg.ReceivedAt.Time,
@@ -632,8 +638,9 @@ func (m *MessageRepository) Update(ctx context.Context, msg *domain.Message) err
 	query := `UPDATE messages SET mailbox_id = $1, message_id = $2, from_name = $3,
 		from_address = $4, subject = $5, text_body = $6, html_body = $7, headers = $8,
 		content_type = $9, size = $10, attachment_count = $11, status = $12, is_starred = $13,
-		is_spam = $14, is_deleted = $15, in_reply_to = $16, references_list = $17, received_at = $18, sent_at = $19,
-		updated_at = $20 WHERE id = $21`
+		is_spam = $14, is_deleted = $15, is_draft = $16, is_answered = $17,
+		in_reply_to = $18, references_list = $19, received_at = $20, sent_at = $21,
+		updated_at = $22 WHERE id = $23`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo sql.NullString
 	var refsList, headersJSON []byte
@@ -684,6 +691,8 @@ func (m *MessageRepository) Update(ctx context.Context, msg *domain.Message) err
 		msg.IsStarred,
 		msg.IsSpam,
 		msg.IsDeleted,
+		msg.IsDraft,
+		msg.IsAnswered,
 		inReplyTo,
 		refsList,
 		msg.ReceivedAt.Time,
@@ -1022,6 +1031,38 @@ func (m *MessageRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) e
 		return domain.NewNotFoundError("message", string(id))
 	}
 
+	return nil
+}
+
+func (m *MessageRepository) MarkAsDraft(ctx context.Context, id domain.ID) error {
+	return m.setBoolFlag(ctx, id, "is_draft", true)
+}
+
+func (m *MessageRepository) UnmarkAsDraft(ctx context.Context, id domain.ID) error {
+	return m.setBoolFlag(ctx, id, "is_draft", false)
+}
+
+func (m *MessageRepository) MarkAsAnswered(ctx context.Context, id domain.ID) error {
+	return m.setBoolFlag(ctx, id, "is_answered", true)
+}
+
+func (m *MessageRepository) UnmarkAsAnswered(ctx context.Context, id domain.ID) error {
+	return m.setBoolFlag(ctx, id, "is_answered", false)
+}
+
+func (m *MessageRepository) setBoolFlag(ctx context.Context, id domain.ID, column string, value bool) error {
+	query := fmt.Sprintf(`UPDATE messages SET %s = $1, updated_at = $2 WHERE id = $3`, column)
+	result, err := m.repo.db().ExecContext(ctx, query, value, time.Now().UTC(), string(id))
+	if err != nil {
+		return fmt.Errorf("failed to set %s: %w", column, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
 	return nil
 }
 

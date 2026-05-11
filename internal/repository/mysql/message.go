@@ -37,6 +37,8 @@ type messageRow struct {
 	IsStarred       bool           `db:"is_starred"`
 	IsSpam          bool           `db:"is_spam"`
 	IsDeleted       bool           `db:"is_deleted"`
+	IsDraft         bool           `db:"is_draft"`
+	IsAnswered      bool           `db:"is_answered"`
 	InReplyTo       sql.NullString `db:"in_reply_to"`
 	ReferencesList  sql.NullString `db:"references_list"`
 	ReceivedAt      time.Time      `db:"received_at"`
@@ -72,6 +74,8 @@ func (r *messageRow) toMessage() *domain.Message {
 		IsStarred:       r.IsStarred,
 		IsSpam:          r.IsSpam,
 		IsDeleted:       r.IsDeleted,
+		IsDraft:         r.IsDraft,
+		IsAnswered:      r.IsAnswered,
 		RawBody:         r.RawBody,
 		ReceivedAt:      domain.Timestamp{Time: r.ReceivedAt},
 		CreatedAt:       domain.Timestamp{Time: r.CreatedAt},
@@ -119,7 +123,7 @@ func (r *messageRow) toMessage() *domain.Message {
 func (m *MessageRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Message, error) {
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
 		received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE id = ?`
 
@@ -176,7 +180,7 @@ func (m *MessageRepository) loadRecipients(ctx context.Context, msg *domain.Mess
 func (m *MessageRepository) GetByMessageID(ctx context.Context, messageID string) (*domain.Message, error) {
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
 		received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE message_id = ?`
 
@@ -262,7 +266,7 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 	} else {
 		sb.WriteString(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 			text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-			status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
+			status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
 			received_at, sent_at, created_at, updated_at FROM messages WHERE 1=1`)
 	}
 
@@ -471,9 +475,9 @@ func (m *MessageRepository) ListSummaries(ctx context.Context, filter *repositor
 func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) error {
 	query := `INSERT INTO messages (id, mailbox_id, message_id, from_name, from_address,
 		subject, text_body, html_body, raw_body, headers, content_type, size,
-		attachment_count, status, is_starred, is_spam, is_deleted, in_reply_to, references_list,
+		attachment_count, status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
 		received_at, sent_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo sql.NullString
 	var refsList, headersJSON sql.NullString
@@ -528,6 +532,8 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 		msg.IsStarred,
 		msg.IsSpam,
 		msg.IsDeleted,
+		msg.IsDraft,
+		msg.IsAnswered,
 		inReplyTo,
 		refsList,
 		msg.ReceivedAt.Time,
@@ -612,7 +618,7 @@ func (m *MessageRepository) Update(ctx context.Context, msg *domain.Message) err
 	query := `UPDATE messages SET mailbox_id = ?, message_id = ?, from_name = ?,
 		from_address = ?, subject = ?, text_body = ?, html_body = ?, headers = ?,
 		content_type = ?, size = ?, attachment_count = ?, status = ?, is_starred = ?,
-		is_spam = ?, is_deleted = ?, in_reply_to = ?, references_list = ?, received_at = ?, sent_at = ?,
+		is_spam = ?, is_deleted = ?, is_draft = ?, is_answered = ?, in_reply_to = ?, references_list = ?, received_at = ?, sent_at = ?,
 		updated_at = ? WHERE id = ?`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo sql.NullString
@@ -666,6 +672,8 @@ func (m *MessageRepository) Update(ctx context.Context, msg *domain.Message) err
 		msg.IsStarred,
 		msg.IsSpam,
 		msg.IsDeleted,
+		msg.IsDraft,
+		msg.IsAnswered,
 		inReplyTo,
 		refsList,
 		msg.ReceivedAt.Time,
@@ -1007,6 +1015,38 @@ func (m *MessageRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) e
 	return nil
 }
 
+func (m *MessageRepository) MarkAsDraft(ctx context.Context, id domain.ID) error {
+	return m.setBoolFlag(ctx, id, "is_draft", true)
+}
+
+func (m *MessageRepository) UnmarkAsDraft(ctx context.Context, id domain.ID) error {
+	return m.setBoolFlag(ctx, id, "is_draft", false)
+}
+
+func (m *MessageRepository) MarkAsAnswered(ctx context.Context, id domain.ID) error {
+	return m.setBoolFlag(ctx, id, "is_answered", true)
+}
+
+func (m *MessageRepository) UnmarkAsAnswered(ctx context.Context, id domain.ID) error {
+	return m.setBoolFlag(ctx, id, "is_answered", false)
+}
+
+func (m *MessageRepository) setBoolFlag(ctx context.Context, id domain.ID, column string, value bool) error {
+	query := fmt.Sprintf("UPDATE messages SET %s = ?, updated_at = ? WHERE id = ?", column)
+	result, err := m.repo.db().ExecContext(ctx, query, value, time.Now().UTC(), string(id))
+	if err != nil {
+		return fmt.Errorf("failed to set %s: %w", column, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
+	return nil
+}
+
 // MoveToMailbox moves a message to a different mailbox.
 func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, targetMailboxID domain.ID) error {
 	msg, err := m.GetByID(ctx, id)
@@ -1116,7 +1156,7 @@ func (m *MessageRepository) GetThread(ctx context.Context, id domain.ID) ([]*dom
 
 	query := fmt.Sprintf(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
 		received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE message_id IN (%s) OR in_reply_to IN (%s)
 		ORDER BY received_at ASC`,
@@ -1154,7 +1194,7 @@ func (m *MessageRepository) GetReplies(ctx context.Context, id domain.ID) ([]*do
 
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, is_deleted, in_reply_to, references_list, 
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, in_reply_to, references_list,
 		received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE in_reply_to = ? ORDER BY received_at ASC`
 

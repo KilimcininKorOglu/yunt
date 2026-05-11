@@ -65,8 +65,13 @@ func NewFlagSetFromMessage(msg *domain.Message) *FlagSet {
 		fs.Add(imap.FlagDeleted)
 	}
 
-	// \Answered - simplified check using InReplyTo
-	if msg.InReplyTo != "" {
+	// \Draft
+	if msg.IsDraft {
+		fs.Add(imap.FlagDraft)
+	}
+
+	// \Answered
+	if msg.IsAnswered {
 		fs.Add(imap.FlagAnswered)
 	}
 
@@ -220,6 +225,36 @@ func (fc *FlagChange) IsNowDeleted() bool {
 // IsNowUndeleted returns true if the message was unmarked as deleted.
 func (fc *FlagChange) IsNowUndeleted() bool {
 	return fc.OldFlags.Has(imap.FlagDeleted) && !fc.NewFlags.Has(imap.FlagDeleted)
+}
+
+// DraftChanged returns true if the \Draft flag changed.
+func (fc *FlagChange) DraftChanged() bool {
+	return fc.OldFlags.Has(imap.FlagDraft) != fc.NewFlags.Has(imap.FlagDraft)
+}
+
+// IsNowDraft returns true if the message was marked as draft.
+func (fc *FlagChange) IsNowDraft() bool {
+	return !fc.OldFlags.Has(imap.FlagDraft) && fc.NewFlags.Has(imap.FlagDraft)
+}
+
+// IsNowUndraft returns true if the message was unmarked as draft.
+func (fc *FlagChange) IsNowUndraft() bool {
+	return fc.OldFlags.Has(imap.FlagDraft) && !fc.NewFlags.Has(imap.FlagDraft)
+}
+
+// AnsweredChanged returns true if the \Answered flag changed.
+func (fc *FlagChange) AnsweredChanged() bool {
+	return fc.OldFlags.Has(imap.FlagAnswered) != fc.NewFlags.Has(imap.FlagAnswered)
+}
+
+// IsNowAnswered returns true if the message was marked as answered.
+func (fc *FlagChange) IsNowAnswered() bool {
+	return !fc.OldFlags.Has(imap.FlagAnswered) && fc.NewFlags.Has(imap.FlagAnswered)
+}
+
+// IsNowUnanswered returns true if the message was unmarked as answered.
+func (fc *FlagChange) IsNowUnanswered() bool {
+	return fc.OldFlags.Has(imap.FlagAnswered) && !fc.NewFlags.Has(imap.FlagAnswered)
 }
 
 // IsStandardFlag returns true if the flag is one of the standard IMAP system flags.

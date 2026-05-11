@@ -105,6 +105,18 @@ type MessageRepository interface {
 	// UnmarkAsDeleted removes the \Deleted flag from a message.
 	UnmarkAsDeleted(ctx context.Context, id domain.ID) error
 
+	// MarkAsDraft sets the \Draft flag on a message.
+	MarkAsDraft(ctx context.Context, id domain.ID) error
+
+	// UnmarkAsDraft removes the \Draft flag from a message.
+	UnmarkAsDraft(ctx context.Context, id domain.ID) error
+
+	// MarkAsAnswered sets the \Answered flag on a message.
+	MarkAsAnswered(ctx context.Context, id domain.ID) error
+
+	// UnmarkAsAnswered removes the \Answered flag from a message.
+	UnmarkAsAnswered(ctx context.Context, id domain.ID) error
+
 	// MoveToMailbox moves a message to a different mailbox.
 	// This updates statistics for both source and destination mailboxes.
 	// Returns domain.ErrNotFound if the message or target mailbox does not exist.

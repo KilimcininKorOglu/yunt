@@ -409,6 +409,34 @@ func (r *mockMsgRepo) UnmarkAsDeleted(_ context.Context, id domain.ID) error {
 	return nil
 }
 
+func (r *mockMsgRepo) MarkAsDraft(_ context.Context, id domain.ID) error {
+	if _, ok := r.messages[id]; !ok {
+		return domain.NewNotFoundError("message", id.String())
+	}
+	return nil
+}
+
+func (r *mockMsgRepo) UnmarkAsDraft(_ context.Context, id domain.ID) error {
+	if _, ok := r.messages[id]; !ok {
+		return domain.NewNotFoundError("message", id.String())
+	}
+	return nil
+}
+
+func (r *mockMsgRepo) MarkAsAnswered(_ context.Context, id domain.ID) error {
+	if _, ok := r.messages[id]; !ok {
+		return domain.NewNotFoundError("message", id.String())
+	}
+	return nil
+}
+
+func (r *mockMsgRepo) UnmarkAsAnswered(_ context.Context, id domain.ID) error {
+	if _, ok := r.messages[id]; !ok {
+		return domain.NewNotFoundError("message", id.String())
+	}
+	return nil
+}
+
 func (r *mockMsgRepo) MoveToMailbox(_ context.Context, id domain.ID, targetID domain.ID) error {
 	if m, ok := r.messages[id]; ok {
 		m.MailboxID = targetID

@@ -241,6 +241,48 @@ func (h *StoreHandler) persistFlagChanges(ctx context.Context, msg *domain.Messa
 		}
 	}
 
+	// Handle \Draft flag changes
+	if change.DraftChanged() {
+		if change.IsNowDraft() {
+			if err := h.repo.Messages().MarkAsDraft(ctx, msg.ID); err != nil {
+				return &imap.Error{
+					Type: imap.StatusResponseTypeNo,
+					Text: "Failed to mark message as draft",
+				}
+			}
+			msg.IsDraft = true
+		} else if change.IsNowUndraft() {
+			if err := h.repo.Messages().UnmarkAsDraft(ctx, msg.ID); err != nil {
+				return &imap.Error{
+					Type: imap.StatusResponseTypeNo,
+					Text: "Failed to unmark message as draft",
+				}
+			}
+			msg.IsDraft = false
+		}
+	}
+
+	// Handle \Answered flag changes
+	if change.AnsweredChanged() {
+		if change.IsNowAnswered() {
+			if err := h.repo.Messages().MarkAsAnswered(ctx, msg.ID); err != nil {
+				return &imap.Error{
+					Type: imap.StatusResponseTypeNo,
+					Text: "Failed to mark message as answered",
+				}
+			}
+			msg.IsAnswered = true
+		} else if change.IsNowUnanswered() {
+			if err := h.repo.Messages().UnmarkAsAnswered(ctx, msg.ID); err != nil {
+				return &imap.Error{
+					Type: imap.StatusResponseTypeNo,
+					Text: "Failed to unmark message as answered",
+				}
+			}
+			msg.IsAnswered = false
+		}
+	}
+
 	return nil
 }
 

@@ -47,6 +47,8 @@ type messageDocument struct {
 	IsStarred       bool                   `bson:"isStarred"`
 	IsSpam          bool                   `bson:"isSpam"`
 	IsDeleted       bool                   `bson:"isDeleted"`
+	IsDraft         bool                   `bson:"isDraft"`
+	IsAnswered      bool                   `bson:"isAnswered"`
 	InReplyTo       string                 `bson:"inReplyTo,omitempty"`
 	References      []string               `bson:"references,omitempty"`
 	ReceivedAt      time.Time              `bson:"receivedAt"`
@@ -84,6 +86,8 @@ func (m *MessageRepository) toDocument(msg *domain.Message) *messageDocument {
 		IsStarred:       msg.IsStarred,
 		IsSpam:          msg.IsSpam,
 		IsDeleted:       msg.IsDeleted,
+		IsDraft:         msg.IsDraft,
+		IsAnswered:      msg.IsAnswered,
 		InReplyTo:       msg.InReplyTo,
 		References:      msg.References,
 		ReceivedAt:      msg.ReceivedAt.Time,
@@ -145,6 +149,8 @@ func (m *MessageRepository) toDomain(doc *messageDocument) *domain.Message {
 		IsStarred:       doc.IsStarred,
 		IsSpam:          doc.IsSpam,
 		IsDeleted:       doc.IsDeleted,
+		IsDraft:         doc.IsDraft,
+		IsAnswered:      doc.IsAnswered,
 		InReplyTo:       doc.InReplyTo,
 		References:      doc.References,
 		ReceivedAt:      domain.Timestamp{Time: doc.ReceivedAt},
@@ -1043,6 +1049,40 @@ func (m *MessageRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) e
 	result, err := m.collection().UpdateOne(ctx, filter, update)
 	if err != nil {
 		return fmt.Errorf("failed to unmark message as deleted: %w", err)
+	}
+
+	if result.MatchedCount == 0 {
+		return domain.NewNotFoundError("message", string(id))
+	}
+
+	return nil
+}
+
+func (m *MessageRepository) MarkAsDraft(ctx context.Context, id domain.ID) error {
+	return m.setBoolField(ctx, id, "isDraft", true)
+}
+
+func (m *MessageRepository) UnmarkAsDraft(ctx context.Context, id domain.ID) error {
+	return m.setBoolField(ctx, id, "isDraft", false)
+}
+
+func (m *MessageRepository) MarkAsAnswered(ctx context.Context, id domain.ID) error {
+	return m.setBoolField(ctx, id, "isAnswered", true)
+}
+
+func (m *MessageRepository) UnmarkAsAnswered(ctx context.Context, id domain.ID) error {
+	return m.setBoolField(ctx, id, "isAnswered", false)
+}
+
+func (m *MessageRepository) setBoolField(ctx context.Context, id domain.ID, field string, value bool) error {
+	ctx = m.repo.getSessionContext(ctx)
+
+	filter := bson.M{"_id": string(id)}
+	update := bson.M{"$set": bson.M{field: value, "updatedAt": time.Now().UTC()}}
+
+	result, err := m.collection().UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to set %s: %w", field, err)
 	}
 
 	if result.MatchedCount == 0 {

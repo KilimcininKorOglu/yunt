@@ -69,9 +69,9 @@ func TestNewFlagSetFromMessage(t *testing.T) {
 		{
 			name: "replied message",
 			msg: &domain.Message{
-				Status:    domain.MessageUnread,
-				IsStarred: false,
-				InReplyTo: "<some-message-id@example.com>",
+				Status:     domain.MessageUnread,
+				IsStarred:  false,
+				IsAnswered: true,
 			},
 			expected: []imap.Flag{imap.FlagAnswered},
 		},
@@ -87,9 +87,9 @@ func TestNewFlagSetFromMessage(t *testing.T) {
 		{
 			name: "all flags",
 			msg: &domain.Message{
-				Status:    domain.MessageRead,
-				IsStarred: true,
-				InReplyTo: "<some-message-id@example.com>",
+				Status:     domain.MessageRead,
+				IsStarred:  true,
+				IsAnswered: true,
 			},
 			expected: []imap.Flag{imap.FlagSeen, imap.FlagFlagged, imap.FlagAnswered},
 		},

@@ -1,0 +1,7 @@
+-- +migrate Up
+ALTER TABLE messages ADD COLUMN is_draft BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE messages ADD COLUMN is_answered BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- +migrate Down
+ALTER TABLE messages DROP COLUMN IF EXISTS is_answered;
+ALTER TABLE messages DROP COLUMN IF EXISTS is_draft;

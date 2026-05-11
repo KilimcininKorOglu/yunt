@@ -302,6 +302,18 @@ func (m *messageMockRepository) MarkAsDeleted(ctx context.Context, id domain.ID)
 func (m *messageMockRepository) UnmarkAsDeleted(ctx context.Context, id domain.ID) error {
 	return nil
 }
+func (m *messageMockRepository) MarkAsDraft(ctx context.Context, id domain.ID) error {
+	return nil
+}
+func (m *messageMockRepository) UnmarkAsDraft(ctx context.Context, id domain.ID) error {
+	return nil
+}
+func (m *messageMockRepository) MarkAsAnswered(ctx context.Context, id domain.ID) error {
+	return nil
+}
+func (m *messageMockRepository) UnmarkAsAnswered(ctx context.Context, id domain.ID) error {
+	return nil
+}
 func (m *messageMockRepository) Search(ctx context.Context, searchOpts *repository.SearchOptions, filter *repository.MessageFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
 	return &repository.ListResult[*domain.Message]{}, nil
 }
