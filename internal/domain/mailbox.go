@@ -4,6 +4,16 @@ import (
 	"strings"
 )
 
+// MailboxType represents the type of a mailbox.
+type MailboxType string
+
+const (
+	// MailboxTypeSystem represents a built-in system mailbox (Inbox, Sent, Drafts, Trash, Spam).
+	MailboxTypeSystem MailboxType = "system"
+	// MailboxTypeCustom represents a user-created mailbox.
+	MailboxTypeCustom MailboxType = "custom"
+)
+
 // Mailbox represents an email mailbox in the Yunt mail server.
 // A mailbox is a container for messages and is associated with a user.
 // Multiple mailboxes can be created per user for organization.
@@ -29,6 +39,9 @@ type Mailbox struct {
 
 	// IsDefault indicates if this is the user's default mailbox.
 	IsDefault bool `json:"isDefault"`
+
+	// Type indicates whether this is a system or custom mailbox.
+	Type MailboxType `json:"type"`
 
 	// MessageCount is the total number of messages in the mailbox.
 	MessageCount int64 `json:"messageCount"`
@@ -59,6 +72,7 @@ func NewMailbox(id, userID ID, name, address string) *Mailbox {
 		Address:       address,
 		IsCatchAll:    false,
 		IsDefault:     false,
+		Type:          MailboxTypeCustom,
 		MessageCount:  0,
 		UnreadCount:   0,
 		TotalSize:     0,

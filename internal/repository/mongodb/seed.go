@@ -202,6 +202,7 @@ func (s *Seeder) createDefaultMailboxes(ctx context.Context, userID domain.ID, c
 		Description: "Default inbox for receiving emails",
 		IsDefault:   true,
 		IsCatchAll:  false,
+		Type:        domain.MailboxTypeSystem,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -307,6 +308,7 @@ func (s *Seeder) CreateUserWithMailbox(ctx context.Context, username, email, pas
 		Description: fmt.Sprintf("Default inbox for %s", username),
 		IsDefault:   true,
 		IsCatchAll:  false,
+		Type:        domain.MailboxTypeSystem,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}

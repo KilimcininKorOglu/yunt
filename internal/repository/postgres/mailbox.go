@@ -26,6 +26,7 @@ type mailboxRow struct {
 	Description   sql.NullString `db:"description"`
 	IsCatchAll    bool           `db:"is_catch_all"`
 	IsDefault     bool           `db:"is_default"`
+	Type          string         `db:"mailbox_type"`
 	MessageCount  int64          `db:"message_count"`
 	UnreadCount   int64          `db:"unread_count"`
 	TotalSize     int64          `db:"total_size"`
@@ -48,6 +49,7 @@ func (r *mailboxRow) toMailbox() *domain.Mailbox {
 		Address:       r.Address,
 		IsCatchAll:    r.IsCatchAll,
 		IsDefault:     r.IsDefault,
+		Type:          domain.MailboxType(r.Type),
 		MessageCount:  r.MessageCount,
 		UnreadCount:   r.UnreadCount,
 		TotalSize:     r.TotalSize,
@@ -65,8 +67,8 @@ func (r *mailboxRow) toMailbox() *domain.Mailbox {
 
 // GetByID retrieves a mailbox by its unique identifier.
 func (m *MailboxRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Mailbox, error) {
-	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, 
-		message_count, unread_count, total_size, retention_days, created_at, updated_at 
+	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
+		message_count, unread_count, total_size, retention_days, created_at, updated_at
 		FROM mailboxes WHERE id = $1`
 
 	var row mailboxRow
@@ -82,8 +84,8 @@ func (m *MailboxRepository) GetByID(ctx context.Context, id domain.ID) (*domain.
 
 // GetByAddress retrieves a mailbox by its email address.
 func (m *MailboxRepository) GetByAddress(ctx context.Context, address string) (*domain.Mailbox, error) {
-	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, 
-		message_count, unread_count, total_size, retention_days, created_at, updated_at 
+	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
+		message_count, unread_count, total_size, retention_days, created_at, updated_at
 		FROM mailboxes WHERE LOWER(address) = LOWER($1)`
 
 	var row mailboxRow
@@ -99,8 +101,8 @@ func (m *MailboxRepository) GetByAddress(ctx context.Context, address string) (*
 
 // GetCatchAll retrieves the catch-all mailbox for a domain.
 func (m *MailboxRepository) GetCatchAll(ctx context.Context, domainName string) (*domain.Mailbox, error) {
-	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, 
-		message_count, unread_count, total_size, retention_days, created_at, updated_at 
+	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
+		message_count, unread_count, total_size, retention_days, created_at, updated_at
 		FROM mailboxes WHERE is_catch_all = true AND LOWER(address) LIKE LOWER($1)`
 
 	pattern := "%@" + domainName
@@ -117,8 +119,8 @@ func (m *MailboxRepository) GetCatchAll(ctx context.Context, domainName string) 
 
 // GetDefault retrieves the default mailbox for a user.
 func (m *MailboxRepository) GetDefault(ctx context.Context, userID domain.ID) (*domain.Mailbox, error) {
-	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, 
-		message_count, unread_count, total_size, retention_days, created_at, updated_at 
+	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
+		message_count, unread_count, total_size, retention_days, created_at, updated_at
 		FROM mailboxes WHERE user_id = $1 AND is_default = true`
 
 	var row mailboxRow
@@ -178,7 +180,7 @@ func (m *MailboxRepository) buildListQuery(filter *repository.MailboxFilter, opt
 	if countOnly {
 		sb.WriteString("SELECT COUNT(*) FROM mailboxes WHERE 1=1")
 	} else {
-		sb.WriteString(`SELECT id, user_id, name, address, description, is_catch_all, is_default, 
+		sb.WriteString(`SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
 			message_count, unread_count, total_size, retention_days, created_at, updated_at FROM mailboxes WHERE 1=1`)
 	}
 
@@ -367,9 +369,9 @@ func (m *MailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox)
 		return domain.NewAlreadyExistsError("mailbox", "address", mailbox.Address)
 	}
 
-	query := `INSERT INTO mailboxes (id, user_id, name, address, description, is_catch_all, is_default, 
-		message_count, unread_count, total_size, retention_days, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+	query := `INSERT INTO mailboxes (id, user_id, name, address, description, is_catch_all, is_default,
+		message_count, unread_count, total_size, retention_days, created_at, updated_at, mailbox_type)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 
 	var description sql.NullString
 	if mailbox.Description != "" {
@@ -390,6 +392,7 @@ func (m *MailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox)
 		mailbox.RetentionDays,
 		mailbox.CreatedAt.Time,
 		mailbox.UpdatedAt.Time,
+		string(mailbox.Type),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create mailbox: %w", err)
@@ -408,9 +411,9 @@ func (m *MailboxRepository) Update(ctx context.Context, mailbox *domain.Mailbox)
 		return domain.NewNotFoundError("mailbox", string(mailbox.ID))
 	}
 
-	query := `UPDATE mailboxes SET user_id = $1, name = $2, address = $3, description = $4, 
-		is_catch_all = $5, is_default = $6, message_count = $7, unread_count = $8, 
-		total_size = $9, retention_days = $10, updated_at = $11 WHERE id = $12`
+	query := `UPDATE mailboxes SET user_id = $1, name = $2, address = $3, description = $4,
+		is_catch_all = $5, is_default = $6, mailbox_type = $7, message_count = $8, unread_count = $9,
+		total_size = $10, retention_days = $11, updated_at = $12 WHERE id = $13`
 
 	var description sql.NullString
 	if mailbox.Description != "" {
@@ -424,6 +427,7 @@ func (m *MailboxRepository) Update(ctx context.Context, mailbox *domain.Mailbox)
 		description,
 		mailbox.IsCatchAll,
 		mailbox.IsDefault,
+		string(mailbox.Type),
 		mailbox.MessageCount,
 		mailbox.UnreadCount,
 		mailbox.TotalSize,

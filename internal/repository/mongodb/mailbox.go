@@ -29,6 +29,7 @@ type mailboxDocument struct {
 	Description   string    `bson:"description,omitempty"`
 	IsCatchAll    bool      `bson:"isCatchAll"`
 	IsDefault     bool      `bson:"isDefault"`
+	Type          string    `bson:"type"`
 	MessageCount  int64     `bson:"messageCount"`
 	UnreadCount   int64     `bson:"unreadCount"`
 	TotalSize     int64     `bson:"totalSize"`
@@ -57,6 +58,7 @@ func (m *MailboxRepository) toDocument(mailbox *domain.Mailbox) *mailboxDocument
 		Description:   mailbox.Description,
 		IsCatchAll:    mailbox.IsCatchAll,
 		IsDefault:     mailbox.IsDefault,
+		Type:          string(mailbox.Type),
 		MessageCount:  mailbox.MessageCount,
 		UnreadCount:   mailbox.UnreadCount,
 		TotalSize:     mailbox.TotalSize,
@@ -76,6 +78,7 @@ func (m *MailboxRepository) toDomain(doc *mailboxDocument) *domain.Mailbox {
 		Description:   doc.Description,
 		IsCatchAll:    doc.IsCatchAll,
 		IsDefault:     doc.IsDefault,
+		Type:          domain.MailboxType(doc.Type),
 		MessageCount:  doc.MessageCount,
 		UnreadCount:   doc.UnreadCount,
 		TotalSize:     doc.TotalSize,
