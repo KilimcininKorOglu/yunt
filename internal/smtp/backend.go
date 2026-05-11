@@ -78,6 +78,7 @@ func (b *Backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	// Check rate limits before accepting connection
 	if b.server.rateLimiter != nil {
 		if err := b.server.rateLimiter.CheckConnection(context.Background(), remoteAddr); err != nil {
+			b.server.rateLimiter.applyBackoff(extractIP(remoteAddr))
 			b.server.stats.RateLimitRejected()
 			b.server.logger.Warn().
 				Str("remoteAddr", remoteAddr).

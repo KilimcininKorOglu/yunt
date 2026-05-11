@@ -89,6 +89,9 @@ type RateLimiter struct {
 	// authFailures tracks authentication failures per IP in the current minute window.
 	authFailures map[string]*rateLimitEntry
 
+	// violations tracks repeated rate limit violations per IP for backoff calculation.
+	violations map[string]*rateLimitEntry
+
 	// stopChan signals the cleanup goroutine to stop.
 	stopChan chan struct{}
 }
@@ -114,6 +117,7 @@ func NewRateLimiter(config *RateLimitConfig, logger zerolog.Logger) *RateLimiter
 		messagesPerConnection: make(map[string]int),
 		userMessageCount:      make(map[string]*rateLimitEntry),
 		authFailures:          make(map[string]*rateLimitEntry),
+		violations:            make(map[string]*rateLimitEntry),
 		stopChan:              make(chan struct{}),
 	}
 
@@ -163,6 +167,13 @@ func (rl *RateLimiter) cleanup() {
 	for ip, entry := range rl.connectionRate {
 		if now.After(entry.windowEnd) {
 			delete(rl.connectionRate, ip)
+		}
+	}
+
+	// Clean up violations
+	for ip, entry := range rl.violations {
+		if now.After(entry.windowEnd) {
+			delete(rl.violations, ip)
 		}
 	}
 
@@ -545,5 +556,53 @@ func (rl *RateLimiter) OnUserMessageSent(username string) {
 		}
 	} else {
 		entry.count++
+	}
+}
+
+// RecordViolation records a rate limit violation for backoff calculation.
+func (rl *RateLimiter) RecordViolation(ip string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	entry, exists := rl.violations[ip]
+
+	if !exists || now.After(entry.windowEnd) {
+		rl.violations[ip] = &rateLimitEntry{
+			count:     1,
+			windowEnd: now.Add(10 * time.Minute),
+		}
+	} else {
+		entry.count++
+	}
+}
+
+// GetBackoff returns the backoff duration for a violating IP.
+func (rl *RateLimiter) GetBackoff(ip string) time.Duration {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+
+	entry, exists := rl.violations[ip]
+	if !exists || time.Now().After(entry.windowEnd) {
+		return 0
+	}
+
+	delay := time.Duration(1<<uint(entry.count-1)) * time.Second
+	if delay > 30*time.Second {
+		delay = 30 * time.Second
+	}
+	return delay
+}
+
+// applyBackoff sleeps for the calculated backoff duration.
+func (rl *RateLimiter) applyBackoff(ip string) {
+	rl.RecordViolation(ip)
+	backoff := rl.GetBackoff(ip)
+	if backoff > 0 {
+		rl.logger.Debug().
+			Str("ip", ip).
+			Dur("backoff", backoff).
+			Msg("applying rate limit backoff")
+		time.Sleep(backoff)
 	}
 }

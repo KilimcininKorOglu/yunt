@@ -121,6 +121,7 @@ func (s *Session) createPlainServer(authenticator *Authenticator) sasl.Server {
 		}
 
 		if s.backend.server.rateLimiter != nil && s.backend.server.rateLimiter.IsAuthBlocked(s.remoteAddr) {
+			s.backend.server.rateLimiter.applyBackoff(extractIP(s.remoteAddr))
 			return &smtp.SMTPError{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Too many authentication failures, try again later"}
 		}
 
@@ -144,6 +145,7 @@ func (s *Session) createPlainServer(authenticator *Authenticator) sasl.Server {
 func (s *Session) createLoginServer(authenticator *Authenticator) sasl.Server {
 	return NewLoginServer(func(username, password string) error {
 		if s.backend.server.rateLimiter != nil && s.backend.server.rateLimiter.IsAuthBlocked(s.remoteAddr) {
+			s.backend.server.rateLimiter.applyBackoff(extractIP(s.remoteAddr))
 			return &smtp.SMTPError{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Too many authentication failures, try again later"}
 		}
 
@@ -310,6 +312,7 @@ func (s *Session) Data(r io.Reader) error {
 	// Check rate limits before accepting message
 	if s.backend.server.rateLimiter != nil {
 		if err := s.backend.server.rateLimiter.CheckMessage(s.ctx, s.remoteAddr); err != nil {
+			s.backend.server.rateLimiter.applyBackoff(extractIP(s.remoteAddr))
 			s.backend.server.stats.RateLimitRejected()
 			s.logger.Warn().Err(err).Str("from", s.from).Msg("message rejected by rate limiter")
 			return err
