@@ -112,6 +112,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	webhookService := service.NewWebhookService(repo, nil)
 	userService.WithWebhookService(webhookService)
 	notifyService := service.NewNotifyService()
+	messageService.WithNotifyService(notifyService)
 
 	// Context for coordinated shutdown
 	ctx, cancel := context.WithCancel(context.Background())

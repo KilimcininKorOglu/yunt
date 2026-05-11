@@ -26,9 +26,10 @@ type IDGenerator interface {
 // It coordinates between message, attachment, and mailbox repositories to ensure
 // consistent storage operations and proper statistics updates.
 type MessageService struct {
-	repo        repository.Repository
-	idGenerator IDGenerator
-	parser      *parser.Parser
+	repo          repository.Repository
+	idGenerator   IDGenerator
+	parser        *parser.Parser
+	notifyService *NotifyService
 }
 
 // NewMessageService creates a new MessageService with the given dependencies.
@@ -38,6 +39,11 @@ func NewMessageService(repo repository.Repository, idGenerator IDGenerator) *Mes
 		idGenerator: idGenerator,
 		parser:      parser.NewParser(),
 	}
+}
+
+// WithNotifyService sets the notification service for real-time updates.
+func (s *MessageService) WithNotifyService(ns *NotifyService) {
+	s.notifyService = ns
 }
 
 // WithParser sets a custom parser for the service.
@@ -135,6 +141,16 @@ func (s *MessageService) StoreMessage(ctx context.Context, input *StoreMessageIn
 			Op:      "store",
 			Message: "failed to store message",
 			Err:     err,
+		}
+	}
+
+	if s.notifyService != nil && result != nil && !result.IsDuplicate {
+		count, err := s.repo.Messages().CountByMailbox(ctx, result.Message.MailboxID)
+		if err == nil {
+			s.notifyService.NotifyNewMessage(
+				result.Message.MailboxID, domain.ID(""), result.Message.ID,
+				uint32(count), uint32(count), uint32(count),
+			)
 		}
 	}
 
