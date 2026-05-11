@@ -11,10 +11,29 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var defaultConfigPaths = []string{
+	"./yunt.yaml",
+	"/etc/yunt/yunt.yaml",
+}
+
+func findConfigFile() string {
+	for _, path := range defaultConfigPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
 // Load loads configuration from a YAML file and applies environment variable overrides.
-// If the file path is empty, only environment variables and defaults are used.
+// If the file path is empty, it searches default paths (./yunt.yaml, /etc/yunt/yunt.yaml).
+// If no config file is found, only environment variables and defaults are used.
 func Load(filePath string) (*Config, error) {
 	cfg := Default()
+
+	if filePath == "" {
+		filePath = findConfigFile()
+	}
 
 	if filePath != "" {
 		if err := loadFromFile(cfg, filePath); err != nil {
