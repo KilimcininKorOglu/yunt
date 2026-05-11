@@ -103,7 +103,7 @@ func TestServerStartAndShutdown(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Make a request to verify the server is running
-	resp, err := http.Get("http://127.0.0.1:18025/healthz")
+	resp, err := http.Get("http://127.0.0.1:18025/api/v1/version")
 	if err != nil {
 		t.Fatalf("failed to make request: %v", err)
 	}
