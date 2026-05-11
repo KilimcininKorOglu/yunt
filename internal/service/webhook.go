@@ -586,54 +586,16 @@ func (s *WebhookService) TriggerUserCreated(ctx context.Context, user *domain.Us
 	return s.TriggerEvent(ctx, domain.WebhookEventUserCreated, data)
 }
 
-// dispatchWebhook sends a webhook request and records the delivery.
+// dispatchWebhook sends a webhook request with retry and exponential backoff.
 func (s *WebhookService) dispatchWebhook(ctx context.Context, webhook *domain.Webhook, payload *WebhookPayload) {
-	deliveryID := s.idGenerator.Generate()
-	attemptNumber := webhook.RetryCount + 1
-
-	delivery := domain.NewWebhookDelivery(
-		deliveryID,
-		webhook.ID,
-		payload.Event,
-		"",
-		attemptNumber,
-	)
-
-	// Marshal payload
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
+		delivery := domain.NewWebhookDelivery(s.idGenerator.Generate(), webhook.ID, payload.Event, "", 1)
 		s.recordDeliveryFailure(ctx, webhook, delivery, 0, "", err, 0)
 		return
 	}
-	delivery.Payload = string(payloadBytes)
+	payloadStr := string(payloadBytes)
 
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook.URL, bytes.NewReader(payloadBytes))
-	if err != nil {
-		s.recordDeliveryFailure(ctx, webhook, delivery, 0, "", err, 0)
-		return
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Yunt-Webhook/1.0")
-	req.Header.Set("X-Webhook-ID", webhook.ID.String())
-	req.Header.Set("X-Webhook-Event", string(payload.Event))
-	req.Header.Set("X-Webhook-Delivery", deliveryID.String())
-
-	// Add signature if secret is configured
-	if webhook.Secret != "" {
-		signature := s.signPayload(payloadBytes, webhook.Secret)
-		req.Header.Set("X-Webhook-Signature", signature)
-		req.Header.Set("X-Webhook-Signature-256", "sha256="+signature)
-	}
-
-	// Add custom headers
-	for name, value := range webhook.Headers {
-		req.Header.Set(name, value)
-	}
-
-	// Create client with custom timeout
 	client := s.httpClient
 	if webhook.TimeoutSeconds > 0 {
 		client = &http.Client{
@@ -641,28 +603,83 @@ func (s *WebhookService) dispatchWebhook(ctx context.Context, webhook *domain.We
 		}
 	}
 
-	// Execute request
-	startTime := time.Now()
-	resp, err := client.Do(req)
-	duration := time.Since(startTime).Milliseconds()
+	maxAttempts := webhook.MaxRetries + 1
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
+			backoff := retryBackoff(attempt - 2)
+			s.logger.Info("retrying webhook delivery",
+				"webhookId", webhook.ID,
+				"attempt", attempt,
+				"backoff", backoff,
+			)
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return
+			}
+		}
 
-	if err != nil {
-		s.recordDeliveryFailure(ctx, webhook, delivery, 0, "", err, duration)
-		return
+		delivery := domain.NewWebhookDelivery(s.idGenerator.Generate(), webhook.ID, payload.Event, payloadStr, attempt)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook.URL, bytes.NewReader(payloadBytes))
+		if err != nil {
+			s.recordDeliveryFailure(ctx, webhook, delivery, 0, "", err, 0)
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Yunt-Webhook/1.0")
+		req.Header.Set("X-Webhook-ID", webhook.ID.String())
+		req.Header.Set("X-Webhook-Event", string(payload.Event))
+		req.Header.Set("X-Webhook-Delivery", delivery.ID.String())
+
+		if webhook.Secret != "" {
+			signature := s.signPayload(payloadBytes, webhook.Secret)
+			req.Header.Set("X-Webhook-Signature", signature)
+			req.Header.Set("X-Webhook-Signature-256", "sha256="+signature)
+		}
+
+		for name, value := range webhook.Headers {
+			req.Header.Set(name, value)
+		}
+
+		startTime := time.Now()
+		resp, err := client.Do(req)
+		duration := time.Since(startTime).Milliseconds()
+
+		if err != nil {
+			s.recordDeliveryFailure(ctx, webhook, delivery, 0, "", err, duration)
+			if attempt < maxAttempts {
+				continue
+			}
+			return
+		}
+
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		resp.Body.Close()
+		responseBody := string(body)
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			s.recordDeliverySuccess(ctx, webhook, delivery, resp.StatusCode, responseBody, duration)
+			return
+		}
+
+		httpErr := fmt.Errorf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+		s.recordDeliveryFailure(ctx, webhook, delivery, resp.StatusCode, responseBody, httpErr, duration)
+
+		// 4xx client errors are not retryable
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return
+		}
 	}
-	defer resp.Body.Close()
+}
 
-	// Read response body (limit to 64KB)
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-	responseBody := string(body)
-
-	// Record result
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		s.recordDeliverySuccess(ctx, webhook, delivery, resp.StatusCode, responseBody, duration)
-	} else {
-		err := fmt.Errorf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
-		s.recordDeliveryFailure(ctx, webhook, delivery, resp.StatusCode, responseBody, err, duration)
+func retryBackoff(attempt int) time.Duration {
+	delay := time.Duration(1<<uint(attempt)) * time.Second
+	if delay > 30*time.Second {
+		delay = 30 * time.Second
 	}
+	return delay
 }
 
 // signPayload creates an HMAC-SHA256 signature for the payload.
