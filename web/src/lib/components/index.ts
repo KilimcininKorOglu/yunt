@@ -11,5 +11,6 @@ export { default as MessageHeader } from './MessageHeader.svelte';
 export { default as MessageBody } from './MessageBody.svelte';
 export { default as AttachmentList } from './AttachmentList.svelte';
 export { default as MessageActions } from './MessageActions.svelte';
+export { default as Sidebar } from './Sidebar.svelte';
 export { default as WebhookForm } from './WebhookForm.svelte';
 export { default as WebhookList } from './WebhookList.svelte';
