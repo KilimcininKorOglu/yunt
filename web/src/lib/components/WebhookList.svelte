@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getWebhooksApi } from '$lib/api';
-	import type { Webhook, WebhookStatus } from '$lib/api';
+	import type { Webhook, WebhookDelivery, WebhookStatus } from '$lib/api';
 
 	interface Props {
 		/** Callback when edit is requested */
@@ -22,6 +22,9 @@
 	let deletingId = $state<string | null>(null);
 	let togglingId = $state<string | null>(null);
 	let testResult = $state<{ webhookId: string; success: boolean; message: string } | null>(null);
+	let expandedId = $state<string | null>(null);
+	let deliveries = $state<WebhookDelivery[]>([]);
+	let deliveriesLoading = $state(false);
 
 	// Load webhooks on mount
 	$effect(() => {
@@ -120,6 +123,23 @@
 	function formatDate(timestamp: string | undefined): string {
 		if (!timestamp) return 'Never';
 		return new Date(timestamp).toLocaleString();
+	}
+
+	async function toggleDeliveries(webhook: Webhook): Promise<void> {
+		if (expandedId === webhook.id) {
+			expandedId = null;
+			return;
+		}
+		expandedId = webhook.id;
+		deliveriesLoading = true;
+		try {
+			const response = await webhooksApi.listDeliveries(webhook.id, { pageSize: 10 });
+			deliveries = response.items;
+		} catch {
+			deliveries = [];
+		} finally {
+			deliveriesLoading = false;
+		}
 	}
 
 	function clearTestResult(): void {
@@ -494,6 +514,46 @@
 								{/if}
 							</button>
 						</div>
+					</div>
+
+					<!-- Delivery History -->
+					<div class="mt-3 border-t border-secondary-100 pt-2">
+						<button
+							class="text-xs text-secondary-500 hover:text-secondary-700 flex items-center gap-1"
+							onclick={() => toggleDeliveries(webhook)}
+						>
+							<svg class="h-3.5 w-3.5 transition-transform {expandedId === webhook.id ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+							</svg>
+							Delivery History
+						</button>
+
+						{#if expandedId === webhook.id}
+							<div class="mt-2">
+								{#if deliveriesLoading}
+									<div class="flex items-center justify-center py-4">
+										<div class="h-5 w-5 animate-spin rounded-full border-2 border-primary-200 border-t-primary-600"></div>
+									</div>
+								{:else if deliveries.length === 0}
+									<p class="text-xs text-secondary-400 py-2">No deliveries yet.</p>
+								{:else}
+									<div class="space-y-1.5 max-h-48 overflow-y-auto">
+										{#each deliveries as delivery (delivery.id)}
+											<div class="flex items-center gap-2 text-xs rounded px-2 py-1.5 {delivery.success ? 'bg-green-50' : 'bg-red-50'}">
+												<span class="inline-block h-2 w-2 rounded-full flex-shrink-0 {delivery.success ? 'bg-green-500' : 'bg-red-500'}"></span>
+												<span class="text-secondary-600 font-medium">{delivery.event}</span>
+												<span class="text-secondary-400">{delivery.statusCode}</span>
+												<span class="text-secondary-400">{delivery.duration}ms</span>
+												{#if delivery.error}
+													<span class="text-red-500 truncate">{delivery.error}</span>
+												{/if}
+												<span class="ml-auto text-secondary-400 flex-shrink-0">{formatDate(delivery.createdAt)}</span>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				</div>
 			{/each}
