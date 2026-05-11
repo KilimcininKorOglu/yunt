@@ -90,11 +90,20 @@ func NewRouter(cfg RouterConfig) *Router {
 	// Recovery middleware
 	e.Use(middleware.RecoveryWithLogger(cfg.Logger))
 
+	// Security headers middleware (HSTS disabled — dev server runs on plain HTTP)
+	secCfg := middleware.DefaultSecurityConfig()
+	secCfg.Logger = cfg.Logger
+	secCfg.StrictTransportSecurity = ""
+	e.Use(middleware.Security(secCfg))
+
 	// CORS middleware
 	e.Use(middleware.CORSWithOrigins(cfg.CORSOrigins))
 
 	// Logger middleware (skip health check endpoints to reduce noise)
 	e.Use(middleware.LoggerWithConfig(cfg.Logger, "/health", "/healthz", "/ready"))
+
+	// Rate limiting middleware
+	e.Use(middleware.RateLimitWithLogger(cfg.Logger))
 
 	// Create router wrapper
 	router := &Router{Echo: e}
