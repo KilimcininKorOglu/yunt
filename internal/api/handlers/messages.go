@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -117,6 +118,18 @@ func (h *MessageHandler) ListMessages(c echo.Context) error {
 	if err != nil {
 		return api.FromError(c, err)
 	}
+
+	// ETag based on total count + latest message timestamp
+	var latestTS int64
+	if len(result.Items) > 0 {
+		latestTS = result.Items[0].ReceivedAt.Unix()
+	}
+	etag := fmt.Sprintf(`"%d-%d"`, result.Total, latestTS)
+
+	if match := c.Request().Header.Get("If-None-Match"); match == etag {
+		return c.NoContent(http.StatusNotModified)
+	}
+	c.Response().Header().Set("ETag", etag)
 
 	// Determine page and perPage from options
 	page := 1

@@ -7,7 +7,7 @@
 import { getMessagesApi } from '$lib/api';
 import { messagesStore } from '$stores/messages';
 import { notificationsStore } from '$stores/notifications';
-import type { Message, PaginatedData } from '$lib/api/types';
+import type { Message } from '$lib/api/types';
 
 // ============================================================================
 // Types
@@ -58,6 +58,7 @@ function createPollingService() {
 	let lastPollAt = $state<number | null>(null);
 	let lastMessageTimestamp = $state<string | null>(null);
 	let lastError = $state<string | null>(null);
+	let lastEtag = $state<string | null>(null);
 
 	// Internal state
 	let pollingTimer: ReturnType<typeof setInterval> | null = null;
@@ -139,24 +140,26 @@ function createPollingService() {
 		lastError = null;
 
 		try {
-			// Fetch latest messages
-			const response: PaginatedData<Message> = await messagesApi.list({
-				page: 1,
-				pageSize: 10,
-				sort: 'receivedAt',
-				order: 'desc'
-			});
+			const result = await messagesApi.listWithEtag(
+				{ page: 1, pageSize: 10, sort: 'receivedAt', order: 'desc' },
+				lastEtag
+			);
 
-			const latestMessages = response.items;
+			lastPollAt = Date.now();
 
-			// Check for new messages since last poll
+			if (result.notModified) {
+				return;
+			}
+
+			lastEtag = result.etag;
+			const latestMessages = result.data?.items ?? [];
+
 			if (lastMessageTimestamp && latestMessages.length > 0) {
 				const newMessages = latestMessages.filter(
 					(msg) => msg.receivedAt > lastMessageTimestamp!
 				);
 
 				if (newMessages.length > 0) {
-					// Notify about new messages
 					if (newMessages.length === 1) {
 						const msg = newMessages[0];
 						notificationsStore.notifyNewMessages(
@@ -168,22 +171,17 @@ function createPollingService() {
 						notificationsStore.notifyNewMessages(newMessages.length);
 					}
 
-					// Refresh the messages store to update the view
 					await messagesStore.refresh();
 				}
 			}
 
-			// Update last message timestamp
 			if (latestMessages.length > 0) {
 				lastMessageTimestamp = latestMessages[0].receivedAt;
 			}
 
-			// Optionally refresh mailbox counts
 			if (config.refreshMailboxes) {
 				await messagesStore.loadMailboxes();
 			}
-
-			lastPollAt = Date.now();
 		} catch (err) {
 			lastError = err instanceof Error ? err.message : 'Failed to check for new messages';
 			console.error('Polling error:', lastError);
@@ -256,6 +254,7 @@ function createPollingService() {
 
 		// Clear state
 		lastMessageTimestamp = null;
+		lastEtag = null;
 	}
 
 	/**

@@ -55,6 +55,44 @@ export class MessagesApi {
 		return this.client.get<PaginatedData<Message>>('/api/v1/messages', { params });
 	}
 
+	async listWithEtag(
+		filter?: MessageListFilter,
+		etag?: string | null
+	): Promise<{ data: PaginatedData<Message> | null; etag: string | null; notModified: boolean }> {
+		const params = buildQueryParams({
+			mailboxId: filter?.mailboxId,
+			status: filter?.status,
+			isStarred: filter?.isStarred,
+			isSpam: filter?.isSpam,
+			hasAttachments: filter?.hasAttachments,
+			from: filter?.from,
+			to: filter?.to,
+			subject: filter?.subject,
+			receivedAfter: filter?.receivedAfter,
+			receivedBefore: filter?.receivedBefore,
+			page: filter?.page,
+			perPage: filter?.perPage ?? filter?.pageSize,
+			sort: filter?.sort,
+			order: filter?.order
+		});
+
+		const headers: Record<string, string> = {};
+		if (etag) headers['If-None-Match'] = etag;
+
+		const response = await this.client.rawRequest('GET', '/api/v1/messages', undefined, {
+			params,
+			headers
+		});
+
+		if (response.status === 304) {
+			return { data: null, etag: etag ?? null, notModified: true };
+		}
+
+		const json = await response.json();
+		const newEtag = response.headers.get('ETag');
+		return { data: json.data, etag: newEtag, notModified: false };
+	}
+
 	/**
 	 * Search messages
 	 * @param query Search query

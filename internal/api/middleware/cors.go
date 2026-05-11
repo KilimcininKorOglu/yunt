@@ -49,6 +49,7 @@ func DefaultCORSConfig() CORSConfig {
 		ExposeHeaders: []string{
 			echo.HeaderXRequestID,
 			"X-Total-Count",
+			"ETag",
 		},
 		AllowCredentials: false,
 		MaxAge:           86400, // 24 hours
