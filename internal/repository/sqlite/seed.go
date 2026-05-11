@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -107,10 +108,13 @@ func (s *Seeder) SeedWithConfig(ctx context.Context, config *SeedConfig) error {
 }
 
 // SeedFromFile seeds data from a JSON file.
-func (s *Seeder) SeedFromFile(_ context.Context, _ string) error {
-	// This would require file system access
-	// For embedded migrations, we use SeedFromReader instead
-	return fmt.Errorf("SeedFromFile is not implemented for SQLite; use SeedFromReader instead")
+func (s *Seeder) SeedFromFile(ctx context.Context, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open seed file: %w", err)
+	}
+	defer f.Close()
+	return s.SeedFromReader(ctx, f)
 }
 
 // SeedFromReader seeds data from a reader containing JSON configuration.
