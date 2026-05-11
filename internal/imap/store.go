@@ -16,14 +16,18 @@ type StoreHandler struct {
 	repo         repository.Repository
 	userID       domain.ID
 	selectedMbox *domain.Mailbox
+	notifyBridge *NotificationBridge
+	sessionID    string
 }
 
 // NewStoreHandler creates a new StoreHandler.
-func NewStoreHandler(repo repository.Repository, userID domain.ID, selectedMbox *domain.Mailbox) *StoreHandler {
+func NewStoreHandler(repo repository.Repository, userID domain.ID, selectedMbox *domain.Mailbox, bridge *NotificationBridge, sessionID string) *StoreHandler {
 	return &StoreHandler{
 		repo:         repo,
 		userID:       userID,
 		selectedMbox: selectedMbox,
+		notifyBridge: bridge,
+		sessionID:    sessionID,
 	}
 }
 
@@ -87,6 +91,20 @@ func (h *StoreHandler) Store(ctx context.Context, w *imapserver.FetchWriter, num
 	// Update mailbox unseen count if any \Seen flags changed
 	if err := h.updateMailboxUnseenCount(ctx, changes); err != nil {
 		return err
+	}
+
+	if h.notifyBridge != nil {
+		for _, change := range changes {
+			imapFlags := change.NewFlags.ToSlice()
+			flagStrs := make([]string, len(imapFlags))
+			for i, f := range imapFlags {
+				flagStrs[i] = string(f)
+			}
+			h.notifyBridge.NotifyFlagsChanged(
+				h.selectedMbox.ID, domain.ID(""), change.MessageID,
+				change.SeqNum, uint32(change.UID), flagStrs, h.sessionID,
+			)
+		}
 	}
 
 	return nil

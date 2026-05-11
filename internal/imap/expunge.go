@@ -16,14 +16,16 @@ type ExpungeHandler struct {
 	repo         repository.Repository
 	userID       domain.ID
 	selectedMbox *domain.Mailbox
+	notifyBridge *NotificationBridge
 }
 
 // NewExpungeHandler creates a new ExpungeHandler.
-func NewExpungeHandler(repo repository.Repository, userID domain.ID, selectedMbox *domain.Mailbox) *ExpungeHandler {
+func NewExpungeHandler(repo repository.Repository, userID domain.ID, selectedMbox *domain.Mailbox, bridge *NotificationBridge) *ExpungeHandler {
 	return &ExpungeHandler{
 		repo:         repo,
 		userID:       userID,
 		selectedMbox: selectedMbox,
+		notifyBridge: bridge,
 	}
 }
 
@@ -77,12 +79,15 @@ func (h *ExpungeHandler) Expunge(ctx context.Context, w *imapserver.ExpungeWrite
 
 		// Delete the message from the repository
 		if err := h.repo.Messages().Delete(ctx, msg.ID); err != nil {
-			// Log the error but continue with other messages
 			continue
 		}
 
 		// Write the EXPUNGE response for this message
 		w.WriteExpunge(seqNum)
+
+		if h.notifyBridge != nil {
+			h.notifyBridge.NotifyMessageExpunged(h.selectedMbox.ID, domain.ID(""), msg.ID, seqNum)
+		}
 	}
 
 	// Update mailbox statistics

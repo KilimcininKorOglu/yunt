@@ -536,11 +536,16 @@ func (s *Session) Expunge(w *imapserver.ExpungeWriter, uids *imap.UIDSet) error 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Create the expunge handler
+	// Create the expunge handler with notification bridge for IDLE updates
+	var expBridge *NotificationBridge
+	if im := s.server.IdleManager(); im != nil {
+		expBridge = im.GetNotificationBridge()
+	}
 	handler := NewExpungeHandler(
 		s.server.backend.Repository(),
 		s.userSession.User.ID,
 		s.userSession.SelectedMailbox,
+		expBridge,
 	)
 
 	// Execute the expunge
@@ -689,11 +694,17 @@ func (s *Session) Store(w *imapserver.FetchWriter, numSet imap.NumSet, flags *im
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Create the store handler
+	// Create the store handler with notification bridge for IDLE updates
+	var bridge *NotificationBridge
+	if im := s.server.IdleManager(); im != nil {
+		bridge = im.GetNotificationBridge()
+	}
 	handler := NewStoreHandler(
 		s.server.backend.Repository(),
 		s.userSession.User.ID,
 		s.userSession.SelectedMailbox,
+		bridge,
+		s.sessionID,
 	)
 
 	// Execute the store operation
