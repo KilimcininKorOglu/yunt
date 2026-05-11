@@ -155,6 +155,7 @@ func TestNewMailboxStatus(t *testing.T) {
 		MessageCount: 42,
 		UnreadCount:  5,
 		TotalSize:    1024000,
+		UIDNext:      43,
 		CreatedAt:    now,
 	}
 

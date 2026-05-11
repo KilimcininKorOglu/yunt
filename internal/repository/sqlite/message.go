@@ -39,6 +39,7 @@ type messageRow struct {
 	IsDeleted       bool           `db:"is_deleted"`
 	IsDraft         bool           `db:"is_draft"`
 	IsAnswered      bool           `db:"is_answered"`
+	IMAPUID         uint32         `db:"imap_uid"`
 	InReplyTo       sql.NullString `db:"in_reply_to"`
 	ReferencesList  sql.NullString `db:"references_list"`
 	ReceivedAt      time.Time      `db:"received_at"`
@@ -76,6 +77,7 @@ func (r *messageRow) toMessage() *domain.Message {
 		IsDeleted:       r.IsDeleted,
 		IsDraft:         r.IsDraft,
 		IsAnswered:      r.IsAnswered,
+		IMAPUID:         r.IMAPUID,
 		RawBody:         r.RawBody,
 		ReceivedAt:      domain.Timestamp{Time: r.ReceivedAt},
 		CreatedAt:       domain.Timestamp{Time: r.CreatedAt},
@@ -123,8 +125,8 @@ func (r *messageRow) toMessage() *domain.Message {
 func (m *MessageRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Message, error) {
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, in_reply_to, references_list, 
-		received_at, sent_at, created_at, updated_at 
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+		in_reply_to, references_list, received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE id = ?`
 
 	var row messageRow
@@ -180,8 +182,8 @@ func (m *MessageRepository) loadRecipients(ctx context.Context, msg *domain.Mess
 func (m *MessageRepository) GetByMessageID(ctx context.Context, messageID string) (*domain.Message, error) {
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, in_reply_to, references_list, 
-		received_at, sent_at, created_at, updated_at 
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+		in_reply_to, references_list, received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE message_id = ?`
 
 	var row messageRow
@@ -264,9 +266,10 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 	if countOnly {
 		sb.WriteString("SELECT COUNT(*) FROM messages WHERE 1=1")
 	} else {
-		sb.WriteString(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
-			text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-			status, is_starred, is_spam, in_reply_to, references_list, 
+		sb.WriteString(`SELECT id, mailbox_id, message_id, from_name, from_address, subject,
+			text_body, html_body, raw_body, headers, content_type, size, attachment_count,
+			status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+			in_reply_to, references_list,
 			received_at, sent_at, created_at, updated_at FROM messages WHERE 1=1`)
 	}
 
@@ -473,12 +476,21 @@ func (m *MessageRepository) ListSummaries(ctx context.Context, filter *repositor
 }
 
 // Create creates a new message.
+// If msg.IMAPUID is 0, it will be assigned automatically via IncrementMessageCount.
 func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) error {
+	if msg.IMAPUID == 0 {
+		assignedUID, err := m.repo.Mailboxes().IncrementMessageCount(ctx, msg.MailboxID, msg.Size)
+		if err != nil {
+			return fmt.Errorf("failed to assign IMAP UID: %w", err)
+		}
+		msg.IMAPUID = assignedUID
+	}
+
 	query := `INSERT INTO messages (id, mailbox_id, message_id, from_name, from_address,
 		subject, text_body, html_body, raw_body, headers, content_type, size,
 		attachment_count, status, is_starred, is_spam, is_deleted, is_draft, is_answered,
-		in_reply_to, references_list, received_at, sent_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		imap_uid, in_reply_to, references_list, received_at, sent_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo, refsList, headersJSON sql.NullString
 
@@ -534,6 +546,7 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 		msg.IsDeleted,
 		msg.IsDraft,
 		msg.IsAnswered,
+		msg.IMAPUID,
 		inReplyTo,
 		refsList,
 		msg.ReceivedAt.Time,
@@ -548,11 +561,6 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 	// Insert recipients
 	if err := m.saveRecipients(ctx, msg); err != nil {
 		return err
-	}
-
-	// Update mailbox stats
-	if err := m.repo.Mailboxes().IncrementMessageCount(ctx, msg.MailboxID, msg.Size); err != nil {
-		return fmt.Errorf("failed to update mailbox stats: %w", err)
 	}
 
 	return nil
@@ -1079,9 +1087,15 @@ func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, tar
 		return err
 	}
 
-	// Update target mailbox stats
-	if err := m.repo.Mailboxes().IncrementMessageCount(ctx, targetMailboxID, msg.Size); err != nil {
+	// Update target mailbox stats and assign new IMAP UID
+	newUID, err := m.repo.Mailboxes().IncrementMessageCount(ctx, targetMailboxID, msg.Size)
+	if err != nil {
 		return err
+	}
+
+	// Update the message's IMAP UID for the new mailbox
+	if _, err := m.repo.db().ExecContext(ctx, `UPDATE messages SET imap_uid = ? WHERE id = ?`, newUID, string(id)); err != nil {
+		return fmt.Errorf("failed to update IMAP UID after move: %w", err)
 	}
 
 	// Adjust unread count for target (IncrementMessageCount adds to unread, but message might be read)
@@ -1156,8 +1170,8 @@ func (m *MessageRepository) GetThread(ctx context.Context, id domain.ID) ([]*dom
 
 	query := fmt.Sprintf(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, in_reply_to, references_list, 
-		received_at, sent_at, created_at, updated_at 
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+		in_reply_to, references_list, received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE message_id IN (%s) OR in_reply_to IN (%s)
 		ORDER BY received_at ASC`,
 		strings.Join(placeholders, ","),
@@ -1194,8 +1208,8 @@ func (m *MessageRepository) GetReplies(ctx context.Context, id domain.ID) ([]*do
 
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
-		status, is_starred, is_spam, in_reply_to, references_list, 
-		received_at, sent_at, created_at, updated_at 
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+		in_reply_to, references_list, received_at, sent_at, created_at, updated_at 
 		FROM messages WHERE in_reply_to = ? ORDER BY received_at ASC`
 
 	var rows []messageRow
@@ -1594,6 +1608,30 @@ func (m *MessageRepository) GetRawBody(ctx context.Context, id domain.ID) ([]byt
 	}
 
 	return rawBody, nil
+}
+
+// GetByIMAPUID retrieves a message by its IMAP UID within a mailbox.
+func (m *MessageRepository) GetByIMAPUID(ctx context.Context, mailboxID domain.ID, uid uint32) (*domain.Message, error) {
+	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject,
+		text_body, html_body, raw_body, headers, content_type, size, attachment_count,
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+		in_reply_to, references_list, received_at, sent_at, created_at, updated_at
+		FROM messages WHERE mailbox_id = ? AND imap_uid = ?`
+
+	var row messageRow
+	if err := m.repo.db().GetContext(ctx, &row, query, string(mailboxID), uid); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.NewNotFoundError("message", fmt.Sprintf("mailbox=%s uid=%d", mailboxID, uid))
+		}
+		return nil, fmt.Errorf("failed to get message by IMAP UID: %w", err)
+	}
+
+	msg := row.toMessage()
+	if err := m.loadRecipients(ctx, msg); err != nil {
+		return nil, err
+	}
+
+	return msg, nil
 }
 
 // Ensure MessageRepository implements repository.MessageRepository

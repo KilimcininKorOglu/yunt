@@ -78,6 +78,9 @@ type Message struct {
 	// IsAnswered indicates if the message is marked with \Answered flag.
 	IsAnswered bool `json:"isAnswered"`
 
+	// IMAPUID is the persistent IMAP UID for this message within its mailbox.
+	IMAPUID uint32 `json:"imapUid,omitempty"`
+
 	// InReplyTo is the Message-ID of the message this is replying to.
 	InReplyTo string `json:"inReplyTo,omitempty"`
 

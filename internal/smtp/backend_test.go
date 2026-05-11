@@ -103,8 +103,8 @@ func (m *mockMailboxRepository) ClearCatchAll(ctx context.Context, id domain.ID)
 func (m *mockMailboxRepository) UpdateStats(ctx context.Context, id domain.ID, stats *repository.MailboxStatsUpdate) error {
 	return nil
 }
-func (m *mockMailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) error {
-	return nil
+func (m *mockMailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error) {
+	return 1, nil
 }
 func (m *mockMailboxRepository) DecrementMessageCount(ctx context.Context, id domain.ID, size int64, wasUnread bool) error {
 	return nil
@@ -343,6 +343,9 @@ func (m *mockMessageRepository) StoreRawBody(ctx context.Context, id domain.ID, 
 }
 func (m *mockMessageRepository) GetRawBody(ctx context.Context, id domain.ID) ([]byte, error) {
 	return nil, nil
+}
+func (m *mockMessageRepository) GetByIMAPUID(_ context.Context, _ domain.ID, _ uint32) (*domain.Message, error) {
+	return nil, domain.NewNotFoundError("message", "imap_uid")
 }
 
 func createTestServer(t *testing.T, opts ...ServerOption) *Server {

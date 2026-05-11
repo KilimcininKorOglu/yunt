@@ -52,9 +52,12 @@ type mockRepository struct {
 }
 
 func newMockRepository() *mockRepository {
+	mbxRepo := newMockMailboxRepository()
+	msgRepo := newMockMessageRepository()
+	msgRepo.mailboxRepo = mbxRepo
 	repo := &mockRepository{
-		mailboxes:   newMockMailboxRepository(),
-		messages:    newMockMessageRepository(),
+		mailboxes:   mbxRepo,
+		messages:    msgRepo,
 		attachments: newMockAttachmentRepository(),
 	}
 	repo.transactionRepo = repo
@@ -143,16 +146,16 @@ func (r *mockMailboxRepository) FindMatchingMailbox(ctx context.Context, address
 	return nil, domain.NewNotFoundError("mailbox", address)
 }
 
-func (r *mockMailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) error {
+func (r *mockMailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error) {
 	if r.incrementError != nil {
-		return r.incrementError
+		return 0, r.incrementError
 	}
 	mailbox, ok := r.mailboxes[id]
 	if !ok {
-		return domain.NewNotFoundError("mailbox", id.String())
+		return 0, domain.NewNotFoundError("mailbox", id.String())
 	}
 	mailbox.IncrementMessageCount(size)
-	return nil
+	return uint32(mailbox.UIDNext - 1), nil
 }
 
 func (r *mockMailboxRepository) DecrementMessageCount(ctx context.Context, id domain.ID, size int64, wasUnread bool) error {
@@ -339,6 +342,7 @@ type mockMessageRepository struct {
 	messages           map[domain.ID]*domain.Message
 	messageIDIndex     map[string]*domain.Message
 	rawBodies          map[domain.ID][]byte
+	mailboxRepo        *mockMailboxRepository
 	createError        error
 	storeRawBodyError  error
 	getByIDError       error
@@ -404,6 +408,10 @@ func (r *mockMessageRepository) GetRawBody(ctx context.Context, id domain.ID) ([
 	return nil, domain.NewNotFoundError("raw body", id.String())
 }
 
+func (r *mockMessageRepository) GetByIMAPUID(_ context.Context, _ domain.ID, _ uint32) (*domain.Message, error) {
+	return nil, domain.NewNotFoundError("message", "imap_uid")
+}
+
 func (r *mockMessageRepository) GetWithAttachments(ctx context.Context, id domain.ID) (*domain.Message, []*domain.Attachment, error) {
 	if r.getByIDError != nil {
 		return nil, nil, r.getByIDError
@@ -455,7 +463,17 @@ func (r *mockMessageRepository) MoveToMailbox(ctx context.Context, id domain.ID,
 	if !ok {
 		return domain.NewNotFoundError("message", id.String())
 	}
+	sourceMailboxID := msg.MailboxID
+	wasUnread := msg.Status == domain.MessageUnread
 	msg.MailboxID = targetMailboxID
+
+	if r.mailboxRepo != nil {
+		r.mailboxRepo.DecrementMessageCount(ctx, sourceMailboxID, msg.Size, wasUnread)
+		r.mailboxRepo.IncrementMessageCount(ctx, targetMailboxID, msg.Size)
+		if !wasUnread {
+			r.mailboxRepo.UpdateUnreadCount(ctx, targetMailboxID, -1)
+		}
+	}
 	return nil
 }
 

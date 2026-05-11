@@ -62,8 +62,7 @@ func (h *FetchHandler) Fetch(ctx context.Context, w *imapserver.FetchWriter, num
 // getMessagesForNumSet retrieves messages matching the given number set.
 // The numSet can contain either sequence numbers or UIDs.
 func (h *FetchHandler) getMessagesForNumSet(ctx context.Context, numSet imap.NumSet) (map[uint32]*domain.Message, error) {
-	// Get all messages in the mailbox
-	result, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, nil)
+	result, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, imapListOptions())
 	if err != nil {
 		return nil, &imap.Error{
 			Type: imap.StatusResponseTypeNo,
@@ -73,13 +72,10 @@ func (h *FetchHandler) getMessagesForNumSet(ctx context.Context, numSet imap.Num
 
 	messages := make(map[uint32]*domain.Message)
 
-	// For now, we use sequence numbers (1-based index)
-	// In a full implementation, we'd also need to handle UIDs
 	for i, msg := range result.Items {
 		seqNum := uint32(i + 1)
-		uid := imap.UID(i + 1) // Simplified UID = sequence number
+		uid := imap.UID(msg.IMAPUID)
 
-		// Check if this message matches the number set
 		if numSetContains(numSet, seqNum, uid) {
 			messages[seqNum] = msg
 		}
@@ -107,9 +103,7 @@ func (h *FetchHandler) fetchMessage(ctx context.Context, w *imapserver.FetchWrit
 
 	// Handle UID
 	if options.UID {
-		// For simplicity, we use the sequence number as UID
-		// In a real implementation, you'd use actual UIDs stored with messages
-		respWriter.WriteUID(imap.UID(seqNum))
+		respWriter.WriteUID(imap.UID(msg.IMAPUID))
 	}
 
 	// Handle FLAGS
@@ -828,4 +822,11 @@ func formatAddressList(addresses []domain.EmailAddress) string {
 // generateBoundary generates a MIME boundary string.
 func generateBoundary() string {
 	return fmt.Sprintf("=_Part_%d_%d", time.Now().UnixNano(), time.Now().UnixMicro())
+}
+
+// imapListOptions returns ListOptions with imap_uid ASC sort for IMAP handlers.
+func imapListOptions() *repository.ListOptions {
+	return &repository.ListOptions{
+		Sort: repository.NewSortOptions("imap_uid", domain.SortAsc),
+	}
 }

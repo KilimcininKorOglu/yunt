@@ -86,15 +86,8 @@ func (s *Session) appendMessage(mailbox string, r imap.LiteralReader, options *i
 		s.logger.Warn().Err(err).Msg("APPEND: failed to store raw body")
 	}
 
-	if err := repo.Mailboxes().IncrementMessageCount(ctx, mbox.ID, msg.Size); err != nil {
-		s.logger.Warn().Err(err).Msg("APPEND: failed to update mailbox stats")
-	}
-
-	msgCount, _ := repo.Messages().CountByMailbox(ctx, mbox.ID)
-	uid := imap.UID(msgCount)
-
 	return &imap.AppendData{
-		UID:         uid,
+		UID:         imap.UID(msg.IMAPUID),
 		UIDValidity: generateUIDValidity(mbox),
 	}, nil
 }

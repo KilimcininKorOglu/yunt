@@ -559,6 +559,9 @@ func (r *mockMsgRepo) GetRawBody(_ context.Context, id domain.ID) ([]byte, error
 	}
 	return nil, domain.NewNotFoundError("raw_body", id.String())
 }
+func (r *mockMsgRepo) GetByIMAPUID(_ context.Context, _ domain.ID, _ uint32) (*domain.Message, error) {
+	return nil, domain.NewNotFoundError("message", "imap_uid")
+}
 
 // --- mockMbxRepo: implements repository.MailboxRepository ---
 
@@ -697,7 +700,9 @@ func (r *mockMbxRepo) ClearCatchAll(_ context.Context, _ domain.ID) error { retu
 func (r *mockMbxRepo) UpdateStats(_ context.Context, _ domain.ID, _ *repository.MailboxStatsUpdate) error {
 	return nil
 }
-func (r *mockMbxRepo) IncrementMessageCount(_ context.Context, _ domain.ID, _ int64) error { return nil }
+func (r *mockMbxRepo) IncrementMessageCount(_ context.Context, _ domain.ID, _ int64) (uint32, error) {
+	return 1, nil
+}
 func (r *mockMbxRepo) DecrementMessageCount(_ context.Context, _ domain.ID, _ int64, _ bool) error {
 	return nil
 }

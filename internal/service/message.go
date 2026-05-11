@@ -170,6 +170,13 @@ func (s *MessageService) storeMessageInTransaction(
 	msg := parsed.ToMessage(messageID, mailbox.ID)
 	msg.RawBody = rawData
 
+	// Assign IMAP UID and update mailbox stats
+	assignedUID, err := tx.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, msg.Size)
+	if err != nil {
+		return nil, err
+	}
+	msg.IMAPUID = assignedUID
+
 	// Store the message
 	if err := tx.Messages().Create(ctx, msg); err != nil {
 		return nil, err
@@ -183,11 +190,6 @@ func (s *MessageService) storeMessageInTransaction(
 	// Store attachments
 	storedAttachments, err := s.storeAttachments(ctx, tx, messageID, parsed.Attachments)
 	if err != nil {
-		return nil, err
-	}
-
-	// Update mailbox statistics
-	if err := tx.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, msg.Size); err != nil {
 		return nil, err
 	}
 
@@ -588,36 +590,11 @@ func (s *MessageService) MoveMessage(ctx context.Context, id, targetMailboxID do
 		return nil // No-op
 	}
 
-	// Capture source mailbox ID and message state before transaction
-	// (important because repository may modify the message struct in MoveToMailbox)
-	sourceMailboxID := msg.MailboxID
-	wasUnread := msg.Status == domain.MessageUnread
-	msgSize := msg.Size
-
 	err = s.repo.Transaction(ctx, func(tx repository.Repository) error {
-		// Move the message
+		// MoveToMailbox handles stats (Decrement source, Increment target, UID assignment)
 		if err := tx.Messages().MoveToMailbox(ctx, id, targetMailboxID); err != nil {
 			return err
 		}
-
-		// Decrement source mailbox stats
-		if err := tx.Mailboxes().DecrementMessageCount(ctx, sourceMailboxID, msgSize, wasUnread); err != nil {
-			return err
-		}
-
-		// Increment target mailbox stats
-		if err := tx.Mailboxes().IncrementMessageCount(ctx, targetMailboxID, msgSize); err != nil {
-			return err
-		}
-
-		// If message is read, we need to adjust the target unread count
-		// (IncrementMessageCount adds to both message and unread counts)
-		if !wasUnread {
-			if err := tx.Mailboxes().UpdateUnreadCount(ctx, targetMailboxID, -1); err != nil {
-				return err
-			}
-		}
-
 		return nil
 	})
 

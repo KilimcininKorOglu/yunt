@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -34,6 +35,7 @@ type mailboxDocument struct {
 	UnreadCount   int64     `bson:"unreadCount"`
 	TotalSize     int64     `bson:"totalSize"`
 	RetentionDays int       `bson:"retentionDays"`
+	UIDNext       uint32    `bson:"uidNext"`
 	CreatedAt     time.Time `bson:"createdAt"`
 	UpdatedAt     time.Time `bson:"updatedAt"`
 }
@@ -63,6 +65,7 @@ func (m *MailboxRepository) toDocument(mailbox *domain.Mailbox) *mailboxDocument
 		UnreadCount:   mailbox.UnreadCount,
 		TotalSize:     mailbox.TotalSize,
 		RetentionDays: mailbox.RetentionDays,
+		UIDNext:       mailbox.UIDNext,
 		CreatedAt:     mailbox.CreatedAt.Time,
 		UpdatedAt:     mailbox.UpdatedAt.Time,
 	}
@@ -83,6 +86,7 @@ func (m *MailboxRepository) toDomain(doc *mailboxDocument) *domain.Mailbox {
 		UnreadCount:   doc.UnreadCount,
 		TotalSize:     doc.TotalSize,
 		RetentionDays: doc.RetentionDays,
+		UIDNext:       doc.UIDNext,
 		CreatedAt:     domain.Timestamp{Time: doc.CreatedAt},
 		UpdatedAt:     domain.Timestamp{Time: doc.UpdatedAt},
 	}
@@ -385,6 +389,10 @@ func (m *MailboxRepository) mapSortField(field string) string {
 // Create creates a new mailbox.
 func (m *MailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox) error {
 	ctx = m.repo.getSessionContext(ctx)
+
+	if mailbox.UIDNext == 0 {
+		mailbox.UIDNext = 1
+	}
 
 	exists, err := m.ExistsByAddress(ctx, mailbox.Address)
 	if err != nil {
@@ -693,8 +701,8 @@ func (m *MailboxRepository) UpdateStats(ctx context.Context, id domain.ID, stats
 	return nil
 }
 
-// IncrementMessageCount atomically increments message counters.
-func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) error {
+// IncrementMessageCount atomically increments message counters and assigns the next IMAP UID.
+func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error) {
 	ctx = m.repo.getSessionContext(ctx)
 
 	filter := bson.M{"_id": string(id)}
@@ -703,20 +711,25 @@ func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain
 			"messageCount": 1,
 			"unreadCount":  1,
 			"totalSize":    size,
+			"uidNext":      1,
 		},
 		"$set": bson.M{"updatedAt": time.Now().UTC()},
 	}
 
-	result, err := m.collection().UpdateOne(ctx, filter, update)
+	// FindOneAndUpdate returns the document BEFORE update, so uidNext is the assigned UID
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.Before)
+	var doc struct {
+		UIDNext uint32 `bson:"uidNext"`
+	}
+	err := m.collection().FindOneAndUpdate(ctx, filter, update, opts).Decode(&doc)
 	if err != nil {
-		return fmt.Errorf("failed to increment message count: %w", err)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return 0, domain.NewNotFoundError("mailbox", string(id))
+		}
+		return 0, fmt.Errorf("failed to increment message count: %w", err)
 	}
 
-	if result.MatchedCount == 0 {
-		return domain.NewNotFoundError("mailbox", string(id))
-	}
-
-	return nil
+	return doc.UIDNext, nil
 }
 
 // DecrementMessageCount atomically decrements message counters.

@@ -182,8 +182,7 @@ func (h *CopyHandler) Move(ctx context.Context, numSet imap.NumSet, destName str
 
 // getMessagesForNumSet retrieves messages matching the given number set.
 func (h *CopyHandler) getMessagesForNumSet(ctx context.Context, numSet imap.NumSet) (map[uint32]*domain.Message, map[uint32]imap.UID, error) {
-	// Get all messages in the mailbox
-	result, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, nil)
+	result, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, imapListOptions())
 	if err != nil {
 		return nil, nil, &imap.Error{
 			Type: imap.StatusResponseTypeNo,
@@ -197,7 +196,7 @@ func (h *CopyHandler) getMessagesForNumSet(ctx context.Context, numSet imap.NumS
 	// Match messages against the number set
 	for i, msg := range result.Items {
 		seqNum := uint32(i + 1)
-		uid := imap.UID(i + 1) // Simplified: UID = sequence number
+		uid := imap.UID(msg.IMAPUID)
 
 		if numSetContainsMessage(numSet, seqNum, uid) {
 			messages[seqNum] = msg
@@ -212,15 +211,6 @@ func (h *CopyHandler) getMessagesForNumSet(ctx context.Context, numSet imap.NumS
 func (h *CopyHandler) copyMessages(ctx context.Context, messages map[uint32]*domain.Message, seqToUID map[uint32]imap.UID, destMailbox *domain.Mailbox) (*CopyResult, error) {
 	result := &CopyResult{
 		UIDValidity: generateUIDValidity(destMailbox),
-	}
-
-	// Get current message count in destination to calculate new UIDs
-	destMsgCount, err := h.repo.Messages().CountByMailbox(ctx, destMailbox.ID)
-	if err != nil {
-		return nil, &imap.Error{
-			Type: imap.StatusResponseTypeNo,
-			Text: "Failed to get destination mailbox message count",
-		}
 	}
 
 	// Sort sequence numbers for consistent ordering
@@ -238,7 +228,7 @@ func (h *CopyHandler) copyMessages(ctx context.Context, messages map[uint32]*dom
 		newMsgID := domain.ID(uuid.New().String())
 		newMsg := h.copyMessageData(msg, newMsgID, destMailbox.ID)
 
-		// Create the message in the destination mailbox
+		// Create auto-assigns IMAPUID
 		if err := h.repo.Messages().Create(ctx, newMsg); err != nil {
 			result.FailedCount++
 			continue
@@ -252,19 +242,12 @@ func (h *CopyHandler) copyMessages(ctx context.Context, messages map[uint32]*dom
 			}
 		}
 
-		// Calculate new UID (simplified: next sequence number)
-		destMsgCount++
-		destUID := imap.UID(destMsgCount)
+		destUID := imap.UID(newMsg.IMAPUID)
 
 		// Add to result sets
 		result.SourceUIDs.AddNum(sourceUID)
 		result.DestUIDs.AddNum(destUID)
 		result.CopiedCount++
-	}
-
-	// Update destination mailbox statistics
-	if err := h.repo.Mailboxes().RecalculateStats(ctx, destMailbox.ID); err != nil {
-		// Log but don't fail
 	}
 
 	return result, nil

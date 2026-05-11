@@ -142,7 +142,7 @@ func NewMailboxStatus(mailbox *domain.Mailbox) *MailboxStatus {
 		Messages:    uint32(mailbox.MessageCount),
 		Recent:      0, // Recent flag handling is not implemented yet
 		Unseen:      uint32(mailbox.UnreadCount),
-		UIDNext:     imap.UID(mailbox.MessageCount + 1), // Simplified: next UID is count + 1
+		UIDNext:     imap.UID(mailbox.UIDNext),
 		UIDValidity: generateUIDValidity(mailbox),
 		Size:        mailbox.TotalSize,
 	}

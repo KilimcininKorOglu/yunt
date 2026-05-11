@@ -53,7 +53,7 @@ func (h *StoreHandler) Store(ctx context.Context, w *imapserver.FetchWriter, num
 
 	// Apply flag changes to each message
 	for seqNum, msg := range messages {
-		uid := imap.UID(seqNum) // Simplified: UID = sequence number
+		uid := imap.UID(msg.IMAPUID)
 
 		// Get current flags
 		oldFlags := NewFlagSetFromMessage(msg)
@@ -112,8 +112,7 @@ func (h *StoreHandler) Store(ctx context.Context, w *imapserver.FetchWriter, num
 
 // getMessagesForNumSet retrieves messages matching the given number set.
 func (h *StoreHandler) getMessagesForNumSet(ctx context.Context, numSet imap.NumSet) (map[uint32]*domain.Message, error) {
-	// Get all messages in the mailbox
-	result, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, nil)
+	result, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, imapListOptions())
 	if err != nil {
 		return nil, &imap.Error{
 			Type: imap.StatusResponseTypeNo,
@@ -126,7 +125,7 @@ func (h *StoreHandler) getMessagesForNumSet(ctx context.Context, numSet imap.Num
 	// Match messages against the number set
 	for i, msg := range result.Items {
 		seqNum := uint32(i + 1)
-		uid := imap.UID(i + 1) // Simplified: UID = sequence number
+		uid := imap.UID(msg.IMAPUID)
 
 		if numSetContainsMessage(numSet, seqNum, uid) {
 			messages[seqNum] = msg

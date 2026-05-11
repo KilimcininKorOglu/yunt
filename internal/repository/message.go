@@ -225,6 +225,10 @@ type MessageRepository interface {
 	// GetRawBody retrieves the raw message body.
 	// Returns domain.ErrNotFound if not found.
 	GetRawBody(ctx context.Context, id domain.ID) ([]byte, error)
+
+	// GetByIMAPUID retrieves a message by its IMAP UID within a mailbox.
+	// Returns domain.ErrNotFound if not found.
+	GetByIMAPUID(ctx context.Context, mailboxID domain.ID, uid uint32) (*domain.Message, error)
 }
 
 // MessageFilter provides filtering options for message queries.

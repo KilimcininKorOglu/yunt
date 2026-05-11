@@ -553,7 +553,7 @@ func BenchmarkMailboxUpdateStats(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := repo.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, 1024); err != nil {
+		if _, err := repo.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, 1024); err != nil {
 			b.Fatalf("failed to update stats: %v", err)
 		}
 	}

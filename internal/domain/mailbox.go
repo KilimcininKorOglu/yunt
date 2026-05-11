@@ -43,6 +43,9 @@ type Mailbox struct {
 	// Type indicates whether this is a system or custom mailbox.
 	Type MailboxType `json:"type"`
 
+	// UIDNext is the next IMAP UID to be assigned in this mailbox.
+	UIDNext uint32 `json:"uidNext"`
+
 	// MessageCount is the total number of messages in the mailbox.
 	MessageCount int64 `json:"messageCount"`
 
@@ -76,6 +79,7 @@ func NewMailbox(id, userID ID, name, address string) *Mailbox {
 		MessageCount:  0,
 		UnreadCount:   0,
 		TotalSize:     0,
+		UIDNext:       1,
 		RetentionDays: 0,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -137,6 +141,7 @@ func (m *Mailbox) IncrementMessageCount(size int64) {
 	m.MessageCount++
 	m.UnreadCount++
 	m.TotalSize += size
+	m.UIDNext++
 	m.UpdatedAt = Now()
 }
 

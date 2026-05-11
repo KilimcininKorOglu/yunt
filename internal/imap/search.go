@@ -61,8 +61,7 @@ type searchResult struct {
 
 // executeSearch performs the search and returns matching message identifiers.
 func (h *SearchHandler) executeSearch(ctx context.Context, kind imapserver.NumKind, criteria *SearchCriteria) ([]searchResult, error) {
-	// Get all messages in the mailbox
-	listResult, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, nil)
+	listResult, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, imapListOptions())
 	if err != nil {
 		return nil, &imap.Error{
 			Type: imap.StatusResponseTypeNo,
@@ -77,8 +76,8 @@ func (h *SearchHandler) executeSearch(ctx context.Context, kind imapserver.NumKi
 
 	// Process each message
 	for i, msg := range listResult.Items {
-		seqNum := uint32(i + 1)       // 1-based sequence number
-		uid := imap.UID(seqNum)       // Simplified: UID = sequence number
+		seqNum := uint32(i + 1)
+		uid := imap.UID(msg.IMAPUID)
 
 		// Check if message matches criteria
 		if matcher.Matches(msg, seqNum, uid) {
@@ -243,18 +242,13 @@ func (h *OptimizedSearchHandler) optimizedSearch(ctx context.Context, kind imaps
 	// Convert to search results
 	var results []searchResult
 	for i, msg := range listResult.Items {
-		// Calculate sequence number and UID
-		// Note: In a real implementation, you'd need proper UID handling
 		seqNum := uint32(i + 1)
-		uid := imap.UID(seqNum)
+		uid := imap.UID(msg.IMAPUID)
 
 		results = append(results, searchResult{
 			seqNum: seqNum,
 			uid:    uid,
 		})
-
-		// Also need to handle sequence numbers correctly
-		_ = msg // Use msg for proper UID lookup
 	}
 
 	h.sortResults(results, kind)

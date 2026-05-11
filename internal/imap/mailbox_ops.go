@@ -423,8 +423,7 @@ func (o *MailboxOperator) renameInbox(ctx context.Context, inbox *domain.Mailbox
 		}
 	}
 
-	// Move all messages from INBOX to the new mailbox
-	result, err := o.repo.Messages().ListByMailbox(ctx, inbox.ID, nil)
+	result, err := o.repo.Messages().ListByMailbox(ctx, inbox.ID, imapListOptions())
 	if err != nil {
 		return &imap.Error{
 			Type: imap.StatusResponseTypeNo,

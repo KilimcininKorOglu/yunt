@@ -53,8 +53,7 @@ func (h *ExpungeHandler) Expunge(ctx context.Context, w *imapserver.ExpungeWrite
 		}
 	}
 
-	// Get all messages in the mailbox
-	result, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, nil)
+	result, err := h.repo.Messages().ListByMailbox(ctx, h.selectedMbox.ID, imapListOptions())
 	if err != nil {
 		return &imap.Error{
 			Type: imap.StatusResponseTypeNo,
@@ -119,7 +118,7 @@ func (h *ExpungeHandler) findDeletedMessages(allMessages []*domain.Message, uidF
 
 	for i, msg := range allMessages {
 		seqNum := uint32(i + 1)
-		uid := imap.UID(i + 1) // Simplified: UID = sequence number
+		uid := imap.UID(msg.IMAPUID)
 
 		// If a UID filter is specified, check if this message matches
 		if uidFilter != nil && !uidFilter.Contains(uid) {

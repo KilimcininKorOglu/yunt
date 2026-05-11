@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"time"
@@ -49,6 +50,7 @@ type messageDocument struct {
 	IsDeleted       bool                   `bson:"isDeleted"`
 	IsDraft         bool                   `bson:"isDraft"`
 	IsAnswered      bool                   `bson:"isAnswered"`
+	IMAPUID         uint32                 `bson:"imapUid"`
 	InReplyTo       string                 `bson:"inReplyTo,omitempty"`
 	References      []string               `bson:"references,omitempty"`
 	ReceivedAt      time.Time              `bson:"receivedAt"`
@@ -88,6 +90,7 @@ func (m *MessageRepository) toDocument(msg *domain.Message) *messageDocument {
 		IsDeleted:       msg.IsDeleted,
 		IsDraft:         msg.IsDraft,
 		IsAnswered:      msg.IsAnswered,
+		IMAPUID:         msg.IMAPUID,
 		InReplyTo:       msg.InReplyTo,
 		References:      msg.References,
 		ReceivedAt:      msg.ReceivedAt.Time,
@@ -151,6 +154,7 @@ func (m *MessageRepository) toDomain(doc *messageDocument) *domain.Message {
 		IsDeleted:       doc.IsDeleted,
 		IsDraft:         doc.IsDraft,
 		IsAnswered:      doc.IsAnswered,
+		IMAPUID:         doc.IMAPUID,
 		InReplyTo:       doc.InReplyTo,
 		References:      doc.References,
 		ReceivedAt:      domain.Timestamp{Time: doc.ReceivedAt},
@@ -596,6 +600,14 @@ func (m *MessageRepository) mapSortField(field string) string {
 func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) error {
 	ctx = m.repo.getSessionContext(ctx)
 
+	if msg.IMAPUID == 0 {
+		assignedUID, err := m.repo.mailboxes.IncrementMessageCount(ctx, msg.MailboxID, msg.Size)
+		if err != nil {
+			return fmt.Errorf("failed to assign IMAP UID: %w", err)
+		}
+		msg.IMAPUID = assignedUID
+	}
+
 	doc := m.toDocument(msg)
 	_, err := m.collection().InsertOne(ctx, doc)
 	if err != nil {
@@ -603,11 +615,6 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 			return domain.NewAlreadyExistsError("message", "id", string(msg.ID))
 		}
 		return fmt.Errorf("failed to create message: %w", err)
-	}
-
-	// Update mailbox stats
-	if err := m.repo.mailboxes.IncrementMessageCount(ctx, msg.MailboxID, msg.Size); err != nil {
-		return fmt.Errorf("failed to update mailbox stats: %w", err)
 	}
 
 	return nil
@@ -1131,8 +1138,13 @@ func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, tar
 	// Update source mailbox stats
 	m.repo.mailboxes.DecrementMessageCount(ctx, sourceMailboxID, msg.Size, wasUnread)
 
-	// Update target mailbox stats
-	m.repo.mailboxes.IncrementMessageCount(ctx, targetMailboxID, msg.Size)
+	// Update target mailbox stats and assign new IMAP UID
+	newUID, uidErr := m.repo.mailboxes.IncrementMessageCount(ctx, targetMailboxID, msg.Size)
+	if uidErr == nil {
+		uidFilter := bson.M{"_id": string(id)}
+		uidUpdate := bson.M{"$set": bson.M{"imapUid": newUID}}
+		m.collection().UpdateOne(ctx, uidFilter, uidUpdate)
+	}
 
 	return nil
 }
@@ -1770,6 +1782,23 @@ func (m *MessageRepository) GetRawBody(ctx context.Context, id domain.ID) ([]byt
 	}
 
 	return doc.RawBody, nil
+}
+
+// GetByIMAPUID retrieves a message by its IMAP UID within a mailbox.
+func (m *MessageRepository) GetByIMAPUID(ctx context.Context, mailboxID domain.ID, uid uint32) (*domain.Message, error) {
+	ctx = m.repo.getSessionContext(ctx)
+
+	filter := bson.M{"mailboxId": string(mailboxID), "imapUid": uid}
+	var doc messageDocument
+	err := m.collection().FindOne(ctx, filter).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, domain.NewNotFoundError("message", fmt.Sprintf("mailbox=%s uid=%d", mailboxID, uid))
+		}
+		return nil, fmt.Errorf("failed to get message by IMAP UID: %w", err)
+	}
+
+	return m.toDomain(&doc), nil
 }
 
 // Ensure MessageRepository implements repository.MessageRepository

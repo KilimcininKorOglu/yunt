@@ -31,6 +31,7 @@ type mailboxRow struct {
 	UnreadCount   int64          `db:"unread_count"`
 	TotalSize     int64          `db:"total_size"`
 	RetentionDays int            `db:"retention_days"`
+	UIDNext       uint32         `db:"uid_next"`
 	CreatedAt     time.Time      `db:"created_at"`
 	UpdatedAt     time.Time      `db:"updated_at"`
 }
@@ -54,6 +55,7 @@ func (r *mailboxRow) toMailbox() *domain.Mailbox {
 		UnreadCount:   r.UnreadCount,
 		TotalSize:     r.TotalSize,
 		RetentionDays: r.RetentionDays,
+		UIDNext:       r.UIDNext,
 		CreatedAt:     domain.Timestamp{Time: r.CreatedAt},
 		UpdatedAt:     domain.Timestamp{Time: r.UpdatedAt},
 	}
@@ -68,7 +70,7 @@ func (r *mailboxRow) toMailbox() *domain.Mailbox {
 // GetByID retrieves a mailbox by its unique identifier.
 func (m *MailboxRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Mailbox, error) {
 	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, created_at, updated_at
+		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at
 		FROM mailboxes WHERE id = ?`
 
 	var row mailboxRow
@@ -85,7 +87,7 @@ func (m *MailboxRepository) GetByID(ctx context.Context, id domain.ID) (*domain.
 // GetByAddress retrieves a mailbox by its email address.
 func (m *MailboxRepository) GetByAddress(ctx context.Context, address string) (*domain.Mailbox, error) {
 	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, created_at, updated_at
+		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at
 		FROM mailboxes WHERE address = ?`
 
 	var row mailboxRow
@@ -102,7 +104,7 @@ func (m *MailboxRepository) GetByAddress(ctx context.Context, address string) (*
 // GetCatchAll retrieves the catch-all mailbox for a domain.
 func (m *MailboxRepository) GetCatchAll(ctx context.Context, domainName string) (*domain.Mailbox, error) {
 	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, created_at, updated_at
+		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at
 		FROM mailboxes WHERE is_catch_all = 1 AND address LIKE ?`
 
 	pattern := "%@" + domainName
@@ -120,7 +122,7 @@ func (m *MailboxRepository) GetCatchAll(ctx context.Context, domainName string) 
 // GetDefault retrieves the default mailbox for a user.
 func (m *MailboxRepository) GetDefault(ctx context.Context, userID domain.ID) (*domain.Mailbox, error) {
 	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, created_at, updated_at
+		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at
 		FROM mailboxes WHERE user_id = ? AND is_default = 1`
 
 	var row mailboxRow
@@ -180,7 +182,7 @@ func (m *MailboxRepository) buildListQuery(filter *repository.MailboxFilter, opt
 		sb.WriteString("SELECT COUNT(*) FROM mailboxes WHERE 1=1")
 	} else {
 		sb.WriteString(`SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-			message_count, unread_count, total_size, retention_days, created_at, updated_at FROM mailboxes WHERE 1=1`)
+			message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at FROM mailboxes WHERE 1=1`)
 	}
 
 	if filter != nil {
@@ -353,9 +355,13 @@ func (m *MailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox)
 		return domain.NewAlreadyExistsError("mailbox", "address", mailbox.Address)
 	}
 
+	if mailbox.UIDNext == 0 {
+		mailbox.UIDNext = 1
+	}
+
 	query := `INSERT INTO mailboxes (id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var description sql.NullString
 	if mailbox.Description != "" {
@@ -375,6 +381,7 @@ func (m *MailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox)
 		mailbox.UnreadCount,
 		mailbox.TotalSize,
 		mailbox.RetentionDays,
+		mailbox.UIDNext,
 		mailbox.CreatedAt.Time,
 		mailbox.UpdatedAt.Time,
 	)
@@ -635,25 +642,34 @@ func (m *MailboxRepository) UpdateStats(ctx context.Context, id domain.ID, stats
 	return nil
 }
 
-// IncrementMessageCount atomically increments message counters.
-func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) error {
-	query := `UPDATE mailboxes SET message_count = message_count + 1, 
-		unread_count = unread_count + 1, total_size = total_size + ?, updated_at = ? WHERE id = ?`
+// IncrementMessageCount atomically increments message counters and assigns the next IMAP UID.
+func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error) {
+	query := `UPDATE mailboxes SET message_count = message_count + 1,
+		unread_count = unread_count + 1, total_size = total_size + ?,
+		uid_next = uid_next + 1, updated_at = ?
+		WHERE id = ?`
 
 	result, err := m.repo.db().ExecContext(ctx, query, size, time.Now().UTC(), string(id))
 	if err != nil {
-		return fmt.Errorf("failed to increment message count: %w", err)
+		return 0, fmt.Errorf("failed to increment message count: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rows == 0 {
-		return domain.NewNotFoundError("mailbox", string(id))
+		return 0, domain.NewNotFoundError("mailbox", string(id))
 	}
 
-	return nil
+	// MySQL doesn't support RETURNING — read back the assigned UID
+	var uidNext uint32
+	err = m.repo.db().QueryRowContext(ctx, `SELECT uid_next - 1 FROM mailboxes WHERE id = ?`, string(id)).Scan(&uidNext)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read assigned UID: %w", err)
+	}
+
+	return uidNext, nil
 }
 
 // DecrementMessageCount atomically decrements message counters.
