@@ -66,8 +66,9 @@ Examples:
 }
 
 var messagesPurgeCmd = &cobra.Command{
-	Use:   "purge [mailbox]",
-	Short: "Purge all messages",
+	Use:     "purge [mailbox]",
+	Aliases: []string{"delete-all"},
+	Short:   "Purge all messages",
 	Long: `Delete all messages in a mailbox or all mailboxes.
 
 Examples:
