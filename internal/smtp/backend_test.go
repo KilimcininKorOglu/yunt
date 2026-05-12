@@ -255,9 +255,6 @@ func (m *mockMessageRepository) MoveToMailbox(ctx context.Context, id domain.ID,
 func (m *mockMessageRepository) Search(ctx context.Context, searchOpts *repository.SearchOptions, filter *repository.MessageFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
 	return nil, nil
 }
-func (m *mockMessageRepository) SearchSummaries(ctx context.Context, searchOpts *repository.SearchOptions, filter *repository.MessageFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.MessageSummary], error) {
-	return nil, nil
-}
 func (m *mockMessageRepository) GetThread(ctx context.Context, id domain.ID) ([]*domain.Message, error) {
 	return nil, nil
 }

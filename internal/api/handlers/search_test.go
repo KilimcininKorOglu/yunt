@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"yunt/internal/domain"
@@ -61,7 +62,9 @@ func TestSearchHandler_SimpleSearch_ShortQuery(t *testing.T) {
 func TestSearchHandler_AdvancedSearch(t *testing.T) {
 	env, token := setupSearchTest(t)
 
-	req := makeAuthReq(http.MethodGet, "/api/v1/search/advanced?from=sender", token, nil)
+	body := strings.NewReader(`{"from":"sender"}`)
+	req := makeAuthReq(http.MethodPost, "/api/v1/search/advanced", token, body)
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 
@@ -73,7 +76,7 @@ func TestSearchHandler_AdvancedSearch(t *testing.T) {
 func TestSearchHandler_AdvancedSearch_Unauthorized(t *testing.T) {
 	env := setupFullTest()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/search/advanced?from=sender", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/search/advanced", strings.NewReader(`{"from":"sender"}`))
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 

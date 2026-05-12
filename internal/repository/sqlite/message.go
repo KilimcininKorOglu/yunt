@@ -1118,26 +1118,6 @@ func (m *MessageRepository) Search(ctx context.Context, searchOpts *repository.S
 	return m.List(ctx, filter, opts)
 }
 
-// SearchSummaries performs search and returns message summaries.
-func (m *MessageRepository) SearchSummaries(ctx context.Context, searchOpts *repository.SearchOptions, filter *repository.MessageFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.MessageSummary], error) {
-	result, err := m.Search(ctx, searchOpts, filter, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	summaries := make([]*domain.MessageSummary, len(result.Items))
-	for i, msg := range result.Items {
-		summaries[i] = msg.ToSummary(100)
-	}
-
-	return &repository.ListResult[*domain.MessageSummary]{
-		Items:      summaries,
-		Total:      result.Total,
-		HasMore:    result.HasMore,
-		Pagination: result.Pagination,
-	}, nil
-}
-
 // GetThread retrieves all messages in a conversation thread.
 func (m *MessageRepository) GetThread(ctx context.Context, id domain.ID) ([]*domain.Message, error) {
 	msg, err := m.GetByID(ctx, id)

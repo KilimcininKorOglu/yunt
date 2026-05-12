@@ -36,7 +36,7 @@ func NewSearchHandler(
 func (h *SearchHandler) RegisterRoutes(g *echo.Group) {
 	search := g.Group("/search", middleware.Auth(h.authService))
 	search.GET("", h.SimpleSearch)
-	search.GET("/advanced", h.AdvancedSearch)
+	search.POST("/advanced", h.AdvancedSearch)
 }
 
 // SimpleSearch handles requests to search messages by text.
@@ -111,97 +111,61 @@ func (h *SearchHandler) SimpleSearch(c echo.Context) error {
 
 // AdvancedSearchInput represents the input parameters for advanced search.
 type AdvancedSearchInput struct {
-	// Query is the optional text search query.
-	Query string `query:"q"`
-	// MailboxID filters by specific mailbox.
-	MailboxID string `query:"mailboxId"`
-	// From filters by sender address (partial match).
-	From string `query:"from"`
-	// To filters by recipient address (partial match).
-	To string `query:"to"`
-	// Subject filters by subject (partial match).
-	Subject string `query:"subject"`
-	// Status filters by message status (read/unread).
-	Status string `query:"status"`
-	// IsStarred filters by starred status.
-	IsStarred *bool `query:"isStarred"`
-	// IsSpam filters by spam status.
-	IsSpam *bool `query:"isSpam"`
-	// HasAttachments filters by attachment presence.
-	HasAttachments *bool `query:"hasAttachments"`
-	// ReceivedAfter filters messages received after this date (RFC3339).
-	ReceivedAfter string `query:"receivedAfter"`
-	// ReceivedBefore filters messages received before this date (RFC3339).
-	ReceivedBefore string `query:"receivedBefore"`
-	// MinSize filters messages larger than this size in bytes.
-	MinSize *int64 `query:"minSize"`
-	// MaxSize filters messages smaller than this size in bytes.
-	MaxSize *int64 `query:"maxSize"`
-	// Page is the page number for pagination.
-	Page int `query:"page"`
-	// PerPage is the number of items per page.
-	PerPage int `query:"perPage"`
-	// Sort is the field to sort by.
-	Sort string `query:"sort"`
-	// Order is the sort order (asc/desc).
-	Order string `query:"order"`
+	Query          string `json:"q"`
+	MailboxID      string `json:"mailboxId"`
+	From           string `json:"from"`
+	To             string `json:"to"`
+	Subject        string `json:"subject"`
+	Status         string `json:"status"`
+	IsStarred      *bool  `json:"isStarred"`
+	IsSpam         *bool  `json:"isSpam"`
+	HasAttachments *bool  `json:"hasAttachments"`
+	ReceivedAfter  string `json:"receivedAfter"`
+	ReceivedBefore string `json:"receivedBefore"`
+	MinSize        *int64 `json:"minSize"`
+	MaxSize        *int64 `json:"maxSize"`
+	Page           int    `json:"page"`
+	PerPage        int    `json:"perPage"`
+	Sort           string `json:"sort"`
+	Order          string `json:"order"`
 }
 
 // AdvancedSearch handles requests to search messages with multiple criteria.
 // @Summary Advanced message search
 // @Description Search messages with multiple structured criteria including sender, recipient, date range, and flags
 // @Tags Search
+// @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param q query string false "Text search query (subject and body)"
-// @Param mailboxId query string false "Filter by mailbox ID"
-// @Param from query string false "Filter by sender address (partial match)"
-// @Param to query string false "Filter by recipient address (partial match)"
-// @Param subject query string false "Filter by subject (partial match)"
-// @Param status query string false "Filter by status (read, unread)"
-// @Param isStarred query bool false "Filter by starred status"
-// @Param isSpam query bool false "Filter by spam status"
-// @Param hasAttachments query bool false "Filter by attachment presence"
-// @Param receivedAfter query string false "Filter messages received after (RFC3339)"
-// @Param receivedBefore query string false "Filter messages received before (RFC3339)"
-// @Param minSize query int false "Filter messages larger than this size (bytes)"
-// @Param maxSize query int false "Filter messages smaller than this size (bytes)"
-// @Param page query int false "Page number (default: 1)"
-// @Param perPage query int false "Items per page (default: 20, max: 100)"
-// @Param sort query string false "Sort field (receivedAt, subject, from, size)"
-// @Param order query string false "Sort order (asc, desc)"
+// @Param input body AdvancedSearchInput true "Advanced search criteria"
 // @Success 200 {object} api.Response{data=api.PaginatedData}
 // @Failure 400 {object} api.Response{error=api.ErrorDetail}
 // @Failure 401 {object} api.Response{error=api.ErrorDetail}
 // @Failure 500 {object} api.Response{error=api.ErrorDetail}
-// @Router /search/advanced [get]
+// @Router /search/advanced [post]
 func (h *SearchHandler) AdvancedSearch(c echo.Context) error {
 	userID := middleware.GetUserID(c)
 	if userID.IsEmpty() {
 		return api.Unauthorized(c, "authentication required")
 	}
 
-	// Parse and validate all search parameters
-	filter, searchOpts, validationErrors := h.parseAdvancedSearchParams(c)
+	var input AdvancedSearchInput
+	if err := c.Bind(&input); err != nil {
+		return api.BadRequest(c, "invalid request body")
+	}
+
+	filter, searchOpts, validationErrors := h.buildAdvancedFilter(&input)
 	if len(validationErrors) > 0 {
 		return api.ValidationFailed(c, validationErrors)
 	}
 
-	// Verify mailbox access if specified
-	if filter.MailboxID != nil {
-		// Ownership verification happens in the service layer
-	}
+	opts := h.buildListOptions(&input)
 
-	// Parse list options
-	opts := h.parseListOptions(c)
-
-	// Execute search
 	result, err := h.messageService.SearchMessagesForUser(c.Request().Context(), userID, searchOpts, filter, opts)
 	if err != nil {
 		return api.FromError(c, err)
 	}
 
-	// Determine page and perPage from options
 	page := 1
 	perPage := repository.DefaultPerPage
 	if opts != nil && opts.Pagination != nil {
@@ -212,14 +176,13 @@ func (h *SearchHandler) AdvancedSearch(c echo.Context) error {
 	return api.Paginated(c, result.Items, page, perPage, result.Total)
 }
 
-// parseAdvancedSearchParams parses and validates all advanced search parameters.
-func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.MessageFilter, *repository.SearchOptions, []ValidationError) {
+// buildAdvancedFilter builds filter and search options from the parsed input.
+func (h *SearchHandler) buildAdvancedFilter(input *AdvancedSearchInput) (*repository.MessageFilter, *repository.SearchOptions, []ValidationError) {
 	filter := &repository.MessageFilter{}
 	searchOpts := &repository.SearchOptions{}
 	var errors []ValidationError
 
-	// Parse text query
-	if query := strings.TrimSpace(c.QueryParam("q")); query != "" {
+	if query := strings.TrimSpace(input.Query); query != "" {
 		if len(query) > 500 {
 			errors = append(errors, ValidationError{Field: "q", Message: "search query is too long (max 500 characters)"})
 		} else {
@@ -228,9 +191,8 @@ func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.M
 		}
 	}
 
-	// Parse mailboxId filter
-	if mailboxIDStr := c.QueryParam("mailboxId"); mailboxIDStr != "" {
-		mailboxID := domain.ID(mailboxIDStr)
+	if input.MailboxID != "" {
+		mailboxID := domain.ID(input.MailboxID)
 		if mailboxID.IsEmpty() {
 			errors = append(errors, ValidationError{Field: "mailboxId", Message: "invalid mailbox ID"})
 		} else {
@@ -238,8 +200,7 @@ func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.M
 		}
 	}
 
-	// Parse from filter (sender)
-	if from := strings.TrimSpace(c.QueryParam("from")); from != "" {
+	if from := strings.TrimSpace(input.From); from != "" {
 		if len(from) > 255 {
 			errors = append(errors, ValidationError{Field: "from", Message: "from address filter is too long"})
 		} else {
@@ -247,8 +208,7 @@ func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.M
 		}
 	}
 
-	// Parse to filter (recipient)
-	if to := strings.TrimSpace(c.QueryParam("to")); to != "" {
+	if to := strings.TrimSpace(input.To); to != "" {
 		if len(to) > 255 {
 			errors = append(errors, ValidationError{Field: "to", Message: "to address filter is too long"})
 		} else {
@@ -256,8 +216,7 @@ func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.M
 		}
 	}
 
-	// Parse subject filter
-	if subject := strings.TrimSpace(c.QueryParam("subject")); subject != "" {
+	if subject := strings.TrimSpace(input.Subject); subject != "" {
 		if len(subject) > 500 {
 			errors = append(errors, ValidationError{Field: "subject", Message: "subject filter is too long"})
 		} else {
@@ -265,10 +224,9 @@ func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.M
 		}
 	}
 
-	// Parse status filter
-	if statusStr := c.QueryParam("status"); statusStr != "" {
+	if input.Status != "" {
 		var status domain.MessageStatus
-		switch strings.ToLower(statusStr) {
+		switch strings.ToLower(input.Status) {
 		case "read":
 			status = domain.MessageRead
 			filter.Status = &status
@@ -280,39 +238,18 @@ func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.M
 		}
 	}
 
-	// Parse isStarred filter
-	if starredStr := c.QueryParam("isStarred"); starredStr != "" {
-		starred, err := strconv.ParseBool(starredStr)
-		if err != nil {
-			errors = append(errors, ValidationError{Field: "isStarred", Message: "invalid boolean value for isStarred"})
-		} else {
-			filter.IsStarred = &starred
-		}
+	if input.IsStarred != nil {
+		filter.IsStarred = input.IsStarred
+	}
+	if input.IsSpam != nil {
+		filter.IsSpam = input.IsSpam
+	}
+	if input.HasAttachments != nil {
+		filter.HasAttachments = input.HasAttachments
 	}
 
-	// Parse isSpam filter
-	if spamStr := c.QueryParam("isSpam"); spamStr != "" {
-		spam, err := strconv.ParseBool(spamStr)
-		if err != nil {
-			errors = append(errors, ValidationError{Field: "isSpam", Message: "invalid boolean value for isSpam"})
-		} else {
-			filter.IsSpam = &spam
-		}
-	}
-
-	// Parse hasAttachments filter
-	if attachmentsStr := c.QueryParam("hasAttachments"); attachmentsStr != "" {
-		hasAttachments, err := strconv.ParseBool(attachmentsStr)
-		if err != nil {
-			errors = append(errors, ValidationError{Field: "hasAttachments", Message: "invalid boolean value for hasAttachments"})
-		} else {
-			filter.HasAttachments = &hasAttachments
-		}
-	}
-
-	// Parse receivedAfter filter
-	if afterStr := c.QueryParam("receivedAfter"); afterStr != "" {
-		t, err := time.Parse(time.RFC3339, afterStr)
+	if input.ReceivedAfter != "" {
+		t, err := time.Parse(time.RFC3339, input.ReceivedAfter)
 		if err != nil {
 			errors = append(errors, ValidationError{Field: "receivedAfter", Message: "invalid date format, use RFC3339 (e.g., 2024-01-01T00:00:00Z)"})
 		} else {
@@ -321,9 +258,8 @@ func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.M
 		}
 	}
 
-	// Parse receivedBefore filter
-	if beforeStr := c.QueryParam("receivedBefore"); beforeStr != "" {
-		t, err := time.Parse(time.RFC3339, beforeStr)
+	if input.ReceivedBefore != "" {
+		t, err := time.Parse(time.RFC3339, input.ReceivedBefore)
 		if err != nil {
 			errors = append(errors, ValidationError{Field: "receivedBefore", Message: "invalid date format, use RFC3339 (e.g., 2024-01-01T00:00:00Z)"})
 		} else {
@@ -332,41 +268,56 @@ func (h *SearchHandler) parseAdvancedSearchParams(c echo.Context) (*repository.M
 		}
 	}
 
-	// Validate date range if both are specified
 	if filter.ReceivedAfter != nil && filter.ReceivedBefore != nil {
 		if filter.ReceivedAfter.After(filter.ReceivedBefore.Time) {
 			errors = append(errors, ValidationError{Field: "receivedAfter", Message: "receivedAfter cannot be after receivedBefore"})
 		}
 	}
 
-	// Parse minSize filter
-	if minSizeStr := c.QueryParam("minSize"); minSizeStr != "" {
-		minSize, err := strconv.ParseInt(minSizeStr, 10, 64)
-		if err != nil || minSize < 0 {
-			errors = append(errors, ValidationError{Field: "minSize", Message: "invalid minSize value, must be a non-negative integer"})
+	if input.MinSize != nil {
+		if *input.MinSize < 0 {
+			errors = append(errors, ValidationError{Field: "minSize", Message: "minSize must be non-negative"})
 		} else {
-			filter.MinSize = &minSize
+			filter.MinSize = input.MinSize
 		}
 	}
-
-	// Parse maxSize filter
-	if maxSizeStr := c.QueryParam("maxSize"); maxSizeStr != "" {
-		maxSize, err := strconv.ParseInt(maxSizeStr, 10, 64)
-		if err != nil || maxSize < 0 {
-			errors = append(errors, ValidationError{Field: "maxSize", Message: "invalid maxSize value, must be a non-negative integer"})
+	if input.MaxSize != nil {
+		if *input.MaxSize < 0 {
+			errors = append(errors, ValidationError{Field: "maxSize", Message: "maxSize must be non-negative"})
 		} else {
-			filter.MaxSize = &maxSize
+			filter.MaxSize = input.MaxSize
 		}
 	}
-
-	// Validate size range if both are specified
-	if filter.MinSize != nil && filter.MaxSize != nil {
-		if *filter.MinSize > *filter.MaxSize {
-			errors = append(errors, ValidationError{Field: "minSize", Message: "minSize cannot be greater than maxSize"})
-		}
+	if filter.MinSize != nil && filter.MaxSize != nil && *filter.MinSize > *filter.MaxSize {
+		errors = append(errors, ValidationError{Field: "minSize", Message: "minSize cannot be greater than maxSize"})
 	}
 
 	return filter, searchOpts, errors
+}
+
+// buildListOptions builds list options from the parsed input.
+func (h *SearchHandler) buildListOptions(input *AdvancedSearchInput) *repository.ListOptions {
+	page := input.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := input.PerPage
+	if perPage <= 0 {
+		perPage = repository.DefaultPerPage
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	opts := &repository.ListOptions{
+		Pagination: &repository.PaginationOptions{Page: page, PerPage: perPage},
+	}
+
+	if input.Sort != "" {
+		opts.Sort = &repository.SortOptions{Field: input.Sort, Order: domain.SortOrder(input.Order)}
+	}
+
+	return opts
 }
 
 // parseMailboxFilter parses the mailbox filter from query parameters.

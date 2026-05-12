@@ -126,9 +126,6 @@ type MessageRepository interface {
 	// Searches in subject, sender, recipients, and body content.
 	Search(ctx context.Context, searchOpts *SearchOptions, filter *MessageFilter, opts *ListOptions) (*ListResult[*domain.Message], error)
 
-	// SearchSummaries performs search and returns message summaries.
-	SearchSummaries(ctx context.Context, searchOpts *SearchOptions, filter *MessageFilter, opts *ListOptions) (*ListResult[*domain.MessageSummary], error)
-
 	// GetThread retrieves all messages in a conversation thread.
 	// Uses References and In-Reply-To headers to find related messages.
 	GetThread(ctx context.Context, id domain.ID) ([]*domain.Message, error)

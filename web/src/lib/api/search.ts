@@ -56,7 +56,7 @@ export class SearchApi {
 		input: AdvancedSearchInput,
 		listOptions?: ListOptions
 	): Promise<PaginatedData<Message>> {
-		const params = buildQueryParams({
+		const body = {
 			q: input.q,
 			mailboxId: input.mailboxId,
 			from: input.from,
@@ -70,13 +70,13 @@ export class SearchApi {
 			receivedBefore: input.receivedBefore,
 			minSize: input.minSize,
 			maxSize: input.maxSize,
-			page: listOptions?.page,
-			perPage: listOptions?.perPage ?? listOptions?.pageSize,
+			page: listOptions?.page ?? 1,
+			perPage: listOptions?.perPage ?? listOptions?.pageSize ?? 20,
 			sort: listOptions?.sort,
 			order: listOptions?.order
-		});
+		};
 
-		return this.client.get<PaginatedData<Message>>('/api/v1/search/advanced', { params });
+		return this.client.post<PaginatedData<Message>>('/api/v1/search/advanced', body);
 	}
 
 	/**

@@ -449,10 +449,6 @@ func (r *mockMsgRepo) Search(_ context.Context, _ *repository.SearchOptions, fil
 	return r.List(context.Background(), filter, nil)
 }
 
-func (r *mockMsgRepo) SearchSummaries(_ context.Context, _ *repository.SearchOptions, _ *repository.MessageFilter, _ *repository.ListOptions) (*repository.ListResult[*domain.MessageSummary], error) {
-	return &repository.ListResult[*domain.MessageSummary]{}, nil
-}
-
 func (r *mockMsgRepo) GetThread(_ context.Context, _ domain.ID) ([]*domain.Message, error)   { return nil, nil }
 func (r *mockMsgRepo) GetReplies(_ context.Context, _ domain.ID) ([]*domain.Message, error)  { return nil, nil }
 func (r *mockMsgRepo) GetStarred(_ context.Context, _ *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {

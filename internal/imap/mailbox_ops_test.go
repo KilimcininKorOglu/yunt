@@ -317,9 +317,6 @@ func (m *messageMockRepository) UnmarkAsAnswered(ctx context.Context, id domain.
 func (m *messageMockRepository) Search(ctx context.Context, searchOpts *repository.SearchOptions, filter *repository.MessageFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
 	return &repository.ListResult[*domain.Message]{}, nil
 }
-func (m *messageMockRepository) SearchSummaries(ctx context.Context, searchOpts *repository.SearchOptions, filter *repository.MessageFilter, opts *repository.ListOptions) (*repository.ListResult[*domain.MessageSummary], error) {
-	return &repository.ListResult[*domain.MessageSummary]{}, nil
-}
 func (m *messageMockRepository) GetThread(ctx context.Context, id domain.ID) ([]*domain.Message, error) {
 	return nil, nil
 }
