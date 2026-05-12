@@ -185,9 +185,9 @@ func (r *Repository) db() sqlxDB {
 	defer r.mu.RUnlock()
 
 	if r.isTx && r.tx != nil {
-		return r.tx
+		return &metricsDB{inner: r.tx}
 	}
-	return r.pool.DB()
+	return &metricsDB{inner: r.pool.DB()}
 }
 
 // sqlxDB is an interface that both *sqlx.DB and *sqlx.Tx implement.

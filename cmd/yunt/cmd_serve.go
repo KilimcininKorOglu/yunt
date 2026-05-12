@@ -108,8 +108,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	if storageBackend != nil {
 		log.Info().Str("type", cfg.Storage.Type).Msg("Storage backend initialized")
-		if sqliteRepo, ok := repo.(*sqlite.Repository); ok {
-			sqliteRepo.Attachments().(*sqlite.AttachmentRepository).SetStorageBackend(storageBackend)
+		switch r := repo.(type) {
+		case *sqlite.Repository:
+			r.Attachments().(*sqlite.AttachmentRepository).SetStorageBackend(storageBackend)
+		case *postgres.Repository:
+			r.Attachments().(*postgres.AttachmentRepository).SetStorageBackend(storageBackend)
+		case *mysql.Repository:
+			r.Attachments().(*mysql.AttachmentRepository).SetStorageBackend(storageBackend)
+		case *mongodb.Repository:
+			r.Attachments().(*mongodb.AttachmentRepository).SetStorageBackend(storageBackend)
 		}
 	}
 

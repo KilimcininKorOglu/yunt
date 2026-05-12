@@ -10,6 +10,8 @@ import (
 
 	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
+
+	"yunt/internal/metrics"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
@@ -122,6 +124,7 @@ func (s *Session) createPlainServer(authenticator *Authenticator) sasl.Server {
 
 		if s.backend.server.rateLimiter != nil && s.backend.server.rateLimiter.IsAuthBlocked(s.remoteAddr) {
 			s.backend.server.rateLimiter.applyBackoff(extractIP(s.remoteAddr))
+			metrics.SMTPMessagesRejected.WithLabelValues("auth_blocked").Inc()
 			return &smtp.SMTPError{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Too many authentication failures, try again later"}
 		}
 
@@ -130,6 +133,7 @@ func (s *Session) createPlainServer(authenticator *Authenticator) sasl.Server {
 			if s.backend.server.rateLimiter != nil {
 				s.backend.server.rateLimiter.RecordAuthFailure(s.remoteAddr)
 			}
+			metrics.SMTPMessagesRejected.WithLabelValues("auth_failure").Inc()
 			s.logAuthFailure(authUsername, "PLAIN", err)
 			return err
 		}
@@ -146,6 +150,7 @@ func (s *Session) createLoginServer(authenticator *Authenticator) sasl.Server {
 	return NewLoginServer(func(username, password string) error {
 		if s.backend.server.rateLimiter != nil && s.backend.server.rateLimiter.IsAuthBlocked(s.remoteAddr) {
 			s.backend.server.rateLimiter.applyBackoff(extractIP(s.remoteAddr))
+			metrics.SMTPMessagesRejected.WithLabelValues("auth_blocked").Inc()
 			return &smtp.SMTPError{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Too many authentication failures, try again later"}
 		}
 
@@ -154,6 +159,7 @@ func (s *Session) createLoginServer(authenticator *Authenticator) sasl.Server {
 			if s.backend.server.rateLimiter != nil {
 				s.backend.server.rateLimiter.RecordAuthFailure(s.remoteAddr)
 			}
+			metrics.SMTPMessagesRejected.WithLabelValues("auth_failure").Inc()
 			s.logAuthFailure(username, "LOGIN", err)
 			return err
 		}
@@ -301,7 +307,7 @@ func (s *Session) Rcpt(to string, opts *smtp.RcptOptions) error {
 func (s *Session) Data(r io.Reader) error {
 	// Verify we have at least one recipient
 	if len(s.recipients) == 0 {
-		// RFC 5321: 503 - Bad sequence of commands
+		metrics.SMTPMessagesRejected.WithLabelValues("no_recipients").Inc()
 		return &smtp.SMTPError{
 			Code:         503,
 			EnhancedCode: smtp.EnhancedCode{5, 5, 1},
@@ -314,12 +320,14 @@ func (s *Session) Data(r io.Reader) error {
 		if err := s.backend.server.rateLimiter.CheckMessage(s.ctx, s.remoteAddr); err != nil {
 			s.backend.server.rateLimiter.applyBackoff(extractIP(s.remoteAddr))
 			s.backend.server.stats.RateLimitRejected()
+			metrics.SMTPMessagesRejected.WithLabelValues("rate_limit").Inc()
 			s.logger.Warn().Err(err).Str("from", s.from).Msg("message rejected by rate limiter")
 			return err
 		}
 		if s.authenticated && s.authUser != nil {
 			if err := s.backend.server.rateLimiter.CheckUserMessage(s.authUser.Username); err != nil {
 				s.backend.server.stats.RateLimitRejected()
+				metrics.SMTPMessagesRejected.WithLabelValues("rate_limit_user").Inc()
 				s.logger.Warn().Err(err).Str("user", s.authUser.Username).Msg("user message rate limit exceeded")
 				return err
 			}
@@ -345,7 +353,7 @@ func (s *Session) Data(r io.Reader) error {
 		}
 		data, err = io.ReadAll(limitedReader)
 		if limitedReader.exceeded {
-			// RFC 5321: 552 - Message exceeds fixed maximum message size
+			metrics.SMTPMessagesRejected.WithLabelValues("size_limit").Inc()
 			return &smtp.SMTPError{
 				Code:         552,
 				EnhancedCode: smtp.EnhancedCode{5, 3, 4},
@@ -414,6 +422,7 @@ func (s *Session) Data(r io.Reader) error {
 	}
 
 	s.backend.server.stats.MessageReceived()
+	metrics.SMTPMessagesReceived.Inc()
 
 	if s.backend.server.rateLimiter != nil {
 		s.backend.server.rateLimiter.OnMessageSent(s.remoteAddr)

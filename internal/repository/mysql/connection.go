@@ -13,6 +13,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"yunt/internal/config"
+	"yunt/internal/repository"
 )
 
 // ConnectionPool manages MySQL database connections with pooling support.
@@ -21,6 +22,8 @@ type ConnectionPool struct {
 	mu      sync.RWMutex
 	config  *ConnectionConfig
 	metrics *ConnectionMetrics
+	cb      *repository.CircuitBreaker
+	stopCh  chan struct{}
 }
 
 // ConnectionConfig holds the configuration for the MySQL connection pool.
@@ -206,11 +209,15 @@ func NewConnectionPool(cfg *ConnectionConfig) (*ConnectionPool, error) {
 	pool := &ConnectionPool{
 		config:  cfg,
 		metrics: &ConnectionMetrics{},
+		cb:      repository.NewCircuitBreaker(repository.DefaultCircuitBreakerConfig()),
+		stopCh:  make(chan struct{}),
 	}
 
 	if err := pool.connect(); err != nil {
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
+
+	go pool.healthMonitor()
 
 	return pool, nil
 }
@@ -285,6 +292,8 @@ func (p *ConnectionPool) DB() *sqlx.DB {
 
 // Close closes all connections in the pool.
 func (p *ConnectionPool) Close() error {
+	close(p.stopCh)
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -303,21 +312,49 @@ func (p *ConnectionPool) Close() error {
 
 // Health checks the health of the database connection.
 func (p *ConnectionPool) Health(ctx context.Context) error {
+	if !p.cb.Allow() {
+		return repository.ErrCircuitOpen
+	}
+
 	p.mu.RLock()
 	db := p.db
 	p.mu.RUnlock()
 
 	if db == nil {
+		p.cb.RecordFailure()
 		return fmt.Errorf("database connection is closed")
 	}
 
 	if err := db.PingContext(ctx); err != nil {
 		p.recordError(err)
+		p.cb.RecordFailure()
 		return fmt.Errorf("database ping failed: %w", err)
 	}
 
+	p.cb.RecordSuccess()
 	p.recordHealthCheck()
 	return nil
+}
+
+// CircuitBreaker returns the pool's circuit breaker.
+func (p *ConnectionPool) CircuitBreaker() *repository.CircuitBreaker {
+	return p.cb
+}
+
+func (p *ConnectionPool) healthMonitor() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.stopCh:
+			return
+		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			p.Health(ctx)
+			cancel()
+		}
+	}
 }
 
 // Stats returns current connection pool statistics.

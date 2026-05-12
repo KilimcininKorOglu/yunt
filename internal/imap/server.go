@@ -13,6 +13,8 @@ import (
 	"github.com/emersion/go-imap/v2/imapserver"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+
+	"yunt/internal/metrics"
 )
 
 // Server represents the IMAP server instance.
@@ -266,6 +268,7 @@ func (s *Server) SupportedAuthMechanisms() []string {
 // newSession creates a new IMAP session for an incoming connection.
 func (s *Server) newSession(conn *imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
 	s.connCount.Add(1)
+	metrics.IMAPActiveConnections.Inc()
 
 	remoteAddr := conn.NetConn().RemoteAddr().String()
 	s.logger.Info().
@@ -295,6 +298,7 @@ func (s *Server) newSession(conn *imapserver.Conn) (imapserver.Session, *imapser
 // onSessionClose is called when a session is closed.
 func (s *Server) onSessionClose(remoteAddr string) {
 	s.connCount.Add(-1)
+	metrics.IMAPActiveConnections.Dec()
 	s.logger.Info().
 		Str("remote_addr", remoteAddr).
 		Int64("remaining_connections", s.connCount.Load()).

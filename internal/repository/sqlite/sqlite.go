@@ -212,9 +212,9 @@ func (r *Repository) db() sqlxDB {
 	defer r.mu.RUnlock()
 
 	if r.isTx && r.tx != nil {
-		return r.tx
+		return &metricsDB{inner: r.tx}
 	}
-	return r.pool.DB()
+	return &metricsDB{inner: r.pool.DB()}
 }
 
 // DB returns the underlying *sqlx.DB connection pool for direct use.
