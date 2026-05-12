@@ -4,14 +4,18 @@ Yunt is a lightweight, powerful mail server written in Go, designed for develope
 
 ## Features
 
-| Feature               | Description                                    |
-|-----------------------|------------------------------------------------|
-| SMTP Server           | Mail capture and relay support                 |
-| IMAP Server           | Mail client support (Thunderbird, etc.)        |
-| Web UI                | Modern admin panel                             |
-| REST API              | Full-featured API for integration              |
-| Multi-user Support    | Team collaboration with isolated mailboxes     |
-| Multi-database        | SQLite, PostgreSQL, MySQL, MongoDB             |
+| Feature               | Description                                                 |
+|-----------------------|-------------------------------------------------------------|
+| SMTP Server           | Mail capture and relay support                              |
+| IMAP Server           | Mail client support (Thunderbird, etc.)                     |
+| Web UI                | MSN Hotmail 2006 nostalgic interface                        |
+| REST API              | Full-featured API for integration                           |
+| Multi-user Support    | Team collaboration with isolated mailboxes                  |
+| Multi-database        | SQLite, PostgreSQL, MySQL, MongoDB                          |
+| Prometheus Metrics    | /metrics endpoint with Grafana dashboard                    |
+| Circuit Breaker       | Automatic database failure recovery                         |
+| Storage Backend       | Pluggable attachment storage (filesystem, S3)               |
+| Real-time Updates     | Server-Sent Events for instant notifications                |
 
 ## Quick Start
 
@@ -42,29 +46,27 @@ docker run -d \
 
 ### Using Docker Compose
 
-```yaml
-services:
-  yunt:
-    image: ghcr.io/yunt/yunt:latest
-    ports:
-      - "1025:1025"  # SMTP
-      - "1143:1143"  # IMAP
-      - "8025:8025"  # Web UI
-    volumes:
-      - yunt-data:/var/lib/yunt
-    environment:
-      - YUNT_DATABASE_DSN=/var/lib/yunt/yunt.db
-    restart: unless-stopped
+```bash
+# SQLite (default)
+docker compose up -d
 
-volumes:
-  yunt-data:
+# PostgreSQL
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+
+# MySQL
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d
+
+# MongoDB
+docker compose -f docker-compose.yml -f docker-compose.mongodb.yml up -d
 ```
+
+Each override file adds the database service and mounts the appropriate config YAML.
 
 ### Building from Source
 
 #### Prerequisites
 
-- Go 1.22 or higher
+- Go 1.25 or higher
 - Make (optional, for build commands)
 
 #### Build
@@ -117,7 +119,9 @@ yunt/
 │   ├── imap/           # IMAP server
 │   ├── api/            # REST API and Web UI
 │   └── parser/         # MIME parser
-├── configs/            # Configuration examples
+├── web/                # SvelteKit Web UI source
+├── webui/              # Embedded Web UI (go:embed)
+├── configs/            # Configuration examples + Grafana dashboard
 ├── scripts/            # Build and utility scripts
 ├── go.mod              # Go module definition
 └── Makefile            # Build automation
@@ -181,6 +185,15 @@ make lint
 
 # Format code
 make fmt
+
+# Build Web UI + Go binary
+make build-full
+
+# Web UI development
+make web-install    # Install dependencies
+make web-dev        # Start Vite dev server (port 3000)
+make web-build      # Production build
+make web-check      # Type checking
 
 # Clean build artifacts
 make clean
