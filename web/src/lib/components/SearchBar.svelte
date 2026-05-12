@@ -1,9 +1,4 @@
 <script lang="ts">
-	/**
-	 * SearchBar Component
-	 * Provides search functionality for filtering messages.
-	 */
-
 	interface Props {
 		value?: string;
 		placeholder?: string;
@@ -24,7 +19,6 @@
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastExternalValue = '';
 
-	// Derived current value - prefer internal state unless external changed
 	const inputValue = $derived.by(() => {
 		if (value !== lastExternalValue) {
 			lastExternalValue = value;
@@ -37,7 +31,6 @@
 		const target = event.target as HTMLInputElement;
 		internalValue = target.value;
 
-		// Debounce search
 		if (debounceTimer) {
 			clearTimeout(debounceTimer);
 		}
@@ -68,23 +61,7 @@
 	}
 </script>
 
-<div class="relative flex-1">
-	<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-		<svg
-			class="h-5 w-5 text-secondary-400"
-			fill="none"
-			viewBox="0 0 24 24"
-			stroke="currentColor"
-			aria-hidden="true"
-		>
-			<path
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				stroke-width="2"
-				d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-			/>
-		</svg>
-	</div>
+<div class="search-bar">
 	<input
 		type="text"
 		{disabled}
@@ -92,24 +69,10 @@
 		oninput={handleInput}
 		onkeydown={handleKeydown}
 		{placeholder}
-		class="input pl-10 pr-10"
-		aria-label="Search messages"
+		class="hotmail-input"
+		style="flex:1;margin:0;"
 	/>
 	{#if inputValue}
-		<button
-			type="button"
-			onclick={handleClear}
-			class="absolute inset-y-0 right-0 flex items-center pr-3 text-secondary-400 hover:text-secondary-600"
-			aria-label="Clear search"
-		>
-			<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M6 18L18 6M6 6l12 12"
-				/>
-			</svg>
-		</button>
+		<button type="button" class="hotmail-btn" onclick={handleClear}>Clear</button>
 	{/if}
 </div>

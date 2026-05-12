@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=800">
+<title>MSN Hotmail - Inbox</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Verdana, Geneva, Arial, Helvetica, sans-serif; font-size: 11px; color: #000; background: #7b9bc5; min-width: 780px; }
+a { color: #0033cc; text-decoration: underline; cursor: pointer; }
+a:hover { color: #cc0000; }
+input[type="text"], input[type="password"], textarea, select { font-family: Verdana, Geneva, Arial, Helvetica, sans-serif; font-size: 11px; }
+
+/* ===== TOP BAR ===== */
+.topbar {
+  background: #003366;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.topbar a { color: #fff; text-decoration: none; font-size: 11px; font-weight: bold; }
+.topbar a:hover { text-decoration: underline; color: #fff; }
+.topbar .sep { color: #6699cc; margin: 0 2px; font-weight: normal; }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.topbar-right .signout {
+  background: #e8e8e0;
+  color: #003366;
+  border: 1px outset #ccc;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  text-decoration: none;
+}
+.topbar-right label { color: #99bbdd; font-size: 10px; }
+.topbar-right input[type="text"] {
+  width: 160px;
+  height: 18px;
+  border: 1px solid #003;
+  padding: 1px 4px;
+  font-size: 11px;
+}
+.topbar-right .go-btn {
+  background: #339933;
+  color: #fff;
+  border: 1px outset #6c6;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* ===== MSN HOTMAIL HEADER ===== */
+.msn-header {
+  background: linear-gradient(to bottom, #6a9fd8 0%, #4a7fb8 50%, #3a6fa8 100%);
+  padding: 6px 10px 0 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.msn-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+.msn-brand .msn-logo {
+  font-size: 28px;
+  font-weight: bold;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.msn-brand .msn-logo .butterfly { font-size: 22px; }
+.msn-brand .hotmail-text {
+  font-size: 26px;
+  font-weight: normal;
+  color: #fff;
+  font-family: 'Trebuchet MS', Arial, sans-serif;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+}
+.nav-tabs .tab {
+  padding: 5px 16px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  background: #5a8fc8;
+  border: 1px solid #3a6fa8;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+.nav-tabs .tab:hover { background: #6a9fd8; color: #fff; }
+.nav-tabs .tab.active {
+  background: #d8e4f0;
+  color: #003366;
+  border-color: #8aafcc;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+.header-right a { color: #ddeeff; font-size: 11px; }
+
+/* ===== SUB HEADER ===== */
+.sub-header {
+  background: #d8e4f0;
+  padding: 3px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #8aafcc;
+}
+.sub-header .email { color: #003366; font-size: 11px; }
+.sub-header .messenger { color: #336699; font-size: 11px; }
+
+/* ===== TOOLBAR ===== */
+.toolbar {
+  background: #e0e8f0;
+  border-bottom: 1px solid #8aafcc;
+  padding: 3px 10px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.toolbar .tbtn {
+  font-family: Verdana, sans-serif;
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #f0f4f8;
+  border: 1px solid #8aafcc;
+  cursor: pointer;
+  color: #003366;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.toolbar .tbtn:hover { background: #e0e8f0; }
+.toolbar .tbtn .ico { font-size: 12px; }
+.toolbar .sep-v { width: 1px; height: 18px; background: #8aafcc; margin: 0 3px; }
+
+/* ===== MAIN LAYOUT ===== */
+.main {
+  display: flex;
+  background: #d0dce8;
+  min-height: 420px;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 150px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.sidebar .collapse-btn {
+  font-size: 12px;
+  color: #003366;
+  cursor: pointer;
+  margin-bottom: 6px;
+  display: block;
+}
+.sidebar .storage {
+  font-size: 10px;
+  color: #336699;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+.sidebar .section-title {
+  font-weight: bold;
+  color: #003366;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.sidebar .folder-list { list-style: none; margin-bottom: 10px; }
+.sidebar .folder-list li { padding: 2px 0; }
+.sidebar .folder-list li a {
+  color: #0033cc;
+  text-decoration: none;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sidebar .folder-list li a:hover { text-decoration: underline; }
+.sidebar .folder-list li a .folder-icon { font-size: 12px; }
+.sidebar .folder-list li a.active { font-weight: bold; color: #000; }
+.sidebar .folder-list li a .count { color: #003366; }
+.sidebar .manage-link {
+  font-size: 10px;
+  color: #0033cc;
+  margin-top: 4px;
+  display: block;
+}
+.sidebar .promo {
+  margin-top: 12px;
+  font-size: 10px;
+  border-top: 1px solid #8aafcc;
+  padding-top: 8px;
+}
+.sidebar .promo a { display: block; padding: 3px 0; font-size: 10px; }
+
+/* ===== CONTENT ===== */
+.content {
+  flex: 1;
+  background: #fff;
+  border-left: 1px solid #8aafcc;
+}
+
+/* ===== FILTER BAR ===== */
+.filter-bar {
+  padding: 3px 8px;
+  text-align: right;
+  background: #f0f4f8;
+  border-bottom: 1px solid #ddd;
+  font-size: 10px;
+  color: #336699;
+}
+.filter-bar select {
+  font-size: 10px;
+  border: 1px solid #8aafcc;
+}
+
+/* ===== MESSAGE TABLE ===== */
+.msg-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.msg-table th {
+  background: #e0e8f0;
+  border-bottom: 1px solid #8aafcc;
+  padding: 3px 5px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: bold;
+  color: #003366;
+  white-space: nowrap;
+}
+.msg-table th a { color: #003366; text-decoration: none; }
+.msg-table th a:hover { text-decoration: underline; }
+.msg-table td {
+  padding: 3px 5px;
+  border-bottom: 1px solid #e8ecf0;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msg-table tr:nth-child(even) td { background: #f4f8fc; }
+.msg-table tr:hover td { background: #e8f0ff; }
+.msg-table tr.unread td { font-weight: bold; }
+.msg-table td.from { max-width: 160px; }
+.msg-table td.subject { max-width: 320px; }
+.msg-table td.subject a { color: #0033cc; text-decoration: none; }
+.msg-table td.subject a:hover { text-decoration: underline; }
+.msg-table td.date { color: #666; font-size: 10px; text-align: right; }
+.msg-table td.size { color: #666; font-size: 10px; text-align: right; }
+.msg-table td.icons { width: 16px; text-align: center; font-size: 11px; color: #6699cc; }
+
+.status-bar {
+  text-align: center;
+  padding: 6px;
+  font-size: 11px;
+  color: #336699;
+  border-top: 1px solid #ddd;
+}
+
+/* ===== FOOTER ===== */
+.footer-bar {
+  background: #4a7fb8;
+  padding: 4px 10px;
+  color: #ddeeff;
+  font-size: 10px;
+}
+.footer-bar a { color: #fff; font-size: 10px; }
+.footer-bottom {
+  background: #003366;
+  padding: 4px 10px;
+  color: #6699cc;
+  font-size: 9px;
+  display: flex;
+  justify-content: space-between;
+}
+.footer-bottom a { color: #99bbdd; font-size: 9px; }
+
+/* ===== PAGE VIEWS ===== */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ===== LOGIN PAGE ===== */
+.login-page {
+  background: #fff;
+  min-height: 420px;
+  display: flex;
+}
+.login-left {
+  flex: 1;
+  padding: 20px 30px;
+}
+.login-left h2 { color: #003366; font-size: 16px; margin-bottom: 10px; }
+.login-left p { font-size: 11px; line-height: 1.6; margin-bottom: 8px; }
+.login-left ul { margin: 8px 0 8px 20px; font-size: 11px; line-height: 1.8; }
+.login-right {
+  width: 300px;
+  background: #e8f0f8;
+  border-left: 1px solid #8aafcc;
+  padding: 20px;
+}
+.login-right h3 { color: #003366; font-size: 13px; margin-bottom: 12px; }
+.login-right label { display: block; font-size: 11px; color: #333; margin-bottom: 3px; font-weight: bold; }
+.login-right input[type="text"],
+.login-right input[type="password"] {
+  width: 100%;
+  padding: 3px;
+  border: 1px solid #8aafcc;
+  margin-bottom: 8px;
+}
+.login-right .hint { font-size: 10px; color: #666; margin-bottom: 8px; }
+.login-right .signin-btn {
+  background: #336699;
+  color: #fff;
+  border: 1px outset #4a7fb8;
+  padding: 3px 16px;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.login-right .signin-btn:hover { background: #4a7fb8; }
+.login-right .remember { font-size: 10px; margin: 8px 0; }
+.login-right .remember label { font-weight: normal; display: inline; }
+.login-right .links { margin-top: 12px; font-size: 10px; }
+.login-right .links a { display: block; padding: 2px 0; }
+
+/* ===== COMPOSE PAGE ===== */
+.compose-area { padding: 10px; }
+.compose-area .field-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.compose-area .field-label {
+  width: 70px;
+  font-weight: bold;
+  color: #003366;
+  font-size: 11px;
+  text-align: right;
+  padding-right: 8px;
+}
+.compose-area .field-input {
+  flex: 1;
+}
+.compose-area .field-input input[type="text"] {
+  width: 100%;
+  padding: 3px;
+  border: 1px solid #8aafcc;
+}
+.compose-area .editor {
+  margin-top: 8px;
+}
+.compose-area .editor-toolbar {
+  background: #e0e8f0;
+  border: 1px solid #8aafcc;
+  border-bottom: none;
+  padding: 3px 6px;
+  display: flex;
+  gap: 4px;
+}
+.compose-area .editor-toolbar select { font-size: 10px; }
+.compose-area .editor-toolbar button {
+  font-size: 12px;
+  border: 1px solid #8aafcc;
+  background: #f0f4f8;
+  cursor: pointer;
+  width: 24px;
+  height: 22px;
+}
+.compose-area textarea {
+  width: 100%;
+  height: 250px;
+  border: 1px solid #8aafcc;
+  padding: 6px;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  resize: vertical;
+}
+.compose-area .attach-row {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #336699;
+}
+
+/* ===== OPTIONS PAGE ===== */
+.options-area { padding: 15px; }
+.options-area h2 { color: #003366; font-size: 14px; margin-bottom: 12px; border-bottom: 1px solid #8aafcc; padding-bottom: 4px; }
+.options-area .opt-section {
+  margin-bottom: 16px;
+}
+.options-area .opt-section h3 {
+  color: #003366;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.options-area .opt-link {
+  display: block;
+  padding: 4px 0 4px 16px;
+  font-size: 11px;
+  color: #0033cc;
+  text-decoration: none;
+}
+.options-area .opt-link:hover { text-decoration: underline; }
+.options-area .opt-desc {
+  display: inline;
+  color: #666;
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+/* ===== READ MESSAGE PAGE ===== */
+.read-area { padding: 0; }
+.read-header {
+  background: #f0f4f8;
+  border-bottom: 1px solid #ddd;
+  padding: 10px 12px;
+}
+.read-header .read-subject {
+  font-size: 16px;
+  font-weight: bold;
+  color: #003366;
+  margin-bottom: 8px;
+}
+.read-header table { font-size: 11px; }
+.read-header td.lbl {
+  font-weight: bold;
+  color: #336699;
+  padding: 2px 8px 2px 0;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.read-header td.val { color: #333; padding: 2px 0; }
+.read-body {
+  padding: 16px;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #333;
+  min-height: 250px;
+}
+.read-attachments {
+  border-top: 1px solid #ddd;
+  padding: 10px 12px;
+  background: #f8fafe;
+  font-size: 11px;
+}
+.read-attachments .att-title { font-weight: bold; color: #003366; margin-bottom: 6px; }
+.read-attachments .att-item {
+  display: inline-block;
+  background: #e8f0f8;
+  border: 1px solid #8aafcc;
+  padding: 4px 10px;
+  margin-right: 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.read-attachments .att-item:hover { background: #d0e0f0; }
+</style>
+</head>
+<body>
+
+<!-- ===== TOP BAR ===== -->
+<div class="topbar">
+  <div>
+    <a href="#" onclick="showPage('login')">MSN Home</a>
+    <span class="sep">|</span>
+    <a href="#">My MSN</a>
+    <span class="sep">|</span>
+    <a href="#" onclick="showPage('inbox')">Hotmail</a>
+    <span class="sep">|</span>
+    <a href="#">Shopping</a>
+    <span class="sep">|</span>
+    <a href="#">Money</a>
+    <span class="sep">|</span>
+    <a href="#">People &amp; Chat</a>
+  </div>
+  <div class="topbar-right">
+    <a href="#" class="signout" onclick="showPage('login')">Sign Out</a>
+    <label>Web Search:</label>
+    <input type="text">
+    <button class="go-btn">Go</button>
+  </div>
+</div>
+
+<!-- ===== MSN HOTMAIL HEADER ===== -->
+<div class="msn-header">
+  <div class="msn-brand">
+    <div class="msn-logo">
+      <span class="butterfly">&#x1F98B;</span>
+      msn
+    </div>
+    <span class="hotmail-text">Hotmail</span>
+  </div>
+  <div style="display:flex; align-items:flex-end; gap: 20px;">
+    <div class="nav-tabs">
+      <a class="tab" href="#" onclick="showPage('inbox')" id="tabToday">Today</a>
+      <a class="tab active" href="#" onclick="showPage('inbox')" id="tabMail">Mail</a>
+      <a class="tab" href="#" onclick="showPage('inbox')" id="tabCalendar">Calendar</a>
+      <a class="tab" href="#" onclick="showPage('inbox')" id="tabContacts">Contacts</a>
+    </div>
+    <div class="header-right">
+      <a href="#" onclick="showPage('options')">Options</a>
+      <a href="#">Help</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SUB HEADER ===== -->
+<div class="sub-header" id="subHeader">
+  <span class="email">kerem_2003@hotmail.com</span>
+  <span class="messenger">&#x1F7E2; Messenger: Online &#x25BC;</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- LOGIN PAGE -->
+<!-- ============================================================ -->
+<div class="page" id="page-login">
+  <div class="login-page">
+    <div class="login-left">
+      <h2>New to MSN Hotmail?</h2>
+      <h3 style="color:#003366;font-size:13px;margin-bottom:8px;">A smarter way to email - FREE!</h3>
+      <ul>
+        <li><b>Get enhanced security for your email</b><br>Help keep your inbox free from contamination. With powerful spam filters and enhanced virus scanning &amp; cleaning.</li>
+        <li><b>Easily connect &amp; share!</b><br>Send &amp; receive e-mail from any Web connection. With a huge <b>1 GB</b> inbox and the ability to send up to <b>10MB</b> files or photos.</li>
+        <li><b>Express yourself!</b><br>Have fun personalizing e-mail to friends &amp; family. With unique emoticons, backgrounds, fonts &amp; layout styles.</li>
+      </ul>
+      <br>
+      <button style="background:#336699;color:#fff;border:1px outset #4a7fb8;padding:4px 20px;font-size:12px;font-weight:bold;cursor:pointer;">Sign Up</button>
+    </div>
+    <div class="login-right">
+      <h3>Sign in to Hotmail</h3>
+      <label>E-mail address:</label>
+      <input type="text" value="kerem_2003@hotmail.com">
+      <label>Password:</label>
+      <input type="password" value="password123">
+      <div class="hint">(example@hotmail.com)</div>
+      <a href="#" style="font-size:10px;">Forgot your password?</a>
+      <br><br>
+      <div class="remember">
+        <input type="radio" name="save" checked> <label>Save my e-mail address and password</label><br>
+        <input type="radio" name="save"> <label>Save my e-mail address</label><br>
+        <input type="radio" name="save"> <label>Always ask for my e-mail address and password</label>
+      </div>
+      <br>
+      <button class="signin-btn" onclick="showPage('inbox')">Sign In</button>
+      <div class="links">
+        <a href="#">Sign in using enhanced security</a>
+      </div>
+      <br>
+      <div style="font-size:9px;color:#666;border-top:1px solid #ccc;padding-top:8px;">
+        <b>&#x1F6E1;&#xFE0F; Windows Live ID</b><br>
+        Works with Windows Live, MSN, and Microsoft Passport sites<br><br>
+        <a href="#" style="font-size:9px;">Account Services</a> |
+        <a href="#" style="font-size:9px;">Privacy Statement</a> |
+        <a href="#" style="font-size:9px;">Terms of Use</a><br>
+        &copy;2007 Microsoft
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- INBOX PAGE -->
+<!-- ============================================================ -->
+<div class="page active" id="page-inbox">
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="tbtn" onclick="showPage('compose')"><span class="ico">&#x2709;</span> New &#x25BC;</button>
+    <div class="sep-v"></div>
+    <button class="tbtn"><span class="ico">&#x2716;</span> Delete</button>
+    <button class="tbtn"><span class="ico">&#x26A0;</span> Junk</button>
+    <div class="sep-v"></div>
+    <button class="tbtn"><span class="ico">&#x1F50D;</span> Find</button>
+    <div class="sep-v"></div>
+    <button class="tbtn"><span class="ico">&#x1F4C1;</span> Put in Folder &#x25BC;</button>
+    <button class="tbtn"><span class="ico">&#x2709;</span> Mark As Unread</button>
+  </div>
+
+  <div class="main">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <a href="#" class="collapse-btn">&laquo;</a>
+      <div class="storage">1% of 25MB</div>
+      <div class="section-title">Folders</div>
+      <ul class="folder-list">
+        <li><a href="#" class="active"><span class="folder-icon">&#x1F4E8;</span> Inbox <span class="count">(7)</span></a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Junk E-Mail</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Drafts</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Sent Messages</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F5D1;</span> Trash Can</a></li>
+      </ul>
+      <a href="#" class="manage-link">Manage Folders</a>
+
+      <div class="promo">
+        <a href="#">&#x1F4F1; Get MSN on your Mobile</a>
+        <a href="#">&#x2B50; MSN Premium</a>
+        <a href="#">&#x1F4E2; Free Newsletters</a>
+        <a href="#">&#x1F381; MSN Featured Offers</a>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <div class="filter-bar">
+        Show me mail from:
+        <select>
+          <option>Everyone</option>
+          <option>Contacts only</option>
+          <option>Mailing lists</option>
+        </select>
+      </div>
+
+      <table class="msg-table">
+        <thead>
+          <tr>
+            <th style="width:16px;">&#x2757;</th>
+            <th style="width:16px;"></th>
+            <th style="width:16px;">&#x1F4CE;</th>
+            <th style="width:22px;"><input type="checkbox"></th>
+            <th style="width:160px;"><a href="#">From</a></th>
+            <th><a href="#">Subject</a></th>
+            <th style="width:60px;text-align:right;"><a href="#">&#x25BC; Date</a></th>
+            <th style="width:45px;text-align:right;"><a href="#">Size</a></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="unread">
+            <td class="icons"></td>
+            <td class="icons">&#x2709;</td>
+            <td class="icons"></td>
+            <td><input type="checkbox"></td>
+            <td class="from">Hotmail Member Servi...</td>
+            <td class="subject"><a href="#" onclick="showRead('Hotmail Member Services &lt;memberservices@msn.com&gt;','Holidays got you in a hurry? MSN Hotmail makes life easier!','December 7, 2006 10:00 AM','Dear MSN Hotmail Member,\n\nThe holidays are here and MSN Hotmail is making it easier than ever to stay connected with friends and family!\n\nWhat\'s New:\n- Send photos up to 10 MB - perfect for holiday memories!\n- Your inbox now holds 1 GB of storage\n- Enhanced virus scanning keeps your inbox safe\n- New emoticons and backgrounds for festive messages\n\nPlus, try MSN Messenger for instant holiday chats with your contacts!\n\nHappy Holidays from the MSN Hotmail Team')">Holidays got you in a hurry? MSN Hotmail...</a></td>
+            <td class="date">Dec 7</td>
+            <td class="size">3KB</td>
+          </tr>
+          <tr class="unread">
+            <td class="icons"></td>
+            <td class="icons">&#x2709;</td>
+            <td class="icons"></td>
+            <td><input type="checkbox"></td>
+            <td class="from">ahmet_cool_42</td>
+            <td class="subject"><a href="#" onclick="showRead('ahmet_cool_42@hotmail.com','kanka bu oyunu bi dene cok iyi bak','Dec 5, 2006 3:42 PM','Kanka su oyunu bi dene bak cok iyi ya. Need For Speed Most Wanted. Internetten indir 2 CD. Bende crack dosyasi var yarin okula getiririm.\n\nBi de msn e gel aksam konusuruz.\n\nAhmet')">kanka bu oyunu bi dene cok iyi bak</a></td>
+            <td class="date">Dec 5</td>
+            <td class="size">5KB</td>
+          </tr>
+          <tr class="unread">
+            <td class="icons"></td>
+            <td class="icons">&#x2709;</td>
+            <td class="icons">&#x1F4CE;</td>
+            <td><input type="checkbox"></td>
+            <td class="from">elif_prenses</td>
+            <td class="subject"><a href="#" onclick="showRead('elif_prenses@hotmail.com','bu fotolari gorsun diye yolluyorum :))','Dec 3, 2006 7:15 PM','Merhabaa :))\n\nGecen hafta cektigimiz fotolari yolluyorum bak. Tatildeki fotolar cok guzel cikti ya. Anneme de goster :P\n\nOzellikle deniz kenarindaki cok guzel.\n\nGorussuruzz\nElif','DSC00142.jpg (124 KB), DSC00158.jpg (98 KB), tatil_grup.jpg (210 KB)')">bu fotolari gorsun diye yolluyorum :))</a></td>
+            <td class="date">Dec 3</td>
+            <td class="size">248KB</td>
+          </tr>
+          <tr class="unread">
+            <td class="icons"></td>
+            <td class="icons">&#x2709;</td>
+            <td class="icons"></td>
+            <td><input type="checkbox"></td>
+            <td class="from">Hotmail Staff</td>
+            <td class="subject"><a href="#">Holiday Sharing with MSN</a></td>
+            <td class="date">Nov 28</td>
+            <td class="size">3KB</td>
+          </tr>
+          <tr>
+            <td class="icons"></td>
+            <td class="icons" style="color:#ccc;">&#x2709;&#xFE0E;</td>
+            <td class="icons"></td>
+            <td><input type="checkbox"></td>
+            <td class="from">mehmet_1987</td>
+            <td class="subject"><a href="#">RE: yarin saat kacta bulusuyoruz?</a></td>
+            <td class="date">Nov 25</td>
+            <td class="size">2KB</td>
+          </tr>
+          <tr>
+            <td class="icons"></td>
+            <td class="icons" style="color:#ccc;">&#x2709;&#xFE0E;</td>
+            <td class="icons"></td>
+            <td><input type="checkbox"></td>
+            <td class="from">Hotmail Staff</td>
+            <td class="subject"><a href="#">Smart Ways to Get the Most from MSN Hotma...</a></td>
+            <td class="date">Nov 17</td>
+            <td class="size">2KB</td>
+          </tr>
+          <tr>
+            <td class="icons"></td>
+            <td class="icons" style="color:#ccc;">&#x2709;&#xFE0E;</td>
+            <td class="icons">&#x1F4CE;</td>
+            <td><input type="checkbox"></td>
+            <td class="from">MSN Featured Offers</td>
+            <td class="subject"><a href="#">Upgrade Your Account Today!!</a></td>
+            <td class="date">Nov 2</td>
+            <td class="size">1KB</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="status-bar">7 Message(s), 4 Unread</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- COMPOSE PAGE -->
+<!-- ============================================================ -->
+<div class="page" id="page-compose">
+  <div class="toolbar">
+    <button class="tbtn" onclick="showPage('inbox')"><span class="ico">&#x2709;</span> Send</button>
+    <div class="sep-v"></div>
+    <button class="tbtn"><span class="ico">&#x1F4BE;</span> Save Draft</button>
+    <button class="tbtn"><span class="ico">&#x1F4CE;</span> Attach</button>
+    <div class="sep-v"></div>
+    <button class="tbtn"><span class="ico">&#x2716;</span> Cancel</button>
+  </div>
+  <div class="main">
+    <div class="sidebar">
+      <div class="storage">1% of 25MB</div>
+      <div class="section-title">Folders</div>
+      <ul class="folder-list">
+        <li><a href="#" onclick="showPage('inbox')"><span class="folder-icon">&#x1F4E8;</span> Inbox <span class="count">(7)</span></a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Junk E-Mail</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Drafts</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Sent Messages</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F5D1;</span> Trash Can</a></li>
+      </ul>
+    </div>
+    <div class="content">
+      <div class="compose-area">
+        <div class="field-row">
+          <span class="field-label">To:</span>
+          <span class="field-input"><input type="text" placeholder="Enter e-mail addresses"></span>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Cc:</span>
+          <span class="field-input"><input type="text"></span>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Bcc:</span>
+          <span class="field-input"><input type="text"></span>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Subject:</span>
+          <span class="field-input"><input type="text"></span>
+        </div>
+        <div class="editor">
+          <div class="editor-toolbar">
+            <select><option>Arial</option><option>Verdana</option><option>Times New Roman</option><option>Courier New</option></select>
+            <select><option>10pt</option><option>12pt</option><option>14pt</option><option>18pt</option><option>24pt</option></select>
+            <button title="Bold"><b>B</b></button>
+            <button title="Italic"><i>I</i></button>
+            <button title="Underline"><u>U</u></button>
+            <button title="Text Color">A</button>
+            <button title="Highlight">&#x1F58D;</button>
+            <button title="Align Left">&#x2261;</button>
+            <button title="Bullets">&#x2022;</button>
+            <button title="Emoticons">&#x1F600;</button>
+          </div>
+          <textarea placeholder="Write your message here..."></textarea>
+        </div>
+        <div class="attach-row">
+          <a href="#">&#x1F4CE; Attach File</a> (max 10 MB)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- OPTIONS PAGE -->
+<!-- ============================================================ -->
+<div class="page" id="page-options">
+  <div class="toolbar">
+    <button class="tbtn" onclick="showPage('inbox')"><span class="ico">&#x2190;</span> Back to Inbox</button>
+  </div>
+  <div class="main">
+    <div class="sidebar">
+      <div class="section-title">Options</div>
+      <ul class="folder-list">
+        <li><a href="#" class="active">Personal</a></li>
+        <li><a href="#">Mail</a></li>
+        <li><a href="#">Junk E-Mail</a></li>
+        <li><a href="#">Customize</a></li>
+        <li><a href="#">Account</a></li>
+      </ul>
+    </div>
+    <div class="content">
+      <div class="options-area">
+        <h2>Options</h2>
+
+        <div class="opt-section">
+          <h3>Personal</h3>
+          <a href="#" class="opt-link">Personal Information <span class="opt-desc">- Update your name and other information</span></a>
+          <a href="#" class="opt-link">Password <span class="opt-desc">- Change your password</span></a>
+          <a href="#" class="opt-link">Language <span class="opt-desc">- Select display language</span></a>
+        </div>
+
+        <div class="opt-section">
+          <h3>Mail</h3>
+          <a href="#" class="opt-link">Mail Display Settings <span class="opt-desc">- Messages per page, message headers</span></a>
+          <a href="#" class="opt-link">Signature <span class="opt-desc">- Create a signature for your messages</span></a>
+          <a href="#" class="opt-link">Reply Settings <span class="opt-desc">- Include original text in replies</span></a>
+          <a href="#" class="opt-link">Message Font <span class="opt-desc">- Default font for new messages</span></a>
+          <a href="#" class="opt-link">Auto Reply <span class="opt-desc">- Send automatic replies when away</span></a>
+        </div>
+
+        <div class="opt-section">
+          <h3>Junk E-Mail Protection</h3>
+          <a href="#" class="opt-link">Junk E-Mail Filter <span class="opt-desc">- Adjust filter sensitivity</span></a>
+          <a href="#" class="opt-link">Safe List <span class="opt-desc">- Addresses that are never junk</span></a>
+          <a href="#" class="opt-link">Block List <span class="opt-desc">- Addresses to always block</span></a>
+        </div>
+
+        <div class="opt-section">
+          <h3>Customize Your Mail</h3>
+          <a href="#" class="opt-link">Custom Folders <span class="opt-desc">- Create and manage folders</span></a>
+          <a href="#" class="opt-link">Custom Filters <span class="opt-desc">- Sort incoming mail automatically</span></a>
+        </div>
+
+        <div class="opt-section">
+          <h3>Account</h3>
+          <a href="#" class="opt-link">Send/Receive Mail from Other Accounts <span class="opt-desc">- POP3 e-mail accounts</span></a>
+          <a href="#" class="opt-link">Mobile Alerts <span class="opt-desc">- Get new mail alerts on your phone</span></a>
+          <a href="#" class="opt-link">MSN Featured Offers</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- READ MESSAGE PAGE -->
+<!-- ============================================================ -->
+<div class="page" id="page-read">
+  <div class="toolbar">
+    <button class="tbtn" onclick="showPage('inbox')"><span class="ico">&#x2190;</span> Back to Inbox</button>
+    <div class="sep-v"></div>
+    <button class="tbtn" onclick="showPage('compose')"><span class="ico">&#x21A9;</span> Reply</button>
+    <button class="tbtn"><span class="ico">&#x21A9;</span> Reply All</button>
+    <button class="tbtn" onclick="showPage('compose')"><span class="ico">&#x21AA;</span> Forward</button>
+    <div class="sep-v"></div>
+    <button class="tbtn"><span class="ico">&#x2716;</span> Delete</button>
+    <button class="tbtn"><span class="ico">&#x26A0;</span> Junk</button>
+    <div class="sep-v"></div>
+    <button class="tbtn"><span class="ico">&#x1F4C1;</span> Put in Folder &#x25BC;</button>
+  </div>
+  <div class="main">
+    <div class="sidebar">
+      <div class="storage">1% of 25MB</div>
+      <div class="section-title">Folders</div>
+      <ul class="folder-list">
+        <li><a href="#" onclick="showPage('inbox')"><span class="folder-icon">&#x1F4E8;</span> Inbox <span class="count">(7)</span></a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Junk E-Mail</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Drafts</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F4C1;</span> Sent Messages</a></li>
+        <li><a href="#"><span class="folder-icon">&#x1F5D1;</span> Trash Can</a></li>
+      </ul>
+      <a href="#" class="manage-link">Manage Folders</a>
+    </div>
+    <div class="content">
+      <div class="read-area">
+        <div class="read-header">
+          <div class="read-subject" id="readSubject">Holidays got you in a hurry? MSN Hotmail makes life easier!</div>
+          <table>
+            <tr><td class="lbl">From:</td><td class="val" id="readFrom">Hotmail Member Services &lt;memberservices@msn.com&gt;</td></tr>
+            <tr><td class="lbl">To:</td><td class="val">kerem_2003@hotmail.com</td></tr>
+            <tr><td class="lbl">Date:</td><td class="val" id="readDate">December 7, 2006 10:00 AM</td></tr>
+          </table>
+        </div>
+        <div class="read-body" id="readBody">
+          <p>Dear MSN Hotmail Member,</p>
+          <p>The holidays are here and MSN Hotmail is making it easier than ever to stay connected with friends and family!</p>
+          <p><b>What's New:</b></p>
+          <ul>
+            <li>Send photos up to <b>10 MB</b> - perfect for holiday memories!</li>
+            <li>Your inbox now holds <b>1 GB</b> of storage</li>
+            <li>Enhanced virus scanning keeps your inbox safe</li>
+            <li>New emoticons and backgrounds for festive messages</li>
+          </ul>
+          <p>Plus, try <b>MSN Messenger</b> for instant holiday chats with your contacts!</p>
+          <p>Happy Holidays from the MSN Hotmail Team</p>
+          <br>
+          <p style="font-size:10px;color:#999;">This is a service announcement from MSN Hotmail. To manage your communication preferences, visit your account settings.</p>
+        </div>
+        <div class="read-attachments" id="readAttachments" style="display:none;">
+          <div class="att-title">&#x1F4CE; Attachments:</div>
+          <div id="readAttList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<div class="footer-bar">
+  <a href="#">MSN Home</a> &nbsp;|&nbsp;
+  <a href="#">My MSN</a> &nbsp;|&nbsp;
+  <a href="#" onclick="showPage('inbox')">Hotmail</a> &nbsp;|&nbsp;
+  <a href="#">Search</a> &nbsp;|&nbsp;
+  <a href="#">Shopping</a> &nbsp;|&nbsp;
+  <a href="#">Money</a> &nbsp;|&nbsp;
+  <a href="#">People &amp; Chat</a>
+</div>
+<div class="footer-bottom">
+  <span>&copy; 2006 Microsoft TERMS OF USE &nbsp; <a href="#">Advertise</a> &nbsp; <a href="#">Privacy Statement</a> &nbsp; <a href="#">GetNetWise</a> &nbsp; <a href="#">Anti-Spam Policy</a></span>
+  <span><a href="#">Help</a></span>
+</div>
+
+<script>
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+
+  document.querySelectorAll('.nav-tabs .tab').forEach(t => t.classList.remove('active'));
+
+  if (name === 'login') {
+    document.getElementById('subHeader').style.display = 'none';
+  } else {
+    document.getElementById('subHeader').style.display = 'flex';
+    document.getElementById('tabMail').classList.add('active');
+  }
+
+  if (name === 'inbox' || name === 'compose') {
+    document.getElementById('tabMail').classList.add('active');
+  }
+
+  document.title = 'MSN Hotmail - ' + name.charAt(0).toUpperCase() + name.slice(1);
+  return false;
+}
+
+function showRead(from, subject, date, body, attachments) {
+  document.getElementById('readFrom').textContent = from;
+  document.getElementById('readSubject').textContent = subject;
+  document.getElementById('readDate').textContent = date;
+  document.getElementById('readBody').innerHTML = body.replace(/\n/g, '<br>');
+
+  var attDiv = document.getElementById('readAttachments');
+  var attList = document.getElementById('readAttList');
+  if (attachments) {
+    attList.innerHTML = '';
+    attachments.split(', ').forEach(function(a) {
+      var span = document.createElement('span');
+      span.className = 'att-item';
+      span.textContent = '\u{1F4CE} ' + a;
+      attList.appendChild(span);
+    });
+    attDiv.style.display = 'block';
+  } else {
+    attDiv.style.display = 'none';
+  }
+
+  showPage('read');
+}
+</script>
+
+</body>
+</html>
