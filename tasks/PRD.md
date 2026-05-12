@@ -519,7 +519,7 @@ type IMAPConfig struct {
 
 #### 4.3.2 Response Format
 
-**Başarılı Response**
+**Başarılı Response (tekil kaynak)**
 
 ```json
 {
@@ -529,10 +529,33 @@ type IMAPConfig struct {
     "subject": "Test Email"
   },
   "meta": {
-    "page": 1,
-    "per_page": 50,
-    "total": 1234,
-    "total_pages": 25
+    "timestamp": "2024-12-24T10:30:00Z",
+    "requestId": "abc-123"
+  }
+}
+```
+
+**Başarılı Response (sayfalanmış liste)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      { "id": "msg_123", "subject": "Test Email" }
+    ],
+    "pagination": {
+      "page": 1,
+      "pageSize": 50,
+      "totalItems": 1234,
+      "totalPages": 25,
+      "hasNext": true,
+      "hasPrev": false
+    }
+  },
+  "meta": {
+    "timestamp": "2024-12-24T10:30:00Z",
+    "requestId": "abc-123"
   }
 }
 ```
@@ -549,6 +572,10 @@ type IMAPConfig struct {
       "field": "email",
       "value": "invalid"
     }
+  },
+  "meta": {
+    "timestamp": "2024-12-24T10:30:00Z",
+    "requestId": "abc-123"
   }
 }
 ```
