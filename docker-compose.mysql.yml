@@ -1,0 +1,46 @@
+# =============================================================================
+# Yunt + MySQL
+# =============================================================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d
+# =============================================================================
+
+services:
+  yunt:
+    container_name: yunt-mail-server-mysql
+    depends_on:
+      yunt-mysql:
+        condition: service_healthy
+    volumes:
+      - ./configs/yunt.mysql.yaml:/etc/yunt/yunt.yaml:ro
+      - ./docker-data/filesystem:/var/lib/yunt/attachments
+    environment:
+      YUNT_DATABASE_HOST: yunt-mysql
+      YUNT_DATABASE_PASSWORD: ${MYSQL_PASSWORD:-yunt_password}
+
+  yunt-mysql:
+    image: mysql:8.0
+    container_name: yunt-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
+      MYSQL_DATABASE: yunt
+      MYSQL_USER: yunt
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-yunt_password}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    volumes:
+      - ./docker-data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M

@@ -1,0 +1,43 @@
+# =============================================================================
+# Yunt + MongoDB
+# =============================================================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.mongodb.yml up -d
+# =============================================================================
+
+services:
+  yunt:
+    container_name: yunt-mail-server-mongodb
+    depends_on:
+      yunt-mongodb:
+        condition: service_healthy
+    volumes:
+      - ./configs/yunt.mongodb.yaml:/etc/yunt/yunt.yaml:ro
+      - ./docker-data/filesystem:/var/lib/yunt/attachments
+    environment:
+      YUNT_DATABASE_DSN: mongodb://yunt:${MONGO_PASSWORD:-yunt_secret}@yunt-mongodb:27017/yunt?authSource=admin
+
+  yunt-mongodb:
+    image: mongo:7.0
+    container_name: yunt-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: yunt
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-yunt_secret}
+      MONGO_INITDB_DATABASE: yunt
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./docker-data/mongodb:/data/db
+      - ./scripts/mongodb-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M

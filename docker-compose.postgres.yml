@@ -1,0 +1,41 @@
+# =============================================================================
+# Yunt + PostgreSQL
+# =============================================================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+# =============================================================================
+
+services:
+  yunt:
+    container_name: yunt-mail-server-postgres
+    depends_on:
+      yunt-postgres:
+        condition: service_healthy
+    volumes:
+      - ./configs/yunt.postgres.yaml:/etc/yunt/yunt.yaml:ro
+      - ./docker-data/filesystem:/var/lib/yunt/attachments
+    environment:
+      YUNT_DATABASE_HOST: yunt-postgres
+      YUNT_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-yunt_password}
+
+  yunt-postgres:
+    image: postgres:16-alpine
+    container_name: yunt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: yunt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yunt_password}
+      POSTGRES_DB: yunt
+    volumes:
+      - ./docker-data/postgresql:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yunt -d yunt"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M

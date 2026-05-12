@@ -50,8 +50,9 @@ web/build/
 webui/dist/*
 !webui/dist/.gitkeep
 
-# Data directory
+# Data directories
 /data/
+docker-data/*/
 *.db
 *.db-journal
 *.db-shm

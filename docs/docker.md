@@ -4,16 +4,16 @@
 
 ```bash
 # SQLite (default)
-docker-compose up -d
+docker compose up -d
 
 # PostgreSQL
-docker-compose --profile postgres up -d
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 
 # MySQL
-docker-compose --profile mysql up -d
+docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d
 
 # MongoDB
-docker-compose --profile mongodb up -d
+docker compose -f docker-compose.yml -f docker-compose.mongodb.yml up -d
 ```
 
 ## Building the Image
@@ -73,13 +73,15 @@ docker inspect --format='{{.State.Health.Status}}' yunt
 
 The Docker image supports `linux/amd64` and `linux/arm64`. GitHub Actions builds multi-platform images automatically on push to `ghcr.io`.
 
-## Docker Compose Profiles
+## Compose File Structure
 
-The `docker-compose.yml` uses profiles to select the database backend:
+Each database backend has its own override file:
 
-- No profile: SQLite (standalone, no external DB)
-- `--profile postgres`: PostgreSQL with `postgres:16-alpine`
-- `--profile mysql`: MySQL with `mysql:8.0`
-- `--profile mongodb`: MongoDB with `mongo:7`
+| File                         | Description                                |
+|------------------------------|--------------------------------------------|
+| `docker-compose.yml`        | Base config: Yunt with SQLite (standalone) |
+| `docker-compose.mysql.yml`  | Adds MySQL container, overrides DB config  |
+| `docker-compose.postgres.yml` | Adds PostgreSQL container, overrides DB config |
+| `docker-compose.mongodb.yml`  | Adds MongoDB container, overrides DB config  |
 
-Each profile starts the database container and configures Yunt to connect to it via environment variables defined in `configs/docker/*.env`.
+Override files extend the base `yunt` service with `depends_on`, database-specific environment variables, and a separate DB container. Data is stored in `docker-data/` bind mounts.
