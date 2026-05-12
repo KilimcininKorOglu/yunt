@@ -63,6 +63,9 @@ type SMTPConfig struct {
 	// MaxMessageSize is the maximum message size in bytes.
 	MaxMessageSize int64 `yaml:"maxMessageSize" env:"YUNT_SMTP_MAX_MESSAGE_SIZE"`
 
+	// MaxAttachmentSize is the maximum attachment size in bytes (0 = unlimited).
+	MaxAttachmentSize int64 `yaml:"maxAttachmentSize" env:"YUNT_SMTP_MAX_ATTACHMENT_SIZE"`
+
 	// MaxRecipients is the maximum number of recipients per message.
 	MaxRecipients int `yaml:"maxRecipients" env:"YUNT_SMTP_MAX_RECIPIENTS"`
 

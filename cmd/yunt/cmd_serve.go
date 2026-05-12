@@ -15,6 +15,7 @@ import (
 	"yunt/internal/api/middleware"
 	"yunt/internal/config"
 	imapserver "yunt/internal/imap"
+	"yunt/internal/parser"
 	"yunt/internal/repository/factory"
 	"yunt/internal/repository/mongodb"
 	"yunt/internal/repository/mysql"
@@ -119,6 +120,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	userService := service.NewUserService(cfg.Auth, repo.Users())
 	mailboxService := service.NewMailboxService(repo, nil)
 	messageService := service.NewMessageService(repo, nil)
+	p := parser.NewParser()
+	p.MaxMessageSize = cfg.SMTP.MaxMessageSize
+	p.MaxAttachmentSize = cfg.SMTP.MaxAttachmentSize
+	messageService.WithParser(p)
 	webhookService := service.NewWebhookService(repo, nil)
 	userService.WithWebhookService(webhookService)
 	notifyService := service.NewNotifyService()

@@ -13,8 +13,9 @@ const (
 	DefaultSMTPEnabled        = true
 	DefaultSMTPHost           = "0.0.0.0"
 	DefaultSMTPPort           = 1025
-	DefaultSMTPMaxMessageSize = 10 * 1024 * 1024 // 10MB
-	DefaultSMTPMaxRecipients  = 100
+	DefaultSMTPMaxMessageSize    = 10 * 1024 * 1024 // 10MB
+	DefaultSMTPMaxAttachmentSize = 25 * 1024 * 1024 // 25MB
+	DefaultSMTPMaxRecipients     = 100
 	DefaultSMTPReadTimeout    = 60 * time.Second
 	DefaultSMTPWriteTimeout   = 60 * time.Second
 	DefaultSMTPAuthRequired         = false
@@ -99,6 +100,7 @@ func Default() *Config {
 			Host:                    DefaultSMTPHost,
 			Port:                    DefaultSMTPPort,
 			MaxMessageSize:          DefaultSMTPMaxMessageSize,
+			MaxAttachmentSize:       DefaultSMTPMaxAttachmentSize,
 			MaxRecipients:           DefaultSMTPMaxRecipients,
 			ReadTimeout:             DefaultSMTPReadTimeout,
 			WriteTimeout:            DefaultSMTPWriteTimeout,
