@@ -39,7 +39,7 @@ func TestSystemHandler_GetVersion(t *testing.T) {
 func TestSystemHandler_GetStats(t *testing.T) {
 	env, token := setupSystemTest(t)
 
-	req := makeAuthReq(http.MethodGet, "/api/v1/system/stats", token, nil)
+	req := makeAuthReq(http.MethodGet, "/api/v1/stats", token, nil)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 
@@ -51,7 +51,7 @@ func TestSystemHandler_GetStats(t *testing.T) {
 func TestSystemHandler_GetStats_Unauthorized(t *testing.T) {
 	env := setupFullTest()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/system/stats", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 

@@ -40,7 +40,7 @@ export class SystemApi {
 	 * @returns System statistics
 	 */
 	async getStats(): Promise<SystemStats> {
-		return this.client.get<SystemStats>('/api/v1/system/stats');
+		return this.client.get<SystemStats>('/api/v1/stats');
 	}
 
 	/**

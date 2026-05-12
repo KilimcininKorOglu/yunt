@@ -49,14 +49,13 @@ func NewSystemHandler(cfg SystemHandlerConfig) *SystemHandler {
 
 // RegisterRoutes registers the system routes on the given group.
 func (h *SystemHandler) RegisterRoutes(g *echo.Group) {
+	// Stats at /api/v1/stats (PRD spec)
+	g.GET("/stats", h.GetStats, middleware.Auth(h.authService))
+
 	system := g.Group("/system")
 
 	// Public endpoints
 	system.GET("/version", h.GetVersion)
-
-	// Protected endpoints (require authentication)
-	protected := system.Group("", middleware.Auth(h.authService))
-	protected.GET("/stats", h.GetStats)
 
 	// Admin-only endpoints
 	admin := system.Group("", middleware.Auth(h.authService), middleware.RequireAdmin())

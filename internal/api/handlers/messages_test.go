@@ -161,7 +161,7 @@ func TestMessageHandler_MarkAsRead(t *testing.T) {
 	msg := createTestMessage("msg-read", "mbx-msg")
 	env.repo.messages.add(msg)
 
-	req := makeAuthReq(http.MethodPost, "/api/v1/messages/msg-read/read", token, nil)
+	req := makeAuthReq(http.MethodPut, "/api/v1/messages/msg-read/read", token, nil)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 
@@ -177,7 +177,7 @@ func TestMessageHandler_MarkAsUnread(t *testing.T) {
 	msg.Status = domain.MessageRead
 	env.repo.messages.add(msg)
 
-	req := makeAuthReq(http.MethodPost, "/api/v1/messages/msg-unread/unread", token, nil)
+	req := makeAuthReq(http.MethodPut, "/api/v1/messages/msg-unread/unread", token, nil)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 
@@ -192,7 +192,7 @@ func TestMessageHandler_Star(t *testing.T) {
 	msg := createTestMessage("msg-star", "mbx-msg")
 	env.repo.messages.add(msg)
 
-	req := makeAuthReq(http.MethodPost, "/api/v1/messages/msg-star/star", token, nil)
+	req := makeAuthReq(http.MethodPut, "/api/v1/messages/msg-star/star", token, nil)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 
@@ -211,7 +211,7 @@ func TestMessageHandler_MoveMessage(t *testing.T) {
 	env.repo.mboxes.add(target)
 
 	body := map[string]string{"targetMailboxId": "mbx-target"}
-	req := makeAuthReq(http.MethodPost, "/api/v1/messages/msg-move/move", token, body)
+	req := makeAuthReq(http.MethodPut, "/api/v1/messages/msg-move/move", token, body)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 
@@ -227,7 +227,7 @@ func TestMessageHandler_MoveMessage_BadRequest(t *testing.T) {
 	env.repo.messages.add(msg)
 
 	body := map[string]string{"targetMailboxId": ""}
-	req := makeAuthReq(http.MethodPost, "/api/v1/messages/msg-move2/move", token, body)
+	req := makeAuthReq(http.MethodPut, "/api/v1/messages/msg-move2/move", token, body)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 

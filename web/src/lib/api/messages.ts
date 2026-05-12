@@ -190,7 +190,7 @@ export class MessagesApi {
 	 * @param id Message ID
 	 */
 	async markAsRead(id: ID): Promise<void> {
-		await this.client.post<void>(`/api/v1/messages/${id}/read`);
+		await this.client.put<void>(`/api/v1/messages/${id}/read`);
 	}
 
 	/**
@@ -198,7 +198,7 @@ export class MessagesApi {
 	 * @param id Message ID
 	 */
 	async markAsUnread(id: ID): Promise<void> {
-		await this.client.post<void>(`/api/v1/messages/${id}/unread`);
+		await this.client.put<void>(`/api/v1/messages/${id}/unread`);
 	}
 
 	/**
@@ -206,7 +206,7 @@ export class MessagesApi {
 	 * @param id Message ID
 	 */
 	async star(id: ID): Promise<void> {
-		await this.client.post<void>(`/api/v1/messages/${id}/star`);
+		await this.client.put<void>(`/api/v1/messages/${id}/star`);
 	}
 
 	/**
@@ -214,7 +214,7 @@ export class MessagesApi {
 	 * @param id Message ID
 	 */
 	async unstar(id: ID): Promise<void> {
-		await this.client.post<void>(`/api/v1/messages/${id}/unstar`);
+		await this.client.put<void>(`/api/v1/messages/${id}/unstar`);
 	}
 
 	/**
@@ -222,7 +222,7 @@ export class MessagesApi {
 	 * @param id Message ID
 	 */
 	async markAsSpam(id: ID): Promise<void> {
-		await this.client.post<void>(`/api/v1/messages/${id}/spam`);
+		await this.client.put<void>(`/api/v1/messages/${id}/spam`);
 	}
 
 	/**
@@ -230,7 +230,7 @@ export class MessagesApi {
 	 * @param id Message ID
 	 */
 	async markAsNotSpam(id: ID): Promise<void> {
-		await this.client.post<void>(`/api/v1/messages/${id}/not-spam`);
+		await this.client.put<void>(`/api/v1/messages/${id}/not-spam`);
 	}
 
 	/**
@@ -240,7 +240,7 @@ export class MessagesApi {
 	 */
 	async move(id: ID, targetMailboxId: ID): Promise<void> {
 		const input: MoveMessageInput = { targetMailboxId };
-		await this.client.post<void>(`/api/v1/messages/${id}/move`, input);
+		await this.client.put<void>(`/api/v1/messages/${id}/move`, input);
 	}
 
 	// ========================================================================

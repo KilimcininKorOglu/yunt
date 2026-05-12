@@ -361,7 +361,7 @@ func TestMessageReadAndDelete(t *testing.T) {
 	msgID := items[0].(map[string]interface{})["id"].(string)
 
 	// Mark as read
-	req, _ := http.NewRequest(http.MethodPost, env.APIAddr+"/api/v1/messages/"+msgID+"/read", nil)
+	req, _ := http.NewRequest(http.MethodPut, env.APIAddr+"/api/v1/messages/"+msgID+"/read", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

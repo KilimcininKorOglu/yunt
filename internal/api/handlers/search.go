@@ -35,7 +35,7 @@ func NewSearchHandler(
 // RegisterRoutes registers the search routes on the given group.
 func (h *SearchHandler) RegisterRoutes(g *echo.Group) {
 	search := g.Group("/search", middleware.Auth(h.authService))
-	search.GET("/simple", h.SimpleSearch)
+	search.GET("", h.SimpleSearch)
 	search.GET("/advanced", h.AdvancedSearch)
 }
 

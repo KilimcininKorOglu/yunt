@@ -215,6 +215,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 		healthHandler := handlers.NewHealthHandler(repo, version)
 		healthHandler.RegisterRoutes(apiSrv.Echo())
+		healthHandler.RegisterAPIRoutes(v1)
 
 		eventHandler := handlers.NewEventHandler(notifyService, authService, repo.Mailboxes())
 		eventHandler.RegisterRoutes(v1)

@@ -43,7 +43,7 @@ export class SearchApi {
 			order: options?.order
 		});
 
-		return this.client.get<PaginatedData<Message>>('/api/v1/search/simple', { params });
+		return this.client.get<PaginatedData<Message>>('/api/v1/search', { params });
 	}
 
 	/**

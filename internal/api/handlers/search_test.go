@@ -25,7 +25,7 @@ func setupSearchTest(t *testing.T) (*fullTestEnv, string) {
 func TestSearchHandler_SimpleSearch(t *testing.T) {
 	env, token := setupSearchTest(t)
 
-	req := makeAuthReq(http.MethodGet, "/api/v1/search/simple?q=test+subject", token, nil)
+	req := makeAuthReq(http.MethodGet, "/api/v1/search?q=test+subject", token, nil)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 
@@ -37,7 +37,7 @@ func TestSearchHandler_SimpleSearch(t *testing.T) {
 func TestSearchHandler_SimpleSearch_EmptyQuery(t *testing.T) {
 	env, token := setupSearchTest(t)
 
-	req := makeAuthReq(http.MethodGet, "/api/v1/search/simple?q=", token, nil)
+	req := makeAuthReq(http.MethodGet, "/api/v1/search?q=", token, nil)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 
@@ -49,7 +49,7 @@ func TestSearchHandler_SimpleSearch_EmptyQuery(t *testing.T) {
 func TestSearchHandler_SimpleSearch_ShortQuery(t *testing.T) {
 	env, token := setupSearchTest(t)
 
-	req := makeAuthReq(http.MethodGet, "/api/v1/search/simple?q=x", token, nil)
+	req := makeAuthReq(http.MethodGet, "/api/v1/search?q=x", token, nil)
 	rec := httptest.NewRecorder()
 	env.echo.ServeHTTP(rec, req)
 

@@ -99,12 +99,18 @@ func NewHealthHandlerWithConfig(cfg HealthHandlerConfig) *HealthHandler {
 	}
 }
 
-// RegisterRoutes registers the health check routes on the given Echo instance.
-// Health endpoints are typically registered at the root level, not under /api.
+// RegisterRoutes registers the health check routes on the given Echo instance (root-level for Docker/K8s).
 func (h *HealthHandler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/health", h.Health)
 	e.GET("/healthz", h.Healthz)
 	e.GET("/ready", h.Ready)
+}
+
+// RegisterAPIRoutes registers health check routes under the API group for PRD compatibility.
+func (h *HealthHandler) RegisterAPIRoutes(g *echo.Group) {
+	g.GET("/health", h.Health)
+	g.GET("/healthz", h.Healthz)
+	g.GET("/ready", h.Ready)
 }
 
 // Health returns detailed health information including database connectivity.
