@@ -35,7 +35,6 @@ import (
 
 	// Configuration
 	_ "github.com/spf13/cobra"
-	_ "github.com/spf13/viper"
 
 	// Logging
 	_ "github.com/rs/zerolog"
