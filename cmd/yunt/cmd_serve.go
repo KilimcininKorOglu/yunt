@@ -16,6 +16,7 @@ import (
 	"yunt/internal/config"
 	imapserver "yunt/internal/imap"
 	"yunt/internal/parser"
+	"yunt/internal/storage"
 	"yunt/internal/repository/factory"
 	"yunt/internal/repository/mongodb"
 	"yunt/internal/repository/mysql"
@@ -99,6 +100,18 @@ func runServe(cmd *cobra.Command, args []string) error {
 	defer repo.Close()
 
 	log.Info().Str("driver", cfg.Database.Driver).Msg("Database connected")
+
+	// Initialize storage backend for attachments
+	storageBackend, err := storage.NewFromConfig(context.Background(), cfg.Storage)
+	if err != nil {
+		return fmt.Errorf("failed to create storage backend: %w", err)
+	}
+	if storageBackend != nil {
+		log.Info().Str("type", cfg.Storage.Type).Msg("Storage backend initialized")
+		if sqliteRepo, ok := repo.(*sqlite.Repository); ok {
+			sqliteRepo.Attachments().(*sqlite.AttachmentRepository).SetStorageBackend(storageBackend)
+		}
+	}
 
 	// Initialize session store (DB-backed for all drivers)
 	var sessionStore service.SessionStore

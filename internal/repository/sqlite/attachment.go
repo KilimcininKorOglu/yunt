@@ -12,11 +12,18 @@ import (
 
 	"yunt/internal/domain"
 	"yunt/internal/repository"
+	"yunt/internal/storage"
 )
 
 // AttachmentRepository implements the repository.AttachmentRepository interface for SQLite.
 type AttachmentRepository struct {
-	repo *Repository
+	repo           *Repository
+	storageBackend storage.Backend
+}
+
+// SetStorageBackend sets an external storage backend for attachment content.
+func (a *AttachmentRepository) SetStorageBackend(b storage.Backend) {
+	a.storageBackend = b
 }
 
 // attachmentRow is the database representation of an attachment.
@@ -579,6 +586,21 @@ func (a *AttachmentRepository) StoreContent(ctx context.Context, id domain.ID, c
 		return domain.NewNotFoundError("attachment", string(id))
 	}
 
+	if a.storageBackend != nil {
+		att, getErr := a.GetByID(ctx, id)
+		if getErr != nil {
+			return getErr
+		}
+		key := string(id)
+		if err := a.storageBackend.Store(ctx, key, content, att.Size); err != nil {
+			return fmt.Errorf("failed to store content in backend: %w", err)
+		}
+		if _, err := a.repo.db().ExecContext(ctx, `UPDATE attachments SET storage_path = ? WHERE id = ?`, key, string(id)); err != nil {
+			return fmt.Errorf("failed to update storage path: %w", err)
+		}
+		return nil
+	}
+
 	data, err := io.ReadAll(content)
 	if err != nil {
 		return fmt.Errorf("failed to read content: %w", err)
@@ -594,6 +616,16 @@ func (a *AttachmentRepository) StoreContent(ctx context.Context, id domain.ID, c
 
 // GetContent retrieves the content of an attachment.
 func (a *AttachmentRepository) GetContent(ctx context.Context, id domain.ID) (io.ReadCloser, error) {
+	if a.storageBackend != nil {
+		att, err := a.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if att.StoragePath != "" {
+			return a.storageBackend.Get(ctx, att.StoragePath)
+		}
+	}
+
 	query := `SELECT content FROM attachment_content WHERE attachment_id = ?`
 
 	var content []byte

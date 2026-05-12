@@ -282,11 +282,29 @@ type AdminConfig struct {
 
 // StorageConfig contains mail storage settings.
 type StorageConfig struct {
-	// Type is the storage type (database, filesystem).
+	// Type is the storage type: "db" (default), "filesystem", "s3".
 	Type string `yaml:"type" env:"YUNT_STORAGE_TYPE"`
 
 	// Path is the filesystem storage path (when type is "filesystem").
 	Path string `yaml:"path" env:"YUNT_STORAGE_PATH"`
+
+	// S3Bucket is the S3 bucket name (when type is "s3").
+	S3Bucket string `yaml:"s3Bucket" env:"YUNT_STORAGE_S3_BUCKET"`
+
+	// S3Region is the AWS region (when type is "s3").
+	S3Region string `yaml:"s3Region" env:"YUNT_STORAGE_S3_REGION"`
+
+	// S3Endpoint is a custom S3 endpoint for S3-compatible services like MinIO.
+	S3Endpoint string `yaml:"s3Endpoint" env:"YUNT_STORAGE_S3_ENDPOINT"`
+
+	// S3AccessKey is the AWS access key (when type is "s3").
+	S3AccessKey string `yaml:"s3AccessKey" env:"YUNT_STORAGE_S3_ACCESS_KEY"`
+
+	// S3SecretKey is the AWS secret key (when type is "s3").
+	S3SecretKey string `yaml:"s3SecretKey" env:"YUNT_STORAGE_S3_SECRET_KEY"`
+
+	// S3Prefix is the key prefix for S3 objects.
+	S3Prefix string `yaml:"s3Prefix" env:"YUNT_STORAGE_S3_PREFIX"`
 
 	// MaxMailboxSize is the maximum mailbox size in bytes (0 for unlimited).
 	MaxMailboxSize int64 `yaml:"maxMailboxSize" env:"YUNT_STORAGE_MAX_MAILBOX_SIZE"`
