@@ -2,6 +2,8 @@
 
 Yunt is a lightweight, powerful mail server written in Go, designed for developers and test environments. The name comes from the Gokturk Turkish word for "horse" - just as mounted couriers carried letters, Yunt safely delivers your emails.
 
+Point your application's SMTP settings to `localhost:1025` and every outgoing email is captured by Yunt instead of reaching real users. Browse captured emails through the Web UI at `localhost:8025`, connect with any IMAP client like Thunderbird on `localhost:1143`, or access everything programmatically via the REST API. Think of it as a safer, more feature-rich alternative to MailHog or Mailpit, with full IMAP support, multiple database backends, and production-grade observability.
+
 ## Features
 
 | Feature               | Description                                                 |
