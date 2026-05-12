@@ -347,9 +347,8 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 		}
 
 		if filter.Search != "" {
-			sb.WriteString(" AND (subject LIKE ? OR from_address LIKE ? OR text_body LIKE ?)")
-			pattern := "%" + filter.Search + "%"
-			args = append(args, pattern, pattern, pattern)
+			sb.WriteString(" AND rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)")
+			args = append(args, escapeFTS5Query(filter.Search))
 		}
 
 		if filter.MessageID != "" {
@@ -1632,6 +1631,19 @@ func (m *MessageRepository) GetByIMAPUID(ctx context.Context, mailboxID domain.I
 	}
 
 	return msg, nil
+}
+
+// escapeFTS5Query escapes special FTS5 characters by quoting each word.
+func escapeFTS5Query(query string) string {
+	words := strings.Fields(query)
+	if len(words) == 0 {
+		return "\"\""
+	}
+	escaped := make([]string, len(words))
+	for i, w := range words {
+		escaped[i] = "\"" + strings.ReplaceAll(w, "\"", "\"\"") + "\""
+	}
+	return strings.Join(escaped, " ")
 }
 
 // Ensure MessageRepository implements repository.MessageRepository
