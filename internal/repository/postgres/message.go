@@ -358,10 +358,9 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 		}
 
 		if filter.Search != "" {
-			sb.WriteString(fmt.Sprintf(" AND (subject ILIKE $%d OR from_address ILIKE $%d OR text_body ILIKE $%d)", argIndex, argIndex+1, argIndex+2))
-			pattern := "%" + filter.Search + "%"
-			args = append(args, pattern, pattern, pattern)
-			argIndex += 3
+			sb.WriteString(fmt.Sprintf(" AND search_vector @@ plainto_tsquery('english', $%d)", argIndex))
+			args = append(args, filter.Search)
+			argIndex++
 		}
 
 		if filter.MessageID != "" {
