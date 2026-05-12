@@ -1,0 +1,129 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "title": "HTTP Overview",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 1},
+      "title": "Request Rate",
+      "type": "timeseries",
+      "targets": [{"expr": "sum(rate(yunt_http_requests_total[5m]))", "legendFormat": "Total"}]
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 1},
+      "title": "Error Rate (5xx)",
+      "type": "timeseries",
+      "targets": [{"expr": "sum(rate(yunt_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(yunt_http_requests_total[5m]))", "legendFormat": "5xx Rate"}]
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 1},
+      "title": "Request Latency",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(yunt_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, rate(yunt_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, rate(yunt_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p99"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 9},
+      "title": "Active Requests",
+      "type": "stat",
+      "targets": [{"expr": "yunt_http_active_requests", "legendFormat": "Active"}]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 13},
+      "title": "SMTP",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "title": "Messages Received",
+      "type": "timeseries",
+      "targets": [{"expr": "rate(yunt_smtp_messages_received_total[5m])", "legendFormat": "Received/s"}]
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "title": "Messages Rejected",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (reason) (rate(yunt_smtp_messages_rejected_total[5m]))", "legendFormat": "{{reason}}"}]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 22},
+      "title": "IMAP",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 23},
+      "title": "Active IMAP Connections",
+      "type": "stat",
+      "targets": [{"expr": "yunt_imap_active_connections", "legendFormat": "Connections"}]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 31},
+      "title": "Database",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "title": "DB Query Latency",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(yunt_db_query_duration_seconds_bucket[5m]))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, rate(yunt_db_query_duration_seconds_bucket[5m]))", "legendFormat": "p95"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "title": "DB Queries/s",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation) (rate(yunt_db_queries_total[5m]))", "legendFormat": "{{operation}}"}]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 40},
+      "title": "Mailboxes",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 41},
+      "title": "Message Count per Mailbox",
+      "type": "bargauge",
+      "targets": [{"expr": "yunt_mailbox_message_count", "legendFormat": "{{mailbox}}"}]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["yunt", "mail-server"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "Yunt Mail Server",
+  "uid": "yunt-overview"
+}

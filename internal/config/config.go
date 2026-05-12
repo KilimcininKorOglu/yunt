@@ -161,6 +161,9 @@ type APIConfig struct {
 
 	// EnableSwagger determines if Swagger documentation is enabled.
 	EnableSwagger bool `yaml:"enableSwagger" env:"YUNT_API_ENABLE_SWAGGER"`
+
+	// EnableMetrics determines if Prometheus /metrics endpoint is enabled.
+	EnableMetrics bool `yaml:"enableMetrics" env:"YUNT_API_ENABLE_METRICS"`
 }
 
 // DatabaseConfig contains database connection settings.

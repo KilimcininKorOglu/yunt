@@ -57,6 +57,7 @@ func New(cfg config.APIConfig, opts ...ServerOption) *Server {
 		Logger:        s.logger,
 		CORSOrigins:   cfg.CORSAllowedOrigins,
 		EnableSwagger: cfg.EnableSwagger,
+		EnableMetrics: cfg.EnableMetrics,
 	}
 	s.router = NewRouter(routerCfg)
 

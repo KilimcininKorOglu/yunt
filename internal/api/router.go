@@ -5,6 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	echoSwagger "github.com/swaggo/echo-swagger"
 
 	"yunt/internal/api/middleware"
@@ -21,6 +22,8 @@ type RouterConfig struct {
 	CORSOrigins []string
 	// EnableSwagger determines if Swagger documentation is enabled.
 	EnableSwagger bool
+	// EnableMetrics determines if Prometheus /metrics endpoint is enabled.
+	EnableMetrics bool
 }
 
 // version holds the application version (set at build time).
@@ -71,6 +74,11 @@ func NewRouter(cfg RouterConfig) *Router {
 	// Rate limiting middleware
 	e.Use(middleware.RateLimitWithLogger(cfg.Logger))
 
+	// Prometheus metrics middleware
+	if cfg.EnableMetrics {
+		e.Use(middleware.Metrics())
+	}
+
 	// Create router wrapper
 	router := &Router{Echo: e}
 
@@ -94,6 +102,11 @@ func registerRoutes(r *Router, cfg RouterConfig) {
 	// Swagger UI
 	if cfg.EnableSwagger {
 		r.GET("/swagger/*", echoSwagger.WrapHandler)
+	}
+
+	// Prometheus metrics endpoint
+	if cfg.EnableMetrics {
+		r.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
 	}
 }
 
