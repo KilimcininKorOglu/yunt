@@ -35,7 +35,7 @@ func NewDBSessionStore(repo *Repository) *DBSessionStore {
 	return &DBSessionStore{repo: repo}
 }
 
-func (s *DBSessionStore) collection() *mongo.Collection {
+func (s *DBSessionStore) collection() mongoCollection {
 	return s.repo.collection("sessions")
 }
 
@@ -125,7 +125,7 @@ func (s *DBSessionStore) EnsureIndexes(ctx context.Context) error {
 		{Keys: bson.M{"expiresAt": 1}, Options: options.Index().SetExpireAfterSeconds(0)},
 	}
 
-	_, err := s.collection().Indexes().CreateMany(ctx, indexes)
+	_, err := s.repo.pool.Collection("sessions").Indexes().CreateMany(ctx, indexes)
 	return err
 }
 

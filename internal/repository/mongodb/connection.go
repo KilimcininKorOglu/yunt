@@ -89,8 +89,6 @@ type ConnectionMetrics struct {
 	totalClosed     int64
 	currentOpen     int
 	currentInUse    int
-	totalQueries    int64
-	totalExecTime   time.Duration
 	lastHealthCheck time.Time
 	lastError       error
 }
@@ -336,8 +334,6 @@ func (p *ConnectionPool) Metrics() ConnectionMetrics {
 		totalClosed:     p.metrics.totalClosed,
 		currentOpen:     p.metrics.currentOpen,
 		currentInUse:    p.metrics.currentInUse,
-		totalQueries:    p.metrics.totalQueries,
-		totalExecTime:   p.metrics.totalExecTime,
 		lastHealthCheck: p.metrics.lastHealthCheck,
 		lastError:       p.metrics.lastError,
 	}

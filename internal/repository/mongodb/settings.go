@@ -47,12 +47,12 @@ func NewSettingsRepository(repo *Repository) *SettingsRepository {
 }
 
 // collection returns the settings collection.
-func (s *SettingsRepository) collection() *mongo.Collection {
+func (s *SettingsRepository) collection() mongoCollection {
 	return s.repo.collection(CollectionSettings)
 }
 
 // historyCollection returns the settings history collection.
-func (s *SettingsRepository) historyCollection() *mongo.Collection {
+func (s *SettingsRepository) historyCollection() mongoCollection {
 	return s.repo.collection(CollectionSettingsHistory)
 }
 

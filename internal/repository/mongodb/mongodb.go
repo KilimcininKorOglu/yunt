@@ -164,9 +164,9 @@ func (r *Repository) Close() error {
 	return r.pool.Close()
 }
 
-// collection returns the collection by name, handling session context.
-func (r *Repository) collection(name string) *mongo.Collection {
-	return r.pool.Collection(name)
+// collection returns the collection by name, wrapped with metrics instrumentation.
+func (r *Repository) collection(name string) mongoCollection {
+	return &metricsCollection{inner: r.pool.Collection(name)}
 }
 
 // getSessionContext returns a session context if in a transaction, otherwise returns the original context.

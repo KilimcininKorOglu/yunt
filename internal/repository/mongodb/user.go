@@ -42,7 +42,7 @@ func NewUserRepository(repo *Repository) *UserRepository {
 }
 
 // collection returns the users collection.
-func (u *UserRepository) collection() *mongo.Collection {
+func (u *UserRepository) collection() mongoCollection {
 	return u.repo.collection(CollectionUsers)
 }
 

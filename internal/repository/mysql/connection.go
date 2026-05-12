@@ -85,8 +85,6 @@ type ConnectionMetrics struct {
 	totalClosed     int64
 	currentOpen     int
 	currentInUse    int
-	totalQueries    int64
-	totalExecTime   time.Duration
 	lastHealthCheck time.Time
 	lastError       error
 }
@@ -379,8 +377,6 @@ func (p *ConnectionPool) Metrics() ConnectionMetrics {
 		totalClosed:     p.metrics.totalClosed,
 		currentOpen:     p.metrics.currentOpen,
 		currentInUse:    p.metrics.currentInUse,
-		totalQueries:    p.metrics.totalQueries,
-		totalExecTime:   p.metrics.totalExecTime,
 		lastHealthCheck: p.metrics.lastHealthCheck,
 		lastError:       p.metrics.lastError,
 	}
@@ -398,14 +394,6 @@ func (p *ConnectionPool) recordError(err error) {
 	p.metrics.mu.Lock()
 	defer p.metrics.mu.Unlock()
 	p.metrics.lastError = err
-}
-
-// recordQuery records query execution metrics.
-func (p *ConnectionPool) recordQuery(duration time.Duration) {
-	p.metrics.mu.Lock()
-	defer p.metrics.mu.Unlock()
-	p.metrics.totalQueries++
-	p.metrics.totalExecTime += duration
 }
 
 // BeginTx starts a new transaction.
@@ -431,11 +419,7 @@ func (p *ConnectionPool) ExecContext(ctx context.Context, query string, args ...
 		return nil, fmt.Errorf("database connection is closed")
 	}
 
-	start := time.Now()
-	result, err := db.ExecContext(ctx, query, args...)
-	p.recordQuery(time.Since(start))
-
-	return result, err
+	return db.ExecContext(ctx, query, args...)
 }
 
 // QueryContext executes a query that returns rows.
@@ -448,11 +432,7 @@ func (p *ConnectionPool) QueryContext(ctx context.Context, query string, args ..
 		return nil, fmt.Errorf("database connection is closed")
 	}
 
-	start := time.Now()
-	rows, err := db.QueryContext(ctx, query, args...)
-	p.recordQuery(time.Since(start))
-
-	return rows, err
+	return db.QueryContext(ctx, query, args...)
 }
 
 // QueryRowContext executes a query that returns at most one row.
@@ -465,11 +445,7 @@ func (p *ConnectionPool) QueryRowContext(ctx context.Context, query string, args
 		return nil
 	}
 
-	start := time.Now()
-	row := db.QueryRowContext(ctx, query, args...)
-	p.recordQuery(time.Since(start))
-
-	return row
+	return db.QueryRowContext(ctx, query, args...)
 }
 
 // SelectContext executes a query and scans results into dest.
@@ -482,11 +458,7 @@ func (p *ConnectionPool) SelectContext(ctx context.Context, dest interface{}, qu
 		return fmt.Errorf("database connection is closed")
 	}
 
-	start := time.Now()
-	err := db.SelectContext(ctx, dest, query, args...)
-	p.recordQuery(time.Since(start))
-
-	return err
+	return db.SelectContext(ctx, dest, query, args...)
 }
 
 // GetContext executes a query and scans a single row into dest.
@@ -499,11 +471,7 @@ func (p *ConnectionPool) GetContext(ctx context.Context, dest interface{}, query
 		return fmt.Errorf("database connection is closed")
 	}
 
-	start := time.Now()
-	err := db.GetContext(ctx, dest, query, args...)
-	p.recordQuery(time.Since(start))
-
-	return err
+	return db.GetContext(ctx, dest, query, args...)
 }
 
 // NamedExecContext executes a named query that doesn't return rows.
@@ -516,11 +484,7 @@ func (p *ConnectionPool) NamedExecContext(ctx context.Context, query string, arg
 		return nil, fmt.Errorf("database connection is closed")
 	}
 
-	start := time.Now()
-	result, err := db.NamedExecContext(ctx, query, arg)
-	p.recordQuery(time.Since(start))
-
-	return result, err
+	return db.NamedExecContext(ctx, query, arg)
 }
 
 // Rebind transforms a query from QUESTION to the DB's bindvar type.

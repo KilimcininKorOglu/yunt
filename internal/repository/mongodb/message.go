@@ -65,7 +65,7 @@ func NewMessageRepository(repo *Repository) *MessageRepository {
 }
 
 // collection returns the messages collection.
-func (m *MessageRepository) collection() *mongo.Collection {
+func (m *MessageRepository) collection() mongoCollection {
 	return m.repo.collection(CollectionMessages)
 }
 

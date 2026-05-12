@@ -46,7 +46,7 @@ func NewMailboxRepository(repo *Repository) *MailboxRepository {
 }
 
 // collection returns the mailboxes collection.
-func (m *MailboxRepository) collection() *mongo.Collection {
+func (m *MailboxRepository) collection() mongoCollection {
 	return m.repo.collection(CollectionMailboxes)
 }
 

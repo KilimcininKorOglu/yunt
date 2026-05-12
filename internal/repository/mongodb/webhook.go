@@ -64,12 +64,12 @@ func NewWebhookRepository(repo *Repository) *WebhookRepository {
 }
 
 // collection returns the webhooks collection.
-func (w *WebhookRepository) collection() *mongo.Collection {
+func (w *WebhookRepository) collection() mongoCollection {
 	return w.repo.collection(CollectionWebhooks)
 }
 
 // deliveriesCollection returns the webhook deliveries collection.
-func (w *WebhookRepository) deliveriesCollection() *mongo.Collection {
+func (w *WebhookRepository) deliveriesCollection() mongoCollection {
 	return w.repo.collection(CollectionWebhookDeliveries)
 }
 

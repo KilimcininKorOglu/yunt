@@ -56,12 +56,12 @@ func NewAttachmentRepository(repo *Repository) *AttachmentRepository {
 }
 
 // collection returns the attachments collection.
-func (a *AttachmentRepository) collection() *mongo.Collection {
+func (a *AttachmentRepository) collection() mongoCollection {
 	return a.repo.collection(CollectionAttachments)
 }
 
 // contentCollection returns the attachment content collection.
-func (a *AttachmentRepository) contentCollection() *mongo.Collection {
+func (a *AttachmentRepository) contentCollection() mongoCollection {
 	return a.repo.collection(CollectionAttachmentContent)
 }
 
