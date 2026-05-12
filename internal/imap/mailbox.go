@@ -140,7 +140,7 @@ func NewMailboxStatus(mailbox *domain.Mailbox) *MailboxStatus {
 	return &MailboxStatus{
 		Name:        NormalizeMailboxName(mailbox.Name),
 		Messages:    uint32(mailbox.MessageCount),
-		Recent:      0, // Recent flag handling is not implemented yet
+		Recent:      0,
 		Unseen:      uint32(mailbox.UnreadCount),
 		UIDNext:     imap.UID(mailbox.UIDNext),
 		UIDValidity: generateUIDValidity(mailbox),
@@ -237,9 +237,9 @@ func NewSelectData(mailbox *domain.Mailbox) *SelectData {
 			imap.FlagWildcard, // Indicates custom flags are allowed
 		},
 		NumMessages: uint32(mailbox.MessageCount),
-		NumRecent:   0, // Recent flag handling is not implemented yet
+		NumRecent:   0,
 		FirstUnseen: 1, // Simplified: first message is unseen if there are unseen messages
-		UIDNext:     imap.UID(mailbox.MessageCount + 1),
+		UIDNext:     imap.UID(mailbox.UIDNext),
 		UIDValidity: generateUIDValidity(mailbox),
 	}
 }

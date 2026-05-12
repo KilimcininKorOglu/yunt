@@ -233,6 +233,7 @@ func TestNewSelectData(t *testing.T) {
 		Name:         "INBOX",
 		MessageCount: 50,
 		UnreadCount:  3,
+		UIDNext:      51,
 		CreatedAt:    now,
 	}
 
