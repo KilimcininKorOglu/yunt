@@ -174,6 +174,11 @@ func (r *Repository) Close() error {
 	return r.pool.Close()
 }
 
+// DB returns the underlying sqlx.DB connection for direct access (e.g., session store).
+func (r *Repository) DB() *sqlx.DB {
+	return r.pool.DB()
+}
+
 // db returns the database connection or transaction.
 func (r *Repository) db() sqlxDB {
 	r.mu.RLock()

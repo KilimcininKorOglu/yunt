@@ -16,6 +16,9 @@ import (
 	"yunt/internal/config"
 	imapserver "yunt/internal/imap"
 	"yunt/internal/repository/factory"
+	"yunt/internal/repository/mongodb"
+	"yunt/internal/repository/mysql"
+	"yunt/internal/repository/postgres"
 	"yunt/internal/repository/sqlite"
 	"yunt/internal/service"
 	smtpserver "yunt/internal/smtp"
@@ -96,11 +99,18 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	log.Info().Str("driver", cfg.Database.Driver).Msg("Database connected")
 
-	// Initialize session store (DB-backed for SQLite, in-memory for others)
+	// Initialize session store (DB-backed for all drivers)
 	var sessionStore service.SessionStore
-	if sqliteRepo, ok := repo.(*sqlite.Repository); ok {
-		sessionStore = sqlite.NewDBSessionStore(sqliteRepo.DB())
-	} else {
+	switch r := repo.(type) {
+	case *sqlite.Repository:
+		sessionStore = sqlite.NewDBSessionStore(r.DB())
+	case *postgres.Repository:
+		sessionStore = postgres.NewDBSessionStore(r.DB())
+	case *mysql.Repository:
+		sessionStore = mysql.NewDBSessionStore(r.DB())
+	case *mongodb.Repository:
+		sessionStore = mongodb.NewDBSessionStore(r)
+	default:
 		sessionStore = service.NewInMemorySessionStore()
 	}
 
