@@ -32,6 +32,7 @@ type Session struct {
 	recipients       []recipientInfo
 	messageSize      int64
 	mailFromReceived bool
+	rateLimitExceeded bool
 
 	// Authentication state
 	authenticated bool
@@ -201,6 +202,17 @@ func (s *Session) logAuthFailure(username, mechanism string, err error) {
 // Mail handles the MAIL FROM command.
 // Validates the sender address and size restrictions.
 func (s *Session) Mail(from string, opts *smtp.MailOptions) error {
+	// RFC 5321 §4.1.1: reject with 421 if connection was rate-limited.
+	// The session is accepted so go-smtp can send the 421 with the correct code
+	// (NewSession errors are overridden to 451 by go-smtp).
+	if s.rateLimitExceeded {
+		return &smtp.SMTPError{
+			Code:         421,
+			EnhancedCode: smtp.EnhancedCode{4, 4, 5},
+			Message:      "Too many connections, try again later",
+		}
+	}
+
 	// RFC 5321 §4.1.1.2: require authentication before accepting MAIL FROM
 	if s.backend.AuthRequired() && !s.authenticated {
 		return &smtp.SMTPError{

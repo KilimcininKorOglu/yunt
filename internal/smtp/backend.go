@@ -85,7 +85,11 @@ func NewBackend(s *Server, opts ...BackendOption) *Backend {
 func (b *Backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	remoteAddr := c.Conn().RemoteAddr().String()
 
-	// Check rate limits before accepting connection
+	// Check rate limits before accepting connection.
+	// We accept the TCP connection so that go-smtp can deliver the 421 response
+	// with the correct code; returning an error here causes go-smtp to override
+	// the code to 451.
+	var rateLimitExceeded bool
 	if b.server.rateLimiter != nil {
 		if err := b.server.rateLimiter.CheckConnection(context.Background(), remoteAddr); err != nil {
 			b.server.rateLimiter.applyBackoff(extractIP(remoteAddr))
@@ -93,11 +97,12 @@ func (b *Backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 			b.server.logger.Warn().
 				Str("remoteAddr", remoteAddr).
 				Err(err).
-				Msg("connection rejected by rate limiter")
-			return nil, err
+				Msg("connection rate-limited, will reject at MAIL FROM")
+			rateLimitExceeded = true
+		} else {
+			// Track connection for rate limiting only when not rate-limited
+			b.server.rateLimiter.OnConnectionOpened(remoteAddr)
 		}
-		// Track connection for rate limiting
-		b.server.rateLimiter.OnConnectionOpened(remoteAddr)
 	}
 
 	b.server.stats.ConnectionOpened()
@@ -107,7 +112,9 @@ func (b *Backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 		Str("hostname", c.Hostname()).
 		Msg("new connection")
 
-	return NewSession(b, c, remoteAddr), nil
+	sess := NewSession(b, c, remoteAddr)
+	sess.rateLimitExceeded = rateLimitExceeded
+	return sess, nil
 }
 
 // validateRecipient checks if the recipient address is valid and has a mailbox.

@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"time"
 
 	"github.com/emersion/go-imap/v2"
 
 	"yunt/internal/domain"
+	"yunt/internal/parser"
 	"yunt/internal/repository"
 )
 
@@ -159,6 +161,11 @@ func (b *BodyStructureBuilder) buildSinglePartFromRaw(rawBody []byte, contentTyp
 		singlePart.Text = &imap.BodyStructureText{
 			NumLines: int64(lines),
 		}
+	}
+
+	// RFC 3501 §7.4.2: message/rfc822 requires envelope, body structure, and line count.
+	if strings.ToLower(typeStr) == "message" && strings.ToLower(subtype) == "rfc822" {
+		singlePart.MessageRFC822 = b.buildMessageRFC822Fields(body, extended)
 	}
 
 	if extended {
@@ -639,4 +646,108 @@ func (b *BodyStructureBuilder) countLines(data []byte) int {
 		}
 	}
 	return count
+}
+
+// buildMessageRFC822Fields builds the RFC 3501 §7.4.2 required metadata for a
+// message/rfc822 part: envelope, nested body structure, and line count.
+func (b *BodyStructureBuilder) buildMessageRFC822Fields(body []byte, extended bool) *imap.BodyStructureMessageRFC822 {
+	numLines := int64(b.countLines(body))
+
+	rfc822 := &imap.BodyStructureMessageRFC822{
+		NumLines: numLines,
+	}
+
+	p := parser.NewParser()
+	parsed, err := p.Parse(body)
+	if err != nil {
+		return rfc822
+	}
+
+	rfc822.Envelope = b.buildEnvelopeFromParsed(parsed)
+
+	// Build nested body structure from the enclosed raw message.
+	nestedCT := b.extractContentType(body)
+	if strings.HasPrefix(nestedCT, "multipart/") {
+		rfc822.BodyStructure, _ = b.buildMultipartFromRaw(body, nestedCT, extended)
+	} else {
+		rfc822.BodyStructure, _ = b.buildSinglePartFromRaw(body, nestedCT, nil, extended)
+	}
+
+	return rfc822
+}
+
+// buildEnvelopeFromParsed builds an imap.Envelope from a parser.ParsedMessage.
+func (b *BodyStructureBuilder) buildEnvelopeFromParsed(parsed *parser.ParsedMessage) *imap.Envelope {
+	envelope := &imap.Envelope{
+		Subject:   parsed.Subject,
+		MessageID: parsed.MessageID,
+	}
+
+	if parsed.Date != nil {
+		envelope.Date = *parsed.Date
+	} else {
+		envelope.Date = time.Time{}
+	}
+
+	if !parsed.From.IsEmpty() {
+		mailbox, host := splitEmailForEnvelope(parsed.From.Address)
+		envelope.From = []imap.Address{{
+			Name:    parsed.From.Name,
+			Mailbox: mailbox,
+			Host:    host,
+		}}
+	}
+	envelope.Sender = envelope.From
+
+	if parsed.ReplyTo != nil && !parsed.ReplyTo.IsEmpty() {
+		mailbox, host := splitEmailForEnvelope(parsed.ReplyTo.Address)
+		envelope.ReplyTo = []imap.Address{{
+			Name:    parsed.ReplyTo.Name,
+			Mailbox: mailbox,
+			Host:    host,
+		}}
+	} else {
+		envelope.ReplyTo = envelope.From
+	}
+
+	for _, addr := range parsed.To {
+		mailbox, host := splitEmailForEnvelope(addr.Address)
+		envelope.To = append(envelope.To, imap.Address{
+			Name:    addr.Name,
+			Mailbox: mailbox,
+			Host:    host,
+		})
+	}
+
+	for _, addr := range parsed.Cc {
+		mailbox, host := splitEmailForEnvelope(addr.Address)
+		envelope.Cc = append(envelope.Cc, imap.Address{
+			Name:    addr.Name,
+			Mailbox: mailbox,
+			Host:    host,
+		})
+	}
+
+	for _, addr := range parsed.Bcc {
+		mailbox, host := splitEmailForEnvelope(addr.Address)
+		envelope.Bcc = append(envelope.Bcc, imap.Address{
+			Name:    addr.Name,
+			Mailbox: mailbox,
+			Host:    host,
+		})
+	}
+
+	if parsed.InReplyTo != "" {
+		envelope.InReplyTo = []string{parsed.InReplyTo}
+	}
+
+	return envelope
+}
+
+// splitEmailForEnvelope splits an email address string into mailbox and host parts.
+func splitEmailForEnvelope(email string) (mailbox, host string) {
+	if idx := strings.Index(email, "@"); idx != -1 {
+		return email[:idx], email[idx+1:]
+	}
+	return email, ""
 }

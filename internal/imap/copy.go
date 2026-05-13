@@ -7,6 +7,7 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"yunt/internal/domain"
 	"yunt/internal/repository"
@@ -19,14 +20,16 @@ type CopyHandler struct {
 	repo         repository.Repository
 	userID       domain.ID
 	selectedMbox *domain.Mailbox
+	logger       zerolog.Logger
 }
 
 // NewCopyHandler creates a new CopyHandler.
-func NewCopyHandler(repo repository.Repository, userID domain.ID, selectedMbox *domain.Mailbox) *CopyHandler {
+func NewCopyHandler(repo repository.Repository, userID domain.ID, selectedMbox *domain.Mailbox, logger zerolog.Logger) *CopyHandler {
 	return &CopyHandler{
 		repo:         repo,
 		userID:       userID,
 		selectedMbox: selectedMbox,
+		logger:       logger,
 	}
 }
 
@@ -232,6 +235,14 @@ func (h *CopyHandler) copyMessages(ctx context.Context, messages map[uint32]*dom
 		if err := h.repo.Messages().Create(ctx, newMsg); err != nil {
 			result.FailedCount++
 			continue
+		}
+
+		// Validate that the repository assigned a non-zero IMAP UID.
+		if newMsg.IMAPUID == 0 {
+			h.logger.Warn().
+				Str("messageID", string(newMsgID)).
+				Str("destMailboxID", string(destMailbox.ID)).
+				Msg("copied message has zero IMAP UID; COPYUID response may be incorrect")
 		}
 
 		// Copy raw body if available

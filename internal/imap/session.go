@@ -833,6 +833,7 @@ func (s *Session) Copy(numSet imap.NumSet, dest string) (*imap.CopyData, error) 
 		s.server.backend.Repository(),
 		s.userSession.User.ID,
 		s.userSession.SelectedMailbox,
+		s.logger,
 	)
 
 	// Execute the copy
@@ -892,6 +893,7 @@ func (s *Session) Move(w *imapserver.MoveWriter, numSet imap.NumSet, dest string
 		s.server.backend.Repository(),
 		s.userSession.User.ID,
 		s.userSession.SelectedMailbox,
+		s.logger,
 	)
 
 	// Execute the move
