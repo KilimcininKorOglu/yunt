@@ -99,6 +99,16 @@ func (s *Seeder) SeedWithConfig(ctx context.Context, config *SeedConfig) error {
 		}
 	}
 
+	// Create default JMAP identity for admin
+	if err := s.createDefaultIdentity(ctx, adminUser); err != nil {
+		return fmt.Errorf("failed to create default identity: %w", err)
+	}
+
+	// Create default JMAP address book for admin
+	if err := s.createDefaultAddressBook(ctx, adminUser.ID); err != nil {
+		return fmt.Errorf("failed to create default address book: %w", err)
+	}
+
 	// Initialize default settings if not exists
 	if err := s.initializeSettings(ctx); err != nil {
 		return fmt.Errorf("failed to initialize settings: %w", err)
@@ -420,6 +430,43 @@ type SeedStatus struct {
 	UserCount    int64     `json:"userCount"`
 	MailboxCount int64     `json:"mailboxCount"`
 	CheckedAt    time.Time `json:"checkedAt"`
+}
+
+// createDefaultIdentity creates a default JMAP Identity for a user.
+func (s *Seeder) createDefaultIdentity(ctx context.Context, user *domain.User) error {
+	existing, _ := s.repo.jmap.identities.List(ctx, user.ID)
+	if len(existing) > 0 {
+		return nil
+	}
+
+	identity := &domain.Identity{
+		ID:        user.ID,
+		UserID:    user.ID,
+		Name:      user.DisplayName,
+		Email:     user.Email,
+		MayDelete: false,
+		CreatedAt: domain.Now(),
+		UpdatedAt: domain.Now(),
+	}
+	return s.repo.jmap.identities.Create(ctx, identity)
+}
+
+// createDefaultAddressBook creates a default JMAP AddressBook for a user.
+func (s *Seeder) createDefaultAddressBook(ctx context.Context, userID domain.ID) error {
+	existing, _ := s.repo.jmap.addressBooks.List(ctx, userID)
+	if len(existing) > 0 {
+		return nil
+	}
+
+	book := &domain.AddressBook{
+		ID:        domain.ID("ab-" + string(userID)),
+		UserID:    userID,
+		Name:      "Personal",
+		IsDefault: true,
+		CreatedAt: domain.Now(),
+		UpdatedAt: domain.Now(),
+	}
+	return s.repo.jmap.addressBooks.Create(ctx, book)
 }
 
 // Ensure Seeder implements repository.Seeder

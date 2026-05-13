@@ -65,11 +65,13 @@ func NewHandler(cfg HandlerConfig) *Handler {
 	h.dispatcher.Register("Email/get", emailHandler.Get)
 	h.dispatcher.Register("Email/query", emailHandler.Query)
 	h.dispatcher.Register("Email/changes", emailHandler.Changes)
+	h.dispatcher.Register("Email/set", emailHandler.Set)
 
 	mailboxHandler := mail.NewMailboxHandler(cfg.MailboxService, cfg.StateManager)
 	h.dispatcher.Register("Mailbox/get", mailboxHandler.Get)
 	h.dispatcher.Register("Mailbox/changes", mailboxHandler.Changes)
 	h.dispatcher.Register("Mailbox/query", mailboxHandler.Query)
+	h.dispatcher.Register("Mailbox/set", mailboxHandler.Set)
 
 	threadHandler := mail.NewThreadHandler(cfg.Repo, cfg.StateManager)
 	h.dispatcher.Register("Thread/get", threadHandler.Get)

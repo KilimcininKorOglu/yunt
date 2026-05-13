@@ -170,6 +170,11 @@ func (s *MessageService) storeMessageInTransaction(
 	msg := parsed.ToMessage(messageID, mailbox.ID)
 	msg.RawBody = rawData
 
+	if len(rawData) > 0 {
+		hash := sha256.Sum256(rawData)
+		msg.BlobID = hex.EncodeToString(hash[:])
+	}
+
 	// Assign IMAP UID and update mailbox stats
 	assignedUID, err := tx.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, msg.Size, msg.Status == domain.MessageUnread)
 	if err != nil {

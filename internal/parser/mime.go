@@ -792,6 +792,7 @@ func (pm *ParsedMessage) ToMessage(id, mailboxID domain.ID) *domain.Message {
 	msg.TextBody = pm.TextBody
 	msg.HTMLBody = pm.HTMLBody
 	msg.Headers = pm.Headers
+	msg.AllHeaders = pm.AllHeaders
 	msg.InReplyTo = pm.InReplyTo
 	msg.References = pm.References
 	msg.Size = pm.RawSize

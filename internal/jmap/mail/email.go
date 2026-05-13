@@ -235,6 +235,104 @@ func (h *EmailHandler) Changes(ctx context.Context, accountID domain.ID, args js
 	})
 }
 
+// Set implements Email/set (RFC 8621 §4.6) — update keywords/mailboxIds, destroy.
+func (h *EmailHandler) Set(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
+	var a struct {
+		AccountID string                            `json:"accountId"`
+		IfInState *string                           `json:"ifInState"`
+		Update    map[string]map[string]interface{} `json:"update"`
+		Destroy   []string                          `json:"destroy"`
+	}
+	if err := json.Unmarshal(args, &a); err != nil {
+		return nil, core.NewMethodError(core.ErrorInvalidArguments, err.Error())
+	}
+
+	stateStr, _ := h.stateManager.CurrentState(ctx, accountID, "Email")
+
+	if a.IfInState != nil && *a.IfInState != stateStr {
+		return nil, core.NewMethodError(core.ErrorStateMismatch, "state mismatch")
+	}
+
+	updated := map[string]interface{}{}
+	notUpdated := map[string]interface{}{}
+	destroyed := []string{}
+	notDestroyed := map[string]interface{}{}
+
+	for id, patch := range a.Update {
+		msg, err := h.messageService.GetMessageForUser(ctx, domain.ID(id), accountID)
+		if err != nil {
+			notUpdated[id] = map[string]interface{}{"type": core.SetErrorNotFound}
+			continue
+		}
+
+		if kw, ok := patch["keywords"]; ok {
+			if kwMap, ok := kw.(map[string]interface{}); ok {
+				boolMap := make(map[string]bool)
+				for k, v := range kwMap {
+					if b, ok := v.(bool); ok {
+						boolMap[k] = b
+					}
+				}
+				KeywordsToMessage(boolMap, msg)
+			}
+		}
+
+		if mbxIds, ok := patch["mailboxIds"]; ok {
+			if mbxMap, ok := mbxIds.(map[string]interface{}); ok {
+				for newMbxID := range mbxMap {
+					if domain.ID(newMbxID) != msg.MailboxID {
+						moveErr := h.messageService.MoveMessageForUser(ctx, msg.ID, domain.ID(newMbxID), accountID)
+						if moveErr != nil {
+							notUpdated[id] = map[string]interface{}{"type": core.ErrorServerFail, "description": moveErr.Error()}
+							continue
+						}
+					}
+				}
+			}
+		}
+
+		if msg.IsRead() {
+			_ = h.messageService.MarkAsReadForUser(ctx, msg.ID, accountID)
+		} else {
+			_ = h.messageService.MarkAsUnreadForUser(ctx, msg.ID, accountID)
+		}
+		if msg.IsStarred {
+			_ = h.messageService.StarForUser(ctx, msg.ID, accountID)
+		} else {
+			_ = h.messageService.UnstarForUser(ctx, msg.ID, accountID)
+		}
+
+		updated[id] = nil
+	}
+
+	for _, id := range a.Destroy {
+		err := h.messageService.DeleteMessageForUser(ctx, domain.ID(id), accountID)
+		if err != nil {
+			notDestroyed[id] = map[string]interface{}{"type": core.SetErrorNotFound}
+			continue
+		}
+		destroyed = append(destroyed, id)
+	}
+
+	newState, _ := h.stateManager.CurrentState(ctx, accountID, "Email")
+
+	resp := map[string]interface{}{
+		"accountId": a.AccountID,
+		"oldState":  stateStr,
+		"newState":  newState,
+	}
+	if a.Update != nil {
+		resp["updated"] = updated
+		resp["notUpdated"] = notUpdated
+	}
+	if a.Destroy != nil {
+		resp["destroyed"] = destroyed
+		resp["notDestroyed"] = notDestroyed
+	}
+
+	return marshalJSON(resp)
+}
+
 func marshalJSON(v interface{}) (json.RawMessage, *core.MethodError) {
 	data, err := json.Marshal(v)
 	if err != nil {
