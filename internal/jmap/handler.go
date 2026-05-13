@@ -90,7 +90,7 @@ func NewHandler(cfg HandlerConfig) *Handler {
 	h.dispatcher.Register("Identity/changes", identityHandler.Changes)
 	h.dispatcher.Register("Identity/set", identityHandler.Set)
 
-	submissionHandler := mail.NewSubmissionHandler(cfg.Repo, cfg.StateManager)
+	submissionHandler := mail.NewSubmissionHandler(cfg.Repo, cfg.StateManager, cfg.MessageService, cfg.RelayService)
 	h.dispatcher.Register("EmailSubmission/get", submissionHandler.Get)
 	h.dispatcher.Register("EmailSubmission/changes", submissionHandler.Changes)
 	h.dispatcher.Register("EmailSubmission/query", submissionHandler.Query)

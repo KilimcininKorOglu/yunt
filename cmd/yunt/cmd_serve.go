@@ -305,7 +305,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 			stateManager := state.NewManager(repo.JMAP().State())
 			idGen := func() domain.ID { return domain.ID(uuid.New().String()) }
 			threadResolver := thread.NewResolver(repo, stateManager, log.Logger, idGen)
-			_ = threadResolver // will be used in Phase 7+
+
+			go func() {
+				count, err := threadResolver.BackfillThreads(context.Background(), 1000)
+				if err != nil {
+					log.Error().Err(err).Msg("thread backfill failed")
+				} else if count > 0 {
+					log.Info().Int("count", count).Msg("thread backfill complete")
+				}
+			}()
 
 			jmapHandler := jmapserver.NewHandler(jmapserver.HandlerConfig{
 				Repo:           repo,

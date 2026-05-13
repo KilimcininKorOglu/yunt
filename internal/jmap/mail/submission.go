@@ -9,17 +9,20 @@ import (
 	"yunt/internal/jmap/core"
 	"yunt/internal/jmap/state"
 	"yunt/internal/repository"
+	"yunt/internal/service"
 )
 
 // SubmissionHandler implements JMAP EmailSubmission methods (RFC 8621 §7).
 type SubmissionHandler struct {
-	repo         repository.Repository
-	stateManager *state.Manager
+	repo           repository.Repository
+	stateManager   *state.Manager
+	messageService *service.MessageService
+	relayService   *service.RelayService
 }
 
 // NewSubmissionHandler creates a new EmailSubmission method handler.
-func NewSubmissionHandler(repo repository.Repository, stateMgr *state.Manager) *SubmissionHandler {
-	return &SubmissionHandler{repo: repo, stateManager: stateMgr}
+func NewSubmissionHandler(repo repository.Repository, stateMgr *state.Manager, msgSvc *service.MessageService, relaySvc *service.RelayService) *SubmissionHandler {
+	return &SubmissionHandler{repo: repo, stateManager: stateMgr, messageService: msgSvc, relayService: relaySvc}
 }
 
 // Get implements EmailSubmission/get.
