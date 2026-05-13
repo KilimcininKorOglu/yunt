@@ -702,17 +702,21 @@ func (m *MailboxRepository) UpdateStats(ctx context.Context, id domain.ID, stats
 }
 
 // IncrementMessageCount atomically increments message counters and assigns the next IMAP UID.
-func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error) {
+func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64, isUnread bool) (uint32, error) {
 	ctx = m.repo.getSessionContext(ctx)
+
+	incFields := bson.M{
+		"messageCount": 1,
+		"totalSize":    size,
+		"uidNext":      1,
+	}
+	if isUnread {
+		incFields["unreadCount"] = 1
+	}
 
 	filter := bson.M{"_id": string(id)}
 	update := bson.M{
-		"$inc": bson.M{
-			"messageCount": 1,
-			"unreadCount":  1,
-			"totalSize":    size,
-			"uidNext":      1,
-		},
+		"$inc": incFields,
 		"$set": bson.M{"updatedAt": time.Now().UTC()},
 	}
 

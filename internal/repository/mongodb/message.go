@@ -542,6 +542,14 @@ func (m *MessageRepository) buildFilter(filter *repository.MessageFilter) bson.M
 		f["isDeleted"] = bson.M{"$ne": true}
 	}
 
+	if filter.IsDraft != nil {
+		f["isDraft"] = *filter.IsDraft
+	}
+
+	if filter.ExcludeDraft {
+		f["isDraft"] = bson.M{"$ne": true}
+	}
+
 	return f
 }
 
@@ -601,7 +609,7 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 	ctx = m.repo.getSessionContext(ctx)
 
 	if msg.IMAPUID == 0 {
-		assignedUID, err := m.repo.mailboxes.IncrementMessageCount(ctx, msg.MailboxID, msg.Size)
+		assignedUID, err := m.repo.mailboxes.IncrementMessageCount(ctx, msg.MailboxID, msg.Size, msg.Status == domain.MessageUnread)
 		if err != nil {
 			return fmt.Errorf("failed to assign IMAP UID: %w", err)
 		}
@@ -1127,7 +1135,7 @@ func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, tar
 	m.repo.mailboxes.DecrementMessageCount(ctx, sourceMailboxID, msg.Size, wasUnread)
 
 	// Update target mailbox stats and assign new IMAP UID
-	newUID, uidErr := m.repo.mailboxes.IncrementMessageCount(ctx, targetMailboxID, msg.Size)
+	newUID, uidErr := m.repo.mailboxes.IncrementMessageCount(ctx, targetMailboxID, msg.Size, wasUnread)
 	if uidErr == nil {
 		uidFilter := bson.M{"_id": string(id)}
 		uidUpdate := bson.M{"$set": bson.M{"imapUid": newUID}}

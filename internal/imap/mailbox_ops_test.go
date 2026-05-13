@@ -123,7 +123,7 @@ func (m *mailboxMockRepository) ClearCatchAll(ctx context.Context, id domain.ID)
 func (m *mailboxMockRepository) UpdateStats(ctx context.Context, id domain.ID, stats *repository.MailboxStatsUpdate) error {
 	return nil
 }
-func (m *mailboxMockRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error) {
+func (m *mailboxMockRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64, isUnread bool) (uint32, error) {
 	return 1, nil
 }
 func (m *mailboxMockRepository) DecrementMessageCount(ctx context.Context, id domain.ID, size int64, wasUnread bool) error {

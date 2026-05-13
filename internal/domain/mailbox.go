@@ -136,10 +136,12 @@ func (m *Mailbox) Validate() error {
 	return nil
 }
 
-// IncrementMessageCount increases the message and unread counts.
-func (m *Mailbox) IncrementMessageCount(size int64) {
+// IncrementMessageCount increases the message count. UnreadCount is incremented only when isUnread is true.
+func (m *Mailbox) IncrementMessageCount(size int64, isUnread bool) {
 	m.MessageCount++
-	m.UnreadCount++
+	if isUnread {
+		m.UnreadCount++
+	}
 	m.TotalSize += size
 	m.UIDNext++
 	m.UpdatedAt = Now()

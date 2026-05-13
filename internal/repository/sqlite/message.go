@@ -403,6 +403,18 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 		if filter.ExcludeDeleted {
 			sb.WriteString(" AND is_deleted = 0")
 		}
+
+		if filter.IsDraft != nil {
+			if *filter.IsDraft {
+				sb.WriteString(" AND is_draft = 1")
+			} else {
+				sb.WriteString(" AND is_draft = 0")
+			}
+		}
+
+		if filter.ExcludeDraft {
+			sb.WriteString(" AND is_draft = 0")
+		}
 	}
 
 	if !countOnly {
@@ -478,7 +490,7 @@ func (m *MessageRepository) ListSummaries(ctx context.Context, filter *repositor
 // If msg.IMAPUID is 0, it will be assigned automatically via IncrementMessageCount.
 func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) error {
 	if msg.IMAPUID == 0 {
-		assignedUID, err := m.repo.Mailboxes().IncrementMessageCount(ctx, msg.MailboxID, msg.Size)
+		assignedUID, err := m.repo.Mailboxes().IncrementMessageCount(ctx, msg.MailboxID, msg.Size, msg.Status == domain.MessageUnread)
 		if err != nil {
 			return fmt.Errorf("failed to assign IMAP UID: %w", err)
 		}
@@ -1077,7 +1089,7 @@ func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, tar
 	}
 
 	// Update target mailbox stats and assign new IMAP UID
-	newUID, err := m.repo.Mailboxes().IncrementMessageCount(ctx, targetMailboxID, msg.Size)
+	newUID, err := m.repo.Mailboxes().IncrementMessageCount(ctx, targetMailboxID, msg.Size, wasUnread)
 	if err != nil {
 		return err
 	}
@@ -1085,13 +1097,6 @@ func (m *MessageRepository) MoveToMailbox(ctx context.Context, id domain.ID, tar
 	// Update the message's IMAP UID for the new mailbox
 	if _, err := m.repo.db().ExecContext(ctx, `UPDATE messages SET imap_uid = ? WHERE id = ?`, newUID, string(id)); err != nil {
 		return fmt.Errorf("failed to update IMAP UID after move: %w", err)
-	}
-
-	// Adjust unread count for target (IncrementMessageCount adds to unread, but message might be read)
-	if !wasUnread {
-		if err := m.repo.Mailboxes().UpdateUnreadCount(ctx, targetMailboxID, -1); err != nil {
-			return err
-		}
 	}
 
 	return nil

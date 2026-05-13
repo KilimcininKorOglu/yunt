@@ -146,7 +146,7 @@ func (r *mockMailboxRepository) FindMatchingMailbox(ctx context.Context, address
 	return nil, domain.NewNotFoundError("mailbox", address)
 }
 
-func (r *mockMailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error) {
+func (r *mockMailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64, isUnread bool) (uint32, error) {
 	if r.incrementError != nil {
 		return 0, r.incrementError
 	}
@@ -154,7 +154,7 @@ func (r *mockMailboxRepository) IncrementMessageCount(ctx context.Context, id do
 	if !ok {
 		return 0, domain.NewNotFoundError("mailbox", id.String())
 	}
-	mailbox.IncrementMessageCount(size)
+	mailbox.IncrementMessageCount(size, isUnread)
 	return uint32(mailbox.UIDNext - 1), nil
 }
 
@@ -469,7 +469,7 @@ func (r *mockMessageRepository) MoveToMailbox(ctx context.Context, id domain.ID,
 
 	if r.mailboxRepo != nil {
 		r.mailboxRepo.DecrementMessageCount(ctx, sourceMailboxID, msg.Size, wasUnread)
-		r.mailboxRepo.IncrementMessageCount(ctx, targetMailboxID, msg.Size)
+		r.mailboxRepo.IncrementMessageCount(ctx, targetMailboxID, msg.Size, msg.Status == domain.MessageUnread)
 		if !wasUnread {
 			r.mailboxRepo.UpdateUnreadCount(ctx, targetMailboxID, -1)
 		}

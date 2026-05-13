@@ -67,6 +67,9 @@ func NewRouter(cfg RouterConfig) *Router {
 	secCfg.StrictTransportSecurity = ""
 	e.Use(middleware.Security(secCfg))
 
+	// Body limit middleware
+	e.Use(echoMiddleware.BodyLimit("25MB"))
+
 	// CORS middleware
 	e.Use(middleware.CORSWithOrigins(cfg.CORSOrigins))
 

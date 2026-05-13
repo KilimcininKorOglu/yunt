@@ -88,8 +88,9 @@ type MailboxRepository interface {
 	UpdateStats(ctx context.Context, id domain.ID, stats *MailboxStatsUpdate) error
 
 	// IncrementMessageCount atomically increments message counters and assigns the next IMAP UID.
+	// isUnread controls whether unread_count is also incremented (false for Sent/Draft messages).
 	// Returns the assigned UID and domain.ErrNotFound if the mailbox does not exist.
-	IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error)
+	IncrementMessageCount(ctx context.Context, id domain.ID, size int64, isUnread bool) (uint32, error)
 
 	// DecrementMessageCount atomically decrements message counters.
 	// wasUnread indicates if the removed message was unread.

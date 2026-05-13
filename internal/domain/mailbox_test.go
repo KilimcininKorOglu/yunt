@@ -157,7 +157,7 @@ func TestMailbox_Validate(t *testing.T) {
 func TestMailbox_IncrementMessageCount(t *testing.T) {
 	mailbox := NewMailbox(ID("mb1"), ID("u1"), "Inbox", "inbox@localhost")
 
-	mailbox.IncrementMessageCount(1024)
+	mailbox.IncrementMessageCount(1024, true)
 
 	if mailbox.MessageCount != 1 {
 		t.Errorf("IncrementMessageCount() MessageCount = %v, want 1", mailbox.MessageCount)
@@ -167,6 +167,19 @@ func TestMailbox_IncrementMessageCount(t *testing.T) {
 	}
 	if mailbox.TotalSize != 1024 {
 		t.Errorf("IncrementMessageCount() TotalSize = %v, want 1024", mailbox.TotalSize)
+	}
+
+	// A read message must not increment UnreadCount.
+	mailbox.IncrementMessageCount(512, false)
+
+	if mailbox.MessageCount != 2 {
+		t.Errorf("IncrementMessageCount() MessageCount = %v, want 2", mailbox.MessageCount)
+	}
+	if mailbox.UnreadCount != 1 {
+		t.Errorf("IncrementMessageCount() UnreadCount = %v, want 1 (read message must not increment)", mailbox.UnreadCount)
+	}
+	if mailbox.TotalSize != 1536 {
+		t.Errorf("IncrementMessageCount() TotalSize = %v, want 1536", mailbox.TotalSize)
 	}
 }
 

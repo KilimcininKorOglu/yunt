@@ -307,6 +307,12 @@ type MessageFilter struct {
 
 	// ExcludeDeleted excludes messages marked with \Deleted flag from results.
 	ExcludeDeleted bool
+
+	// IsDraft filters by draft status. When non-nil, only messages matching this value are returned.
+	IsDraft *bool
+
+	// ExcludeDraft excludes messages marked with \Draft flag from results.
+	ExcludeDraft bool
 }
 
 // IsEmpty returns true if no filter criteria are set.
@@ -338,7 +344,9 @@ func (f *MessageFilter) IsEmpty() bool {
 		f.MinSize == nil &&
 		f.MaxSize == nil &&
 		f.ContentType == nil &&
-		!f.ExcludeSpam
+		!f.ExcludeSpam &&
+		!f.ExcludeDraft &&
+		f.IsDraft == nil
 }
 
 // MessageSortField represents the available fields for sorting messages.

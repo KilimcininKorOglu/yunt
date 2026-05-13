@@ -664,12 +664,21 @@ func (m *MailboxRepository) UpdateStats(ctx context.Context, id domain.ID, stats
 }
 
 // IncrementMessageCount atomically increments message counters and assigns the next IMAP UID.
-func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64) (uint32, error) {
-	query := `UPDATE mailboxes SET message_count = message_count + 1,
-		unread_count = unread_count + 1, total_size = total_size + $1,
-		uid_next = uid_next + 1, updated_at = $2
-		WHERE id = $3
-		RETURNING uid_next - 1`
+func (m *MailboxRepository) IncrementMessageCount(ctx context.Context, id domain.ID, size int64, isUnread bool) (uint32, error) {
+	var query string
+	if isUnread {
+		query = `UPDATE mailboxes SET message_count = message_count + 1,
+			unread_count = unread_count + 1, total_size = total_size + $1,
+			uid_next = uid_next + 1, updated_at = $2
+			WHERE id = $3
+			RETURNING uid_next - 1`
+	} else {
+		query = `UPDATE mailboxes SET message_count = message_count + 1,
+			total_size = total_size + $1,
+			uid_next = uid_next + 1, updated_at = $2
+			WHERE id = $3
+			RETURNING uid_next - 1`
+	}
 
 	var assignedUID uint32
 	err := m.repo.db().QueryRowContext(ctx, query, size, time.Now().UTC(), string(id)).Scan(&assignedUID)

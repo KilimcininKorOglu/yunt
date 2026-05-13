@@ -334,7 +334,7 @@ func TestMailboxRepository(t *testing.T) {
 	}
 
 	// Update stats
-	if _, err := mailboxes.IncrementMessageCount(ctx, mailbox.ID, 1024); err != nil {
+	if _, err := mailboxes.IncrementMessageCount(ctx, mailbox.ID, 1024, true); err != nil {
 		t.Fatalf("failed to increment message count: %v", err)
 	}
 
@@ -1607,7 +1607,7 @@ func TestStatsRecalculation(t *testing.T) {
 			CreatedAt: domain.Now(),
 			UpdatedAt: domain.Now(),
 		}
-		uid, _ := repo.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, msg.Size)
+		uid, _ := repo.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, msg.Size, true)
 		msg.IMAPUID = uid
 		repo.Messages().Create(ctx, msg)
 	}
@@ -1701,7 +1701,7 @@ func TestStatsDenormalizedCounters(t *testing.T) {
 		CreatedAt: domain.Now(),
 		UpdatedAt: domain.Now(),
 	}
-	uid, _ := repo.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, msg.Size)
+	uid, _ := repo.Mailboxes().IncrementMessageCount(ctx, mailbox.ID, msg.Size, true)
 	msg.IMAPUID = uid
 	repo.Messages().Create(ctx, msg)
 
