@@ -243,6 +243,12 @@ func (h *SystemHandler) getMessageStats(ctx context.Context) (*MessageStats, err
 	}
 	stats.Total = total
 
+	unreadStatus := domain.MessageUnread
+	unread, err := h.repo.Messages().Count(ctx, &repository.MessageFilter{Status: &unreadStatus})
+	if err == nil {
+		stats.Unread = unread
+	}
+
 	totalSize, err := h.repo.Messages().GetTotalSize(ctx)
 	if err == nil {
 		stats.TotalSize = totalSize
