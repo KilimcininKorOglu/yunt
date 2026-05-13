@@ -1,10 +1,12 @@
 package smtp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
 	"github.com/emersion/go-smtp"
+	"github.com/google/uuid"
 
 	"yunt/internal/domain"
 	"yunt/internal/parser"
@@ -15,13 +17,14 @@ import (
 // Backend implements the smtp.Backend interface.
 // It manages SMTP connections and creates sessions for handling mail transactions.
 type Backend struct {
-	server        *Server
-	mailboxRepo   repository.MailboxRepository
-	messageRepo   repository.MessageRepository
-	repo          repository.Repository
-	authenticator *Authenticator
-	relayService  *service.RelayService
-	mimeParser    *parser.Parser
+	server         *Server
+	mailboxRepo    repository.MailboxRepository
+	messageRepo    repository.MessageRepository
+	attachmentRepo repository.AttachmentRepository
+	repo           repository.Repository
+	authenticator  *Authenticator
+	relayService   *service.RelayService
+	mimeParser     *parser.Parser
 	notifyService  *service.NotifyService
 	webhookService *service.WebhookService
 }
@@ -40,6 +43,13 @@ func WithMailboxRepository(repo repository.MailboxRepository) BackendOption {
 func WithMessageRepository(repo repository.MessageRepository) BackendOption {
 	return func(b *Backend) {
 		b.messageRepo = repo
+	}
+}
+
+// WithAttachmentRepository sets the attachment repository for storing attachments.
+func WithAttachmentRepository(repo repository.AttachmentRepository) BackendOption {
+	return func(b *Backend) {
+		b.attachmentRepo = repo
 	}
 }
 
@@ -146,13 +156,13 @@ func (b *Backend) validateRecipient(ctx context.Context, address string) error {
 // Returns nil if successful, or an error otherwise.
 func (b *Backend) storeMessage(ctx context.Context, msg *domain.Message) error {
 	if b.messageRepo == nil {
-		// No message repository configured - message is effectively dropped
 		b.server.logger.Warn().
 			Str("from", msg.From.Address).
 			Msg("message received but no repository configured to store it")
 		return nil
 	}
 
+	var parsedAttachments []*parser.AttachmentData
 	if len(msg.RawBody) > 0 && b.mimeParser != nil {
 		parsed, err := b.mimeParser.Parse(msg.RawBody)
 		if err != nil {
@@ -166,6 +176,7 @@ func (b *Backend) storeMessage(ctx context.Context, msg *domain.Message) error {
 			if msg.From.Address == "" {
 				msg.From.Address = envelopeFrom
 			}
+			parsedAttachments = parsed.Attachments
 		}
 	}
 
@@ -175,6 +186,10 @@ func (b *Backend) storeMessage(ctx context.Context, msg *domain.Message) error {
 			Str("from", msg.From.Address).
 			Msg("failed to store message")
 		return err
+	}
+
+	if len(parsedAttachments) > 0 && b.attachmentRepo != nil {
+		b.storeAttachments(ctx, msg.ID, parsedAttachments)
 	}
 
 	if b.notifyService != nil && !msg.MailboxID.IsEmpty() {
@@ -190,6 +205,32 @@ func (b *Backend) storeMessage(ctx context.Context, msg *domain.Message) error {
 	}
 
 	return nil
+}
+
+// storeAttachments saves parsed attachments to the attachment repository.
+func (b *Backend) storeAttachments(ctx context.Context, messageID domain.ID, attachments []*parser.AttachmentData) {
+	for _, att := range attachments {
+		attID := domain.ID(uuid.New().String())
+		attachment := &domain.Attachment{
+			ID:          attID,
+			MessageID:   messageID,
+			Filename:    att.Filename,
+			ContentType: att.ContentType,
+			Size:        int64(len(att.Data)),
+			ContentID:   att.ContentID,
+			Disposition: att.Disposition,
+			IsInline:    att.IsInline,
+			CreatedAt:   domain.Now(),
+		}
+
+		if err := b.attachmentRepo.CreateWithContent(ctx, attachment, bytes.NewReader(att.Data)); err != nil {
+			b.server.logger.Error().
+				Err(err).
+				Str("messageId", string(messageID)).
+				Str("filename", att.Filename).
+				Msg("failed to store attachment")
+		}
+	}
 }
 
 // getMailbox retrieves a mailbox by address for message delivery.

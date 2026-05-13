@@ -169,6 +169,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			smtpserver.WithRepo(repo),
 			smtpserver.WithMailboxRepo(repo.Mailboxes()),
 			smtpserver.WithMessageRepo(repo.Messages()),
+			smtpserver.WithAttachmentRepo(repo.Attachments()),
 			smtpserver.WithNotifyService(notifyService),
 			smtpserver.WithWebhookService(webhookService),
 		)

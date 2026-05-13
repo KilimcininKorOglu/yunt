@@ -24,9 +24,10 @@ type Server struct {
 	backend  *Backend
 
 	// Repositories for message handling
-	mailboxRepo repository.MailboxRepository
-	messageRepo repository.MessageRepository
-	repo        repository.Repository
+	mailboxRepo    repository.MailboxRepository
+	messageRepo    repository.MessageRepository
+	attachmentRepo repository.AttachmentRepository
+	repo           repository.Repository
 
 	// Notification service for real-time events
 	notifyService *service.NotifyService
@@ -60,6 +61,13 @@ func WithMailboxRepo(repo repository.MailboxRepository) ServerOption {
 func WithMessageRepo(repo repository.MessageRepository) ServerOption {
 	return func(s *Server) {
 		s.messageRepo = repo
+	}
+}
+
+// WithAttachmentRepo sets the attachment repository for storing message attachments.
+func WithAttachmentRepo(repo repository.AttachmentRepository) ServerOption {
+	return func(s *Server) {
+		s.attachmentRepo = repo
 	}
 }
 
@@ -235,6 +243,9 @@ func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, err
 	}
 	if s.repo != nil {
 		backendOpts = append(backendOpts, WithRepository(s.repo))
+	}
+	if s.attachmentRepo != nil {
+		backendOpts = append(backendOpts, WithAttachmentRepository(s.attachmentRepo))
 	}
 	backend := NewBackend(s, backendOpts...)
 	backend.notifyService = s.notifyService
