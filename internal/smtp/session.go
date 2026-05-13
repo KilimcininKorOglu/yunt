@@ -27,10 +27,11 @@ type Session struct {
 	logger     zerolog.Logger
 
 	// Session state
-	from        string
-	fromOpts    *smtp.MailOptions
-	recipients  []recipientInfo
-	messageSize int64
+	from             string
+	fromOpts         *smtp.MailOptions
+	recipients       []recipientInfo
+	messageSize      int64
+	mailFromReceived bool
 
 	// Authentication state
 	authenticated bool
@@ -200,12 +201,22 @@ func (s *Session) logAuthFailure(username, mechanism string, err error) {
 // Mail handles the MAIL FROM command.
 // Validates the sender address and size restrictions.
 func (s *Session) Mail(from string, opts *smtp.MailOptions) error {
+	// RFC 5321 §4.1.1.2: require authentication before accepting MAIL FROM
+	if s.backend.AuthRequired() && !s.authenticated {
+		return &smtp.SMTPError{
+			Code:         530,
+			EnhancedCode: smtp.EnhancedCode{5, 7, 0},
+			Message:      "Authentication required",
+		}
+	}
+
 	s.logger.Debug().
 		Str("from", from).
 		Msg("MAIL FROM")
 
 	// Reset session state for new message
 	s.Reset()
+	s.mailFromReceived = true
 
 	// Validate sender address format (basic validation)
 	if from == "" {
@@ -288,6 +299,23 @@ func (s *Session) Rcpt(to string, opts *smtp.RcptOptions) error {
 
 	// Validate recipient against database
 	if err := s.backend.validateRecipient(s.ctx, to); err != nil {
+		// Relay protection (RFC 5321 §2.1): if recipient has no local mailbox and the
+		// domain is foreign, and the client is not authenticated, report relay denied
+		// rather than mailbox unavailable, to avoid disclosing address existence.
+		if s.backend.mailboxRepo != nil && !s.authenticated {
+			atIdx := strings.LastIndex(to, "@")
+			if atIdx != -1 {
+				recipientDomain := to[atIdx+1:]
+				if !strings.EqualFold(recipientDomain, s.backend.server.config.Domain) {
+					metrics.SMTPMessagesRejected.WithLabelValues("relay_denied").Inc()
+					return &smtp.SMTPError{
+						Code:         550,
+						EnhancedCode: smtp.EnhancedCode{5, 7, 1},
+						Message:      "Relaying denied",
+					}
+				}
+			}
+		}
 		return err
 	}
 
@@ -305,6 +333,16 @@ func (s *Session) Rcpt(to string, opts *smtp.RcptOptions) error {
 // Data handles the DATA command.
 // Receives the message data and stores it for each recipient.
 func (s *Session) Data(r io.Reader) error {
+	// Verify MAIL FROM was issued (RFC 5321 §3.3)
+	if !s.mailFromReceived {
+		metrics.SMTPMessagesRejected.WithLabelValues("no_mail_from").Inc()
+		return &smtp.SMTPError{
+			Code:         503,
+			EnhancedCode: smtp.EnhancedCode{5, 5, 1},
+			Message:      "need MAIL command",
+		}
+	}
+
 	// Verify we have at least one recipient
 	if len(s.recipients) == 0 {
 		metrics.SMTPMessagesRejected.WithLabelValues("no_recipients").Inc()
@@ -468,10 +506,43 @@ func (s *Session) relayMessage(data []byte, recipients []string) {
 	}
 }
 
+// receivedProtocol returns the ESMTP protocol label for the Received header.
+// Follows RFC 5321 §4.4 with modifiers for TLS (S) and authentication (A).
+func (s *Session) receivedProtocol() string {
+	secure := s.security != nil && s.security.IsSecure()
+	switch {
+	case secure && s.authenticated:
+		return "ESMTPSA"
+	case secure:
+		return "ESMTPS"
+	case s.authenticated:
+		return "ESMTPA"
+	default:
+		return "ESMTP"
+	}
+}
+
 // createMessage creates a new domain.Message from the received data.
 func (s *Session) createMessage(mailboxID domain.ID, data []byte, size int64, recipients []string) *domain.Message {
 	msgID := domain.ID(uuid.New().String())
 	msg := domain.NewMessage(msgID, mailboxID)
+
+	// Prepend Received: trace header (RFC 5321 §4.4)
+	clientHostname := "unknown"
+	if s.conn != nil {
+		clientHostname = s.conn.Hostname()
+	}
+	receivedHeader := fmt.Sprintf(
+		"Received: from %s (%s)\r\n\tby %s with %s id %s;\r\n\t%s\r\n",
+		clientHostname,
+		s.remoteAddr,
+		s.backend.server.config.Domain,
+		s.receivedProtocol(),
+		msgID,
+		time.Now().Format(time.RFC1123Z),
+	)
+	data = append([]byte(receivedHeader), data...)
+	size = int64(len(data))
 
 	// Set basic fields
 	msg.From = domain.EmailAddress{Address: s.from}
@@ -500,6 +571,7 @@ func (s *Session) Reset() {
 	s.fromOpts = nil
 	s.recipients = make([]recipientInfo, 0)
 	s.messageSize = 0
+	s.mailFromReceived = false
 }
 
 // Logout is called when the client disconnects.

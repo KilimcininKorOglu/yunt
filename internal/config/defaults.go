@@ -16,8 +16,8 @@ const (
 	DefaultSMTPMaxMessageSize    = 10 * 1024 * 1024 // 10MB
 	DefaultSMTPMaxAttachmentSize = 25 * 1024 * 1024 // 25MB
 	DefaultSMTPMaxRecipients     = 100
-	DefaultSMTPReadTimeout    = 60 * time.Second
-	DefaultSMTPWriteTimeout   = 60 * time.Second
+	DefaultSMTPReadTimeout    = 5 * time.Minute
+	DefaultSMTPWriteTimeout   = 5 * time.Minute
 	DefaultSMTPAuthRequired         = false
 	DefaultSMTPAllowRelay           = false
 	DefaultSMTPRelayPort            = 587
@@ -31,8 +31,8 @@ const (
 	DefaultIMAPEnabled      = true
 	DefaultIMAPHost         = "0.0.0.0"
 	DefaultIMAPPort         = 1143
-	DefaultIMAPReadTimeout  = 60 * time.Second
-	DefaultIMAPWriteTimeout = 60 * time.Second
+	DefaultIMAPReadTimeout  = 30 * time.Minute
+	DefaultIMAPWriteTimeout = 30 * time.Minute
 	DefaultIMAPIdleTimeout  = 30 * time.Minute
 
 	// API defaults.
