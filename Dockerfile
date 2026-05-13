@@ -32,7 +32,7 @@ RUN mkdir -p /webui/dist && \
 # Stage 2: Go Builder
 # Compile the Go binary with embedded Web UI
 # -----------------------------------------------------------------------------
-FROM golang:1.24-alpine AS go-builder
+FROM golang:1.25-alpine AS go-builder
 
 # Install build dependencies
 # git: for go mod operations
@@ -57,6 +57,7 @@ COPY --from=web-builder /webui/dist/ /app/webui/dist/
 # Copy Go source code
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
+COPY docs/ ./docs/
 COPY webui/embed.go ./webui/
 
 # Build arguments for version info
@@ -125,8 +126,8 @@ WORKDIR /var/lib/yunt
 # 8025: Web UI / API
 EXPOSE 1025 1143 8025
 
-# Define volumes for persistent data
-VOLUME ["/var/lib/yunt", "/etc/yunt"]
+# Define volume for persistent data
+VOLUME ["/var/lib/yunt"]
 
 # Environment variables with sensible defaults
 ENV YUNT_DATABASE_DSN=/var/lib/yunt/yunt.db \

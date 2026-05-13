@@ -2,10 +2,11 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { authStore } from '$stores/auth';
+	import { authStore } from '$stores/auth.svelte';
 	import { isPublicRoute, isGuestOnlyRoute } from '$lib/guards/auth';
-	import { sseService } from '$lib/services/sse';
-	import { pollingService } from '$lib/services/polling';
+	import { sseService } from '$lib/services/sse.svelte';
+	import { pollingService } from '$lib/services/polling.svelte';
+	import { messagesStore } from '$stores/messages.svelte';
 	import Toast from '$components/Toast.svelte';
 
 	interface Props {
@@ -39,6 +40,12 @@
 			const redirectUrl =
 				currentPath !== '/' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
 			goto(`/login${redirectUrl}`);
+		}
+	});
+
+	$effect(() => {
+		if (initialized && authStore.isAuthenticated) {
+			messagesStore.loadMailboxes();
 		}
 	});
 
@@ -86,7 +93,33 @@
 		</div>
 	</div>
 {:else if !authStore.isAuthenticated || $page.url.pathname === '/login'}
+	<!-- MSN Top Bar (login) -->
+	<div class="topbar">
+		<div><a href="/login">Yunt Mail</a></div>
+	</div>
+
+	<!-- MSN Hotmail Header (login) -->
+	<div class="msn-header">
+		<div class="msn-brand">
+			<div class="msn-logo">
+				<span class="logo-icon">&#x1F434;</span>
+				Yunt
+			</div>
+			<span class="hotmail-text">Mail</span>
+		</div>
+	</div>
+
 	{@render children?.()}
+
+	<!-- Footer (login) -->
+	<div class="footer-bar">
+		<a href="https://github.com/KilimcininKorOglu/yunt" target="_blank">GitHub</a> &nbsp;|&nbsp;
+		<span style="color:#ddeeff;">Development Mail Server</span>
+	</div>
+	<div class="footer-bottom">
+		<span>Yunt Mail Server &nbsp; <a href="https://github.com/KilimcininKorOglu/yunt" target="_blank">GitHub</a></span>
+		<span></span>
+	</div>
 {:else}
 	<!-- MSN Top Bar -->
 	<div class="topbar">
@@ -118,7 +151,7 @@
 		<div style="display:flex;align-items:flex-end;gap:20px;">
 			<div class="nav-tabs">
 				<a class="tab" class:active={getActiveTab($page.url.pathname) === 'today'} href="/">Today</a>
-				<a class="tab" class:active={getActiveTab($page.url.pathname) === 'mail'} href="/inbox">Mail</a>
+				<a class="tab" class:active={getActiveTab($page.url.pathname) === 'mail'} href="/inbox">Mail{#if messagesStore.totalUnreadCount > 0} ({messagesStore.totalUnreadCount}){/if}</a>
 				<a class="tab" class:active={getActiveTab($page.url.pathname) === 'calendar'} href="/calendar">Calendar</a>
 				<a class="tab" class:active={getActiveTab($page.url.pathname) === 'contacts'} href="/contacts">Contacts</a>
 			</div>

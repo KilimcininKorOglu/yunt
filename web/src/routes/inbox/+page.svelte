@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { authStore } from '$stores/auth';
-	import { messagesStore } from '$stores/messages';
+	import { authStore } from '$stores/auth.svelte';
+	import { messagesStore } from '$stores/messages.svelte';
 	import Sidebar from '$components/Sidebar.svelte';
 	import SearchBar from '$components/SearchBar.svelte';
 	import FilterControls from '$components/FilterControls.svelte';

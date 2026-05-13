@@ -10,7 +10,10 @@
 // @name Authorization
 package main
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
 // Version information set via ldflags during build.
 var (
@@ -21,6 +24,7 @@ var (
 
 func main() {
 	if err := Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }

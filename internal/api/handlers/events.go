@@ -69,6 +69,12 @@ func (h *EventHandler) StreamEvents(c echo.Context) error {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+
+	// Disable write deadline for SSE long-lived connections
+	if rc := http.NewResponseController(w); rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
+	}
+
 	w.WriteHeader(http.StatusOK)
 
 	notifCh := make(chan *service.Notification, 64)

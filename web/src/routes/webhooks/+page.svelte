@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { WebhookForm, WebhookList } from '$components';
 	import type { Webhook } from '$lib/api';
-	import { authStore } from '$stores/auth';
+	import { authStore } from '$stores/auth.svelte';
 
 	let showForm = $state(false);
 	let editingWebhook = $state<Webhook | undefined>(undefined);

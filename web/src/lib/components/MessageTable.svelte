@@ -44,7 +44,7 @@
 
 <script lang="ts">
 	import type { Message, ID, SortOrder, PaginationInfo } from '$lib/api/types';
-	import type { MessageSortField } from '$stores/messages';
+	import type { MessageSortField } from '$stores/messages.svelte';
 
 	interface Props {
 		messages: Message[];

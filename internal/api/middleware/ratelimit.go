@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -168,8 +169,15 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Check if path should be skipped
-			if skipPaths[c.Path()] {
+			path := c.Request().URL.Path
+
+			// Skip exact paths
+			if skipPaths[path] {
+				return next(c)
+			}
+
+			// Skip static assets and SSE stream
+			if strings.HasPrefix(path, "/_app/") || strings.HasPrefix(path, "/favicon") || strings.HasPrefix(path, "/api/v1/events/") {
 				return next(c)
 			}
 

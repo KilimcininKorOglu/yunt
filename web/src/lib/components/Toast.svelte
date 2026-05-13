@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { notificationsStore, type NotificationType } from '$stores/notifications';
+	import { notificationsStore, type NotificationType } from '$stores/notifications.svelte';
 
 	function getToastClass(type: NotificationType): string {
 		switch (type) {

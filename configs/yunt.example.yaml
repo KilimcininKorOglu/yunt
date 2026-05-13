@@ -108,8 +108,8 @@ imap:
     enabled: false
     certFile: ""
     keyFile: ""
-    startTLS: true
-  
+    startTLS: false
+
   # Connection timeouts
   readTimeout: 60s
   writeTimeout: 60s

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { authStore } from '$stores/auth';
-	import { notificationsStore } from '$stores/notifications';
-	import { pollingService } from '$lib/services/polling';
+	import { authStore } from '$stores/auth.svelte';
+	import { notificationsStore } from '$stores/notifications.svelte';
+	import { pollingService } from '$lib/services/polling.svelte';
 	import WebhookList from '$components/WebhookList.svelte';
 	import WebhookForm from '$components/WebhookForm.svelte';
 	import MailboxSettings from '$components/MailboxSettings.svelte';

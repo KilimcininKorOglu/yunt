@@ -4,9 +4,9 @@
  * Falls back to polling when SSE is unavailable.
  */
 
-import { messagesStore } from '$stores/messages';
-import { notificationsStore } from '$stores/notifications';
-import { pollingService } from './polling';
+import { messagesStore } from '$stores/messages.svelte';
+import { notificationsStore } from '$stores/notifications.svelte';
+import { pollingService } from './polling.svelte';
 
 // ============================================================================
 // Types

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { authStore } from '$stores/auth';
+	import { authStore } from '$stores/auth.svelte';
 	import { getMessagesApi, getMailboxesApi, getAttachmentsApi } from '$lib/api';
 	import type { Message, Mailbox, AttachmentSummary, ID } from '$lib/api/types';
 	import MessageHeader from '$lib/components/MessageHeader.svelte';

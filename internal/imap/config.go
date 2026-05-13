@@ -89,11 +89,10 @@ func (c *Config) Validate() error {
 
 	// Validate TLS configuration if enabled
 	if c.TLS.Enabled || c.TLS.StartTLS {
-		if c.TLS.CertFile == "" {
-			return fmt.Errorf("imap: TLS certificate file is required when TLS is enabled")
-		}
-		if c.TLS.KeyFile == "" {
-			return fmt.Errorf("imap: TLS key file is required when TLS is enabled")
+		if c.TLS.CertFile == "" || c.TLS.KeyFile == "" {
+			// Auto-disable TLS/StartTLS when certificates are not configured
+			c.TLS.Enabled = false
+			c.TLS.StartTLS = false
 		}
 	}
 

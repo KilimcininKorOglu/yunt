@@ -4,7 +4,7 @@
  */
 
 import { goto } from '$app/navigation';
-import { authStore } from '$stores/auth';
+import { authStore } from '$stores/auth.svelte';
 
 // ============================================================================
 // Types

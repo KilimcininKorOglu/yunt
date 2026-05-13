@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { authStore } from '$stores/auth';
+	import { authStore } from '$stores/auth.svelte';
 	import { requireGuest, handleGuardResult } from '$lib/guards/auth';
 
 	let username = $state('');

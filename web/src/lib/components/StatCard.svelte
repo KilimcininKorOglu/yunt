@@ -1,5 +1,5 @@
 <script lang="ts">
-	export type IconType = 'mail' | 'clock' | 'calendar' | 'week' | 'none';
+	type IconType = 'mail' | 'clock' | 'calendar' | 'week' | 'none';
 
 	interface Props {
 		title: string;

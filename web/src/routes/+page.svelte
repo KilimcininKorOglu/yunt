@@ -4,7 +4,7 @@
 	import { StatCard, MessageList, StorageUsage, ActivityChart } from '$components';
 	import { getSystemApi, getMessagesApi } from '$lib/api';
 	import type { SystemStats, MessageSummary } from '$lib/api';
-	import { authStore } from '$stores/auth';
+	import { authStore } from '$stores/auth.svelte';
 
 	const systemApi = getSystemApi();
 	const messagesApi = getMessagesApi();

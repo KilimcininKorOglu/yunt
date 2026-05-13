@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { authStore } from '$stores/auth';
+	import { authStore } from '$stores/auth.svelte';
 	import { requireAdmin, handleGuardResult } from '$lib/guards/auth';
 	import { getUsersApi } from '$lib/api';
 	import type {

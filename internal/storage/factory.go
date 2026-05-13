@@ -27,7 +27,7 @@ func NewFromConfig(ctx context.Context, cfg config.StorageConfig) (Backend, erro
 			AccessKey: cfg.S3AccessKey,
 			SecretKey: cfg.S3SecretKey,
 		})
-	case "db", "":
+	case "db", "database", "":
 		return nil, nil
 	default:
 		return nil, fmt.Errorf("unsupported storage type: %s", cfg.Type)

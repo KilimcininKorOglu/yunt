@@ -5,8 +5,8 @@
  */
 
 import { getMessagesApi } from '$lib/api';
-import { messagesStore } from '$stores/messages';
-import { notificationsStore } from '$stores/notifications';
+import { messagesStore } from '$stores/messages.svelte';
+import { notificationsStore } from '$stores/notifications.svelte';
 import type { Message } from '$lib/api/types';
 
 // ============================================================================

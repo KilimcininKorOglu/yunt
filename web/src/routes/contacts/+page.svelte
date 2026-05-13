@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { authStore } from '$stores/auth';
+	import { authStore } from '$stores/auth.svelte';
 	import { getMessagesApi } from '$lib/api';
 
 	const messagesApi = getMessagesApi();
