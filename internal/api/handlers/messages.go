@@ -13,6 +13,7 @@ import (
 	"yunt/internal/api"
 	"yunt/internal/api/middleware"
 	"yunt/internal/domain"
+	"yunt/internal/parser"
 	"yunt/internal/repository"
 	"yunt/internal/service"
 )
@@ -23,6 +24,8 @@ type MessageHandler struct {
 	mailboxService *service.MailboxService
 	authService    *service.AuthService
 	notifyService  *service.NotifyService
+	relayService   *service.RelayService
+	userService    *service.UserService
 }
 
 // NewMessageHandler creates a new MessageHandler.
@@ -44,11 +47,24 @@ func (h *MessageHandler) WithNotifyService(ns *service.NotifyService) *MessageHa
 	return h
 }
 
+// WithRelayService sets the relay service for outbound mail delivery.
+func (h *MessageHandler) WithRelayService(rs *service.RelayService) *MessageHandler {
+	h.relayService = rs
+	return h
+}
+
+// WithUserService sets the user service for user lookups.
+func (h *MessageHandler) WithUserService(us *service.UserService) *MessageHandler {
+	h.userService = us
+	return h
+}
+
 // RegisterRoutes registers the message routes on the given group.
 func (h *MessageHandler) RegisterRoutes(g *echo.Group) {
 	messages := g.Group("/messages", middleware.Auth(h.authService))
 	messages.GET("", h.ListMessages)
 	messages.GET("/search", h.SearchMessages)
+	messages.POST("/send", h.SendMessage)
 	messages.GET("/:id", h.GetMessage)
 	messages.GET("/:id/html", h.GetMessageHTML)
 	messages.GET("/:id/text", h.GetMessageText)
@@ -1015,6 +1031,180 @@ func (h *MessageHandler) BulkUnstar(c echo.Context) error {
 		Succeeded: result.Succeeded,
 		Failed:    result.Failed,
 		Errors:    result.Errors,
+	})
+}
+
+// SendMessageInput represents the input for sending an outbound message via relay.
+type SendMessageInput struct {
+	FromMailboxID string   `json:"fromMailboxId" validate:"required"`
+	To            []string `json:"to"            validate:"required"`
+	Cc            []string `json:"cc"`
+	Bcc           []string `json:"bcc"`
+	Subject       string   `json:"subject"       validate:"required"`
+	TextBody      string   `json:"textBody"`
+	HTMLBody      string   `json:"htmlBody"`
+}
+
+// SendMessageResponse is the success payload returned by SendMessage.
+type SendMessageResponse struct {
+	MessageID  string   `json:"messageId"`
+	Recipients []string `json:"recipients"`
+}
+
+// SendMessage handles outbound mail delivery via the relay service.
+// @Summary Send message
+// @Description Send an outbound email via the configured relay service
+// @Tags Messages
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param input body SendMessageInput true "Send message input"
+// @Success 200 {object} api.Response{data=SendMessageResponse}
+// @Failure 400 {object} api.Response{error=api.ErrorDetail}
+// @Failure 403 {object} api.Response{error=api.ErrorDetail}
+// @Failure 503 {object} api.Response{error=api.ErrorDetail}
+// @Router /messages/send [post]
+func (h *MessageHandler) SendMessage(c echo.Context) error {
+	// Relay must be configured and enabled
+	if h.relayService == nil || !h.relayService.IsEnabled() {
+		return api.ServiceUnavailable(c, "relay service is not enabled")
+	}
+
+	userID := middleware.GetUserID(c)
+	if userID.IsEmpty() {
+		return api.Unauthorized(c, "authentication required")
+	}
+
+	// Viewers cannot send mail
+	role := middleware.GetUserRole(c)
+	if role == domain.RoleViewer {
+		return api.Forbidden(c, "viewers cannot send messages")
+	}
+
+	var input SendMessageInput
+	if err := c.Bind(&input); err != nil {
+		return api.BadRequest(c, "invalid request body")
+	}
+
+	if len(input.To) == 0 {
+		return api.BadRequest(c, "at least one recipient is required")
+	}
+	if input.Subject == "" {
+		return api.BadRequest(c, "subject is required")
+	}
+	if input.FromMailboxID == "" {
+		return api.BadRequest(c, "fromMailboxId is required")
+	}
+
+	// Verify the From mailbox belongs to the user
+	fromMailboxID := domain.ID(input.FromMailboxID)
+	fromMailbox, err := h.mailboxService.GetMailbox(c.Request().Context(), fromMailboxID, userID)
+	if err != nil {
+		return api.FromError(c, err)
+	}
+
+	// Get user info for display name and signature
+	var fromName string
+	var textSignature, htmlSignature string
+	if h.userService != nil {
+		user, userErr := h.userService.GetByID(c.Request().Context(), userID)
+		if userErr == nil {
+			if user.DisplayName != "" {
+				fromName = user.DisplayName
+			} else {
+				fromName = user.Username
+			}
+			textSignature = user.Signature
+			htmlSignature = user.SignatureHTML
+		}
+	}
+
+	// Extract the message domain from the From mailbox address
+	msgDomain := fromMailbox.GetDomain()
+
+	// Build text and HTML bodies with appended signature
+	textBody := input.TextBody
+	if textSignature != "" {
+		textBody += "\r\n\r\n-- \r\n" + textSignature
+	}
+	htmlBody := input.HTMLBody
+	if htmlSignature != "" {
+		htmlBody += "<br><br>-- <br>" + htmlSignature
+	}
+
+	// Build the raw message
+	opts := parser.BuildMessageOpts{
+		From:     fromMailbox.Address,
+		FromName: fromName,
+		To:       input.To,
+		Cc:       input.Cc,
+		Bcc:      input.Bcc,
+		Subject:  input.Subject,
+		TextBody: textBody,
+		HTMLBody: htmlBody,
+		Domain:   msgDomain,
+	}
+	forSent, forRelay := parser.BuildRawMessage(opts)
+
+	// Find or create the Sent mailbox
+	mailboxes, err := h.mailboxService.ListMailboxes(c.Request().Context(), userID, nil)
+	if err != nil {
+		return api.InternalServerError(c, "failed to list mailboxes")
+	}
+
+	var sentMailboxID domain.ID
+	for _, mb := range mailboxes.Items {
+		if strings.EqualFold(mb.Name, "Sent") {
+			sentMailboxID = mb.ID
+			break
+		}
+	}
+
+	if sentMailboxID.IsEmpty() {
+		// Create a Sent mailbox for this user
+		localPart := fromMailbox.GetLocalPart()
+		sentAddr := localPart + "+sent@" + msgDomain
+		created, createErr := h.mailboxService.CreateMailbox(c.Request().Context(), &service.CreateMailboxInput{
+			UserID:  userID,
+			Name:    "Sent",
+			Address: sentAddr,
+		})
+		if createErr != nil {
+			return api.InternalServerError(c, "failed to create Sent mailbox")
+		}
+		sentMailboxID = created.ID
+	}
+
+	// Store the message in the Sent mailbox
+	storeResult, err := h.messageService.StoreMessage(c.Request().Context(), &service.StoreMessageInput{
+		RawData:            forSent,
+		TargetMailboxID:    sentMailboxID,
+		SkipDuplicateCheck: true,
+	})
+	if err != nil {
+		return api.InternalServerError(c, "failed to store sent message")
+	}
+
+	// Mark it as read immediately (sent messages are not unread)
+	_ = h.messageService.MarkAsRead(c.Request().Context(), storeResult.Message.ID)
+
+	// Collect all relay recipients (To + Cc + Bcc)
+	allRecipients := make([]string, 0, len(input.To)+len(input.Cc)+len(input.Bcc))
+	allRecipients = append(allRecipients, input.To...)
+	allRecipients = append(allRecipients, input.Cc...)
+	allRecipients = append(allRecipients, input.Bcc...)
+
+	// Relay the message
+	result := h.relayService.Relay(c.Request().Context(), fromMailbox.Address, allRecipients, forRelay)
+	if !result.Success {
+		// Roll back: delete the stored sent message so the user sees no phantom
+		_ = h.messageService.DeleteMessageForUser(c.Request().Context(), storeResult.Message.ID, userID)
+		return api.InternalServerError(c, "relay failed: "+result.Error.Error())
+	}
+
+	return api.OK(c, &SendMessageResponse{
+		MessageID:  storeResult.Message.ID.String(),
+		Recipients: result.Recipients,
 	})
 }
 

@@ -149,6 +149,30 @@ func runServe(cmd *cobra.Command, args []string) error {
 	notifyService := service.NewNotifyService()
 	messageService.WithNotifyService(notifyService)
 
+	// Initialize relay service if relay is enabled
+	var relayService *service.RelayService
+	if cfg.SMTP.AllowRelay {
+		relayCfg := &service.RelayConfig{
+			Enabled:            true,
+			Host:               cfg.SMTP.RelayHost,
+			Port:               cfg.SMTP.RelayPort,
+			Username:           cfg.SMTP.RelayUsername,
+			Password:           cfg.SMTP.RelayPassword,
+			UseTLS:             cfg.SMTP.RelayUseTLS,
+			UseSTARTTLS:        cfg.SMTP.RelayUseSTARTTLS,
+			AllowedDomains:     cfg.SMTP.RelayAllowedDomains,
+			Timeout:            cfg.SMTP.RelayTimeout,
+			RetryCount:         cfg.SMTP.RelayRetryCount,
+			InsecureSkipVerify: cfg.SMTP.RelayInsecureSkipVerify,
+		}
+		if rs, err := service.NewRelayService(relayCfg, log.Logger); err == nil {
+			relayService = rs
+			log.Info().Str("host", cfg.SMTP.RelayHost).Int("port", cfg.SMTP.RelayPort).Msg("Relay service initialized")
+		} else {
+			log.Warn().Err(err).Msg("Failed to initialize relay service")
+		}
+	}
+
 	// Context for coordinated shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -172,6 +196,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			smtpserver.WithAttachmentRepo(repo.Attachments()),
 			smtpserver.WithNotifyService(notifyService),
 			smtpserver.WithWebhookService(webhookService),
+			smtpserver.WithRelayService(relayService),
 		)
 		if smtpErr != nil {
 			return fmt.Errorf("failed to create SMTP server: %w", smtpErr)
@@ -232,6 +257,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		authed := v1.Group("", authMiddleware)
 
 		messageHandler := handlers.NewMessageHandler(messageService, mailboxService, authService)
+		messageHandler.WithRelayService(relayService).WithUserService(userService)
 		messageHandler.RegisterRoutes(authed)
 
 		mailboxHandler := handlers.NewMailboxHandler(mailboxService, authService)
@@ -265,6 +291,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			MessageService: messageService,
 			Config:         cfg,
 			Version:        version,
+			RelayEnabled:   relayService != nil && relayService.IsEnabled(),
 		})
 		systemHandler.RegisterRoutes(authed)
 

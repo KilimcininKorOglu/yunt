@@ -61,8 +61,8 @@ func WithRepository(repo repository.Repository) BackendOption {
 	}
 }
 
-// WithRelayService sets the relay service for forwarding messages.
-func WithRelayService(svc *service.RelayService) BackendOption {
+// withRelayService sets the relay service for forwarding messages (internal use only).
+func withRelayService(svc *service.RelayService) BackendOption {
 	return func(b *Backend) {
 		b.relayService = svc
 	}

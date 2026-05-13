@@ -24,6 +24,7 @@ type SystemHandler struct {
 	config         *config.Config
 	startTime      time.Time
 	version        string
+	relayEnabled   bool
 }
 
 // SystemHandlerConfig contains configuration for creating a SystemHandler.
@@ -33,6 +34,7 @@ type SystemHandlerConfig struct {
 	MessageService *service.MessageService
 	Config         *config.Config
 	Version        string
+	RelayEnabled   bool
 }
 
 // NewSystemHandler creates a new SystemHandler.
@@ -44,6 +46,7 @@ func NewSystemHandler(cfg SystemHandlerConfig) *SystemHandler {
 		config:         cfg.Config,
 		startTime:      time.Now(),
 		version:        cfg.Version,
+		relayEnabled:   cfg.RelayEnabled,
 	}
 }
 
@@ -101,6 +104,8 @@ type SystemStats struct {
 	Uptime int64 `json:"uptime"`
 	// Timestamp is when the stats were collected.
 	Timestamp time.Time `json:"timestamp"`
+	// RelayEnabled indicates whether the relay service is active.
+	RelayEnabled bool `json:"relayEnabled"`
 }
 
 // UserStats contains user-related statistics.
@@ -150,8 +155,9 @@ func (h *SystemHandler) GetStats(c echo.Context) error {
 	defer cancel()
 
 	stats := &SystemStats{
-		Uptime:    int64(time.Since(h.startTime).Seconds()),
-		Timestamp: time.Now().UTC(),
+		Uptime:       int64(time.Since(h.startTime).Seconds()),
+		Timestamp:    time.Now().UTC(),
+		RelayEnabled: h.relayEnabled,
 	}
 
 	// Get user stats

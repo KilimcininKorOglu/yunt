@@ -35,6 +35,9 @@ type Server struct {
 	// Webhook service for event dispatch
 	webhookService *service.WebhookService
 
+	// Relay service for forwarding messages to external SMTP
+	relayService *service.RelayService
+
 	// Rate limiter for connection and message throttling
 	rateLimiter *RateLimiter
 
@@ -89,6 +92,13 @@ func WithNotifyService(ns *service.NotifyService) ServerOption {
 func WithWebhookService(ws *service.WebhookService) ServerOption {
 	return func(s *Server) {
 		s.webhookService = ws
+	}
+}
+
+// WithRelayService sets the relay service for forwarding messages to an external SMTP server.
+func WithRelayService(rs *service.RelayService) ServerOption {
+	return func(s *Server) {
+		s.relayService = rs
 	}
 }
 
@@ -250,6 +260,7 @@ func New(cfg *Config, logger zerolog.Logger, opts ...ServerOption) (*Server, err
 	backend := NewBackend(s, backendOpts...)
 	backend.notifyService = s.notifyService
 	backend.webhookService = s.webhookService
+	backend.relayService = s.relayService
 	s.backend = backend
 
 	// Create the go-smtp server
