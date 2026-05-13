@@ -3,6 +3,7 @@ package mail
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"yunt/internal/domain"
 	"yunt/internal/jmap/core"
@@ -235,11 +236,12 @@ func (h *EmailHandler) Changes(ctx context.Context, accountID domain.ID, args js
 	})
 }
 
-// Set implements Email/set (RFC 8621 §4.6) — update keywords/mailboxIds, destroy.
+// Set implements Email/set (RFC 8621 §4.6) — create from structured properties, update keywords/mailboxIds, destroy.
 func (h *EmailHandler) Set(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
 	var a struct {
 		AccountID string                            `json:"accountId"`
 		IfInState *string                           `json:"ifInState"`
+		Create    map[string]map[string]interface{} `json:"create"`
 		Update    map[string]map[string]interface{} `json:"update"`
 		Destroy   []string                          `json:"destroy"`
 	}
@@ -253,10 +255,88 @@ func (h *EmailHandler) Set(ctx context.Context, accountID domain.ID, args json.R
 		return nil, core.NewMethodError(core.ErrorStateMismatch, "state mismatch")
 	}
 
+	created := map[string]interface{}{}
+	notCreated := map[string]interface{}{}
 	updated := map[string]interface{}{}
 	notUpdated := map[string]interface{}{}
 	destroyed := []string{}
 	notDestroyed := map[string]interface{}{}
+
+	for tempID, props := range a.Create {
+		mailboxIds, _ := props["mailboxIds"].(map[string]interface{})
+		var targetMailboxID domain.ID
+		for mbxID := range mailboxIds {
+			targetMailboxID = domain.ID(mbxID)
+			break
+		}
+		if targetMailboxID == "" {
+			notCreated[tempID] = map[string]interface{}{"type": core.ErrorInvalidArguments, "description": "mailboxIds required"}
+			continue
+		}
+
+		subject, _ := props["subject"].(string)
+		fromAddrs, _ := props["from"].([]interface{})
+		var fromAddr domain.EmailAddress
+		if len(fromAddrs) > 0 {
+			if fa, ok := fromAddrs[0].(map[string]interface{}); ok {
+				fromAddr.Address, _ = fa["email"].(string)
+				fromAddr.Name, _ = fa["name"].(string)
+			}
+		}
+
+		msg := domain.NewMessage(domain.ID(""), targetMailboxID)
+		msg.From = fromAddr
+		msg.Subject = subject
+
+		if toAddrs, ok := props["to"].([]interface{}); ok {
+			for _, ta := range toAddrs {
+				if addr, ok := ta.(map[string]interface{}); ok {
+					email, _ := addr["email"].(string)
+					name, _ := addr["name"].(string)
+					msg.To = append(msg.To, domain.EmailAddress{Address: email, Name: name})
+				}
+			}
+		}
+
+		if bv, ok := props["bodyValues"].(map[string]interface{}); ok {
+			for _, val := range bv {
+				if v, ok := val.(map[string]interface{}); ok {
+					if text, ok := v["value"].(string); ok {
+						if msg.TextBody == "" {
+							msg.TextBody = text
+						}
+					}
+				}
+			}
+		}
+
+		if kw, ok := props["keywords"].(map[string]interface{}); ok {
+			boolMap := make(map[string]bool)
+			for k, v := range kw {
+				if b, ok := v.(bool); ok {
+					boolMap[k] = b
+				}
+			}
+			KeywordsToMessage(boolMap, msg)
+		}
+
+		input := &service.StoreMessageInput{
+			TargetMailboxID:    targetMailboxID,
+			RawData:            []byte(buildSimpleRFC5322(msg)),
+			SkipDuplicateCheck: true,
+		}
+		result, err := h.messageService.StoreMessage(ctx, input)
+		if err != nil {
+			notCreated[tempID] = map[string]interface{}{"type": core.ErrorServerFail, "description": err.Error()}
+			continue
+		}
+		created[tempID] = map[string]interface{}{
+			"id":       string(result.Message.ID),
+			"blobId":   result.Message.BlobID,
+			"threadId": string(result.Message.ThreadID),
+			"size":     result.Message.Size,
+		}
+	}
 
 	for id, patch := range a.Update {
 		msg, err := h.messageService.GetMessageForUser(ctx, domain.ID(id), accountID)
@@ -321,6 +401,10 @@ func (h *EmailHandler) Set(ctx context.Context, accountID domain.ID, args json.R
 		"oldState":  stateStr,
 		"newState":  newState,
 	}
+	if a.Create != nil {
+		resp["created"] = created
+		resp["notCreated"] = notCreated
+	}
 	if a.Update != nil {
 		resp["updated"] = updated
 		resp["notUpdated"] = notUpdated
@@ -331,6 +415,38 @@ func (h *EmailHandler) Set(ctx context.Context, accountID domain.ID, args json.R
 	}
 
 	return marshalJSON(resp)
+}
+
+func buildSimpleRFC5322(msg *domain.Message) string {
+	var sb strings.Builder
+	sb.WriteString("From: ")
+	if msg.From.Name != "" {
+		sb.WriteString(msg.From.Name + " <" + msg.From.Address + ">")
+	} else {
+		sb.WriteString(msg.From.Address)
+	}
+	sb.WriteString("\r\n")
+
+	if len(msg.To) > 0 {
+		sb.WriteString("To: ")
+		for i, to := range msg.To {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			if to.Name != "" {
+				sb.WriteString(to.Name + " <" + to.Address + ">")
+			} else {
+				sb.WriteString(to.Address)
+			}
+		}
+		sb.WriteString("\r\n")
+	}
+
+	sb.WriteString("Subject: " + msg.Subject + "\r\n")
+	sb.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+	sb.WriteString("\r\n")
+	sb.WriteString(msg.TextBody)
+	return sb.String()
 }
 
 // Import implements Email/import (RFC 8621 §4.8) — import raw RFC 5322 message from blob.
