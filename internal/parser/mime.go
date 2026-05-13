@@ -10,8 +10,12 @@ import (
 
 // ParsedMessage represents a fully parsed email message.
 type ParsedMessage struct {
-	// Headers contains all message headers.
+	// Headers contains the first value for each header (case-canonicalized).
 	Headers map[string]string
+
+	// AllHeaders contains all values for every header, preserving duplicates
+	// (e.g. multiple Received: lines).
+	AllHeaders map[string][]string
 
 	// From is the sender address.
 	From domain.EmailAddress
@@ -132,6 +136,7 @@ func (p *Parser) Parse(data []byte) (*ParsedMessage, error) {
 
 	msg := &ParsedMessage{
 		Headers:     make(map[string]string),
+		AllHeaders:  make(map[string][]string),
 		To:          make([]domain.EmailAddress, 0),
 		Cc:          make([]domain.EmailAddress, 0),
 		Bcc:         make([]domain.EmailAddress, 0),
@@ -160,24 +165,27 @@ func (p *Parser) Parse(data []byte) (*ParsedMessage, error) {
 
 // parseHeaders extracts and parses all headers from the message.
 func (p *Parser) parseHeaders(msg *ParsedMessage, headers []byte) {
-	headerMap := parseHeaderBlock(headers)
+	allHeaders := parseHeaderBlock(headers)
 
-	// Store all headers
-	for name, value := range headerMap {
-		msg.Headers[name] = value
+	// Store all headers: AllHeaders keeps every value; Headers keeps the first.
+	for name, values := range allHeaders {
+		msg.AllHeaders[name] = values
+		if len(values) > 0 {
+			msg.Headers[name] = values[0]
+		}
 	}
 
-	// Helper function for case-insensitive header lookup
+	// Helper function for case-insensitive header lookup (returns first value).
 	getHeader := func(name string) string {
 		// Try exact match first
-		if v, ok := headerMap[name]; ok {
-			return v
+		if values, ok := allHeaders[name]; ok && len(values) > 0 {
+			return values[0]
 		}
 		// Try case-insensitive match
 		nameLower := strings.ToLower(name)
-		for k, v := range headerMap {
-			if strings.ToLower(k) == nameLower {
-				return v
+		for k, values := range allHeaders {
+			if strings.ToLower(k) == nameLower && len(values) > 0 {
+				return values[0]
 			}
 		}
 		return ""
@@ -267,7 +275,15 @@ func (p *Parser) parseMultipart(msg *ParsedMessage, body []byte, boundary, multi
 // parsePart parses a single MIME part.
 func (p *Parser) parsePart(msg *ParsedMessage, part []byte, parentType string) error {
 	headers, body := splitHeadersBody(part)
-	headerMap := parseHeaderBlock(headers)
+	allHeaders := parseHeaderBlock(headers)
+
+	// Build a single-value map for convenience within this part.
+	headerMap := make(map[string]string, len(allHeaders))
+	for k, values := range allHeaders {
+		if len(values) > 0 {
+			headerMap[k] = values[0]
+		}
+	}
 
 	contentType := headerMap["Content-Type"]
 	if contentType == "" {
@@ -373,9 +389,10 @@ func splitHeadersBody(data []byte) (headers, body []byte) {
 	return data, nil
 }
 
-// parseHeaderBlock parses a header block into a map.
-func parseHeaderBlock(headers []byte) map[string]string {
-	result := make(map[string]string)
+// parseHeaderBlock parses a header block into a multi-value map.
+// Duplicate headers (e.g. Received:) are preserved as additional slice entries.
+func parseHeaderBlock(headers []byte) map[string][]string {
+	result := make(map[string][]string)
 	if len(headers) == 0 {
 		return result
 	}
@@ -403,12 +420,13 @@ func parseHeaderBlock(headers []byte) map[string]string {
 
 		// Save previous header
 		if currentName != "" {
-			result[currentName] = currentHeader.String()
+			result[currentName] = append(result[currentName], currentHeader.String())
 		}
 
 		// Parse new header
 		colonIdx := bytes.IndexByte(line, ':')
 		if colonIdx == -1 {
+			currentName = ""
 			continue // Invalid header line
 		}
 
@@ -419,7 +437,7 @@ func parseHeaderBlock(headers []byte) map[string]string {
 
 	// Save last header
 	if currentName != "" {
-		result[currentName] = currentHeader.String()
+		result[currentName] = append(result[currentName], currentHeader.String())
 	}
 
 	return result
@@ -705,32 +723,35 @@ func parseDate(value string) (time.Time, error) {
 		value = strings.TrimSpace(value[idx+2:])
 	}
 
-	// Common email date formats
-	formats := []string{
-		time.RFC1123Z,                      // "Mon, 02 Jan 2006 15:04:05 -0700"
-		time.RFC1123,                       // "Mon, 02 Jan 2006 15:04:05 MST"
-		"2 Jan 2006 15:04:05 -0700",        // Without day name
-		"02 Jan 2006 15:04:05 -0700",       // With leading zero
-		"2 Jan 2006 15:04:05 MST",          // With timezone name
-		"02 Jan 2006 15:04:05 MST",         // With leading zero and timezone name
-		"2006-01-02T15:04:05-07:00",        // ISO 8601
-		"2006-01-02 15:04:05",              // Simple format
-		"Mon, 2 Jan 2006 15:04:05 -0700",   // RFC 2822 variant
-		"Mon, 02 Jan 2006 15:04:05 -0700",  // RFC 2822 variant with leading zero
-		"2 Jan 06 15:04:05 -0700",          // Two-digit year
-		"02 Jan 06 15:04:05 -0700",         // Two-digit year with leading zero
-		"Jan 2, 2006 3:04:05 PM",           // US format
-		"January 2, 2006 3:04:05 PM",       // US format with full month
-		"2 Jan 2006 15:04:05 -0700 (MST)",  // With timezone in parentheses
-		"02 Jan 2006 15:04:05 -0700 (MST)", // With leading zero
+	// Remove all RFC 2822 comments in parentheses (e.g. timezone names).
+	// Loop to handle multiple nested or sequential comments.
+	for {
+		start := strings.Index(value, "(")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(value[start:], ")")
+		if end == -1 {
+			break
+		}
+		value = strings.TrimSpace(value[:start]) + strings.TrimSpace(value[start+end+1:])
 	}
 
-	// Remove comments in parentheses (e.g., timezone names)
-	if idx := strings.Index(value, "("); idx != -1 {
-		endIdx := strings.Index(value, ")")
-		if endIdx > idx {
-			value = strings.TrimSpace(value[:idx]) + strings.TrimSpace(value[endIdx+1:])
-		}
+	// Common email date formats (day-name prefix already stripped above).
+	formats := []string{
+		time.RFC1123,                      // "Mon, 02 Jan 2006 15:04:05 MST"
+		"2 Jan 2006 15:04:05 -0700",       // Without day name
+		"02 Jan 2006 15:04:05 -0700",      // With leading zero
+		"2 Jan 2006 15:04:05 MST",         // With timezone name
+		"02 Jan 2006 15:04:05 MST",        // With leading zero and timezone name
+		"2006-01-02T15:04:05-07:00",       // ISO 8601
+		"2006-01-02 15:04:05",             // Simple format
+		"Mon, 2 Jan 2006 15:04:05 -0700",  // RFC 2822 variant
+		"Mon, 02 Jan 2006 15:04:05 -0700", // RFC 2822 variant with leading zero
+		"2 Jan 06 15:04:05 -0700",         // Two-digit year
+		"02 Jan 06 15:04:05 -0700",        // Two-digit year with leading zero
+		"Jan 2, 2006 3:04:05 PM",          // US format
+		"January 2, 2006 3:04:05 PM",      // US format with full month
 	}
 
 	for _, format := range formats {

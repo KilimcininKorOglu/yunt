@@ -555,9 +555,10 @@ func (s *Session) createMessage(mailboxID domain.ID, data []byte, size int64, re
 		msg.AddRecipient("", addr)
 	}
 
-	// Generate a Message-ID header if not present in raw data
+	// Generate a Message-ID if not present in raw data.
+	// Store without angle brackets for consistency with extractMessageID in the parser.
 	if msg.MessageID == "" {
-		msg.MessageID = fmt.Sprintf("<%s@%s>", uuid.New().String(), s.backend.server.config.Domain)
+		msg.MessageID = fmt.Sprintf("%s@%s", uuid.New().String(), s.backend.server.config.Domain)
 	}
 
 	return msg

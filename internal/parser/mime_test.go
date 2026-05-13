@@ -218,7 +218,7 @@ func TestIsValidAddress(t *testing.T) {
 		{"@example.com", false},
 		{"user@", false},
 		{"user@@example.com", false},
-		{"user@example", false},
+		{"user@example", true}, // RFC 5321 §2.3.5: dotless domains are valid for local delivery
 		{"user@.example.com", false},
 		{"user@example.", false},
 	}

@@ -45,7 +45,9 @@ func ParseAddress(input string) domain.EmailAddress {
 }
 
 // ParseAddressList parses a comma-separated list of email addresses.
-// It handles complex cases with quoted strings containing commas.
+// It handles complex cases with quoted strings containing commas, and RFC 5322
+// §3.4 group addresses of the form "Group Name: addr1, addr2;" or
+// "Undisclosed-recipients:;" (empty group).
 func ParseAddressList(input string) []domain.EmailAddress {
 	input = strings.TrimSpace(input)
 	if input == "" {
@@ -53,6 +55,69 @@ func ParseAddressList(input string) []domain.EmailAddress {
 	}
 
 	var addresses []domain.EmailAddress
+
+	// Detect a group address: a colon must appear before any '@' sign and
+	// outside of angle brackets / quoted strings.
+	colonIdx := -1
+	for i := 0; i < len(input); i++ {
+		c := input[i]
+		if c == '"' {
+			// Skip quoted string
+			i++
+			for i < len(input) && input[i] != '"' {
+				if input[i] == '\\' {
+					i++
+				}
+				i++
+			}
+			continue
+		}
+		if c == '<' {
+			// Skip angle-bracket address
+			for i < len(input) && input[i] != '>' {
+				i++
+			}
+			continue
+		}
+		if c == '@' {
+			// An '@' appeared before any unquoted ':', so this is not a group.
+			break
+		}
+		if c == ':' {
+			colonIdx = i
+			break
+		}
+	}
+
+	if colonIdx != -1 {
+		// Group syntax: "Name: member-list;"
+		// Find the closing semicolon.
+		semicolonIdx := strings.Index(input[colonIdx+1:], ";")
+		var memberList, remainder string
+		if semicolonIdx == -1 {
+			// Malformed: no closing semicolon — treat everything after ':' as members.
+			memberList = input[colonIdx+1:]
+			remainder = ""
+		} else {
+			absIdx := colonIdx + 1 + semicolonIdx
+			memberList = input[colonIdx+1 : absIdx]
+			remainder = strings.TrimSpace(input[absIdx+1:])
+		}
+
+		// Parse members inside the group (may be empty for Undisclosed-recipients:;)
+		addresses = append(addresses, ParseAddressList(memberList)...)
+
+		// Parse any addresses after the closing semicolon
+		if remainder != "" {
+			// Strip a leading comma separator if present
+			remainder = strings.TrimLeft(remainder, ", \t")
+			addresses = append(addresses, ParseAddressList(remainder)...)
+		}
+
+		return addresses
+	}
+
+	// Standard (non-group) comma-separated address list.
 	var current strings.Builder
 	inQuotes := false
 	inAngle := false
@@ -249,11 +314,6 @@ func IsValidAddress(address string) bool {
 
 	// Domain part checks
 	if domain == "" || len(domain) > 255 {
-		return false
-	}
-
-	// Domain must have at least one dot
-	if !strings.Contains(domain, ".") {
 		return false
 	}
 
