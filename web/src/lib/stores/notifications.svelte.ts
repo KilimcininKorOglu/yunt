@@ -58,37 +58,21 @@ function createNotificationsStore() {
 		hasDesktopPermission = Notification.permission === 'granted';
 	}
 
-	/**
-	 * Load preferences from localStorage
-	 */
 	function loadPreferences(): NotificationPreferences {
-		if (typeof window === 'undefined') {
-			return DEFAULT_PREFERENCES;
-		}
-
+		if (typeof document === 'undefined') return DEFAULT_PREFERENCES;
 		try {
-			const stored = localStorage.getItem(STORAGE_KEY);
-			if (stored) {
-				return { ...DEFAULT_PREFERENCES, ...JSON.parse(stored) };
-			}
-		} catch {
-			console.warn('Failed to load notification preferences');
-		}
-
+			const match = document.cookie.match(new RegExp('(?:^|; )' + STORAGE_KEY + '=([^;]*)'));
+			if (match) return { ...DEFAULT_PREFERENCES, ...JSON.parse(decodeURIComponent(match[1])) };
+		} catch { /* ignore */ }
 		return DEFAULT_PREFERENCES;
 	}
 
-	/**
-	 * Save preferences to localStorage
-	 */
 	function savePreferences(): void {
-		if (typeof window === 'undefined') return;
-
+		if (typeof document === 'undefined') return;
 		try {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-		} catch {
-			console.warn('Failed to save notification preferences');
-		}
+			const expires = new Date(Date.now() + 365 * 864e5).toUTCString();
+			document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(preferences))}; expires=${expires}; path=/; SameSite=Lax`;
+		} catch { /* ignore */ }
 	}
 
 	/**

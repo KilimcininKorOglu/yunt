@@ -4,7 +4,7 @@
  * Handles login, logout, token persistence, and automatic token refresh.
  */
 
-import { getAuthApi, LocalStorageTokenStorage, getApiClient } from '$lib/api';
+import { getAuthApi, CookieTokenStorage, getApiClient } from '$lib/api';
 import type { UserInfo, TokenPair, LoginInput } from '$lib/api';
 
 // ============================================================================
@@ -44,7 +44,7 @@ function createAuthStore() {
 	const apiClient = getApiClient();
 
 	// Setup localStorage token storage for persistence
-	const tokenStorage = new LocalStorageTokenStorage('yunt');
+	const tokenStorage = new CookieTokenStorage('yunt');
 	apiClient.setTokenStorage(tokenStorage);
 
 	/**

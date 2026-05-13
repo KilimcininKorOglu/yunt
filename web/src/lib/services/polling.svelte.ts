@@ -67,37 +67,21 @@ function createPollingService() {
 	// API instances
 	const messagesApi = getMessagesApi();
 
-	/**
-	 * Load config from localStorage
-	 */
 	function loadConfig(): PollingConfig {
-		if (typeof window === 'undefined') {
-			return DEFAULT_CONFIG;
-		}
-
+		if (typeof document === 'undefined') return DEFAULT_CONFIG;
 		try {
-			const stored = localStorage.getItem(STORAGE_KEY);
-			if (stored) {
-				return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
-			}
-		} catch {
-			console.warn('Failed to load polling config');
-		}
-
+			const match = document.cookie.match(new RegExp('(?:^|; )' + STORAGE_KEY + '=([^;]*)'));
+			if (match) return { ...DEFAULT_CONFIG, ...JSON.parse(decodeURIComponent(match[1])) };
+		} catch { /* ignore */ }
 		return DEFAULT_CONFIG;
 	}
 
-	/**
-	 * Save config to localStorage
-	 */
 	function saveConfig(): void {
-		if (typeof window === 'undefined') return;
-
+		if (typeof document === 'undefined') return;
 		try {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-		} catch {
-			console.warn('Failed to save polling config');
-		}
+			const expires = new Date(Date.now() + 365 * 864e5).toUTCString();
+			document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(config))}; expires=${expires}; path=/; SameSite=Lax`;
+		} catch { /* ignore */ }
 	}
 
 	/**

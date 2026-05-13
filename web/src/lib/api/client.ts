@@ -4,6 +4,7 @@
  */
 
 import type { ApiResponse, TokenPair, RefreshTokenInput } from './types';
+import { getCookie, setCookie, deleteCookie } from '$lib/utils/cookie';
 
 // ============================================================================
 // Types
@@ -134,8 +135,8 @@ export class MemoryTokenStorage implements TokenStorage {
 	}
 }
 
-/** LocalStorage-based token storage */
-export class LocalStorageTokenStorage implements TokenStorage {
+/** Cookie-based token storage */
+export class CookieTokenStorage implements TokenStorage {
 	private readonly accessTokenKey: string;
 	private readonly refreshTokenKey: string;
 
@@ -145,25 +146,21 @@ export class LocalStorageTokenStorage implements TokenStorage {
 	}
 
 	getAccessToken(): string | null {
-		if (typeof localStorage === 'undefined') return null;
-		return localStorage.getItem(this.accessTokenKey);
+		return getCookie(this.accessTokenKey);
 	}
 
 	getRefreshToken(): string | null {
-		if (typeof localStorage === 'undefined') return null;
-		return localStorage.getItem(this.refreshTokenKey);
+		return getCookie(this.refreshTokenKey);
 	}
 
 	setTokens(tokens: TokenPair): void {
-		if (typeof localStorage === 'undefined') return;
-		localStorage.setItem(this.accessTokenKey, tokens.accessToken);
-		localStorage.setItem(this.refreshTokenKey, tokens.refreshToken);
+		setCookie(this.accessTokenKey, tokens.accessToken, 1);
+		setCookie(this.refreshTokenKey, tokens.refreshToken, 7);
 	}
 
 	clearTokens(): void {
-		if (typeof localStorage === 'undefined') return;
-		localStorage.removeItem(this.accessTokenKey);
-		localStorage.removeItem(this.refreshTokenKey);
+		deleteCookie(this.accessTokenKey);
+		deleteCookie(this.refreshTokenKey);
 	}
 }
 

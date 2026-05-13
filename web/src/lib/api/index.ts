@@ -32,7 +32,7 @@ export {
 	NetworkError,
 	TimeoutError,
 	MemoryTokenStorage,
-	LocalStorageTokenStorage,
+	CookieTokenStorage,
 	createApiClient,
 	getApiClient,
 	initApiClient,
