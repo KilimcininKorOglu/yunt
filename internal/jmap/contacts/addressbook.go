@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"yunt/internal/domain"
 	"yunt/internal/jmap/core"
@@ -98,8 +99,11 @@ func (h *AddressBookHandler) Changes(ctx context.Context, accountID domain.ID, a
 // Set implements AddressBook/set with onDestroyRemoveContents.
 func (h *AddressBookHandler) Set(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
 	var a struct {
-		AccountID string `json:"accountId"`
-		IfInState *string `json:"ifInState"`
+		AccountID                string                            `json:"accountId"`
+		Create                   map[string]map[string]interface{} `json:"create"`
+		Update                   map[string]map[string]interface{} `json:"update"`
+		Destroy                  []string                          `json:"destroy"`
+		OnDestroyRemoveContents  bool                              `json:"onDestroyRemoveContents"`
 	}
 	if err := json.Unmarshal(args, &a); err != nil {
 		return nil, core.NewMethodError(core.ErrorInvalidArguments, err.Error())
@@ -107,11 +111,74 @@ func (h *AddressBookHandler) Set(ctx context.Context, accountID domain.ID, args 
 
 	stateStr, _ := h.stateManager.CurrentState(ctx, accountID, "AddressBook")
 
-	return marshalJSON(map[string]interface{}{
+	created := map[string]interface{}{}
+	notCreated := map[string]interface{}{}
+	updated := map[string]interface{}{}
+	notUpdated := map[string]interface{}{}
+	destroyed := []string{}
+	notDestroyed := map[string]interface{}{}
+
+	for tempID, props := range a.Create {
+		name, _ := props["name"].(string)
+		if name == "" {
+			notCreated[tempID] = map[string]interface{}{"type": "invalidProperties", "description": "name required"}
+			continue
+		}
+		book := &domain.AddressBook{
+			ID: domain.ID(fmt.Sprintf("ab-%d", time.Now().UnixNano())),
+			UserID: accountID, Name: name, IsSubscribed: true,
+			CreatedAt: domain.Now(), UpdatedAt: domain.Now(),
+		}
+		if desc, ok := props["description"].(string); ok {
+			book.Description = desc
+		}
+		if err := h.repo.JMAP().AddressBooks().Create(ctx, book); err != nil {
+			notCreated[tempID] = map[string]interface{}{"type": "serverFail", "description": err.Error()}
+			continue
+		}
+		created[tempID] = map[string]interface{}{"id": string(book.ID)}
+	}
+
+	for id, patch := range a.Update {
+		book, err := h.repo.JMAP().AddressBooks().GetByID(ctx, domain.ID(id))
+		if err != nil {
+			notUpdated[id] = map[string]interface{}{"type": "notFound"}
+			continue
+		}
+		if name, ok := patch["name"].(string); ok {
+			book.Name = name
+		}
+		if desc, ok := patch["description"].(string); ok {
+			book.Description = desc
+		}
+		if err := h.repo.JMAP().AddressBooks().Update(ctx, book); err != nil {
+			notUpdated[id] = map[string]interface{}{"type": "serverFail", "description": err.Error()}
+			continue
+		}
+		updated[id] = nil
+	}
+
+	for _, id := range a.Destroy {
+		if a.OnDestroyRemoveContents {
+			_, _ = h.repo.JMAP().ContactCards().DeleteByAddressBook(ctx, domain.ID(id))
+		}
+		if err := h.repo.JMAP().AddressBooks().Delete(ctx, domain.ID(id)); err != nil {
+			notDestroyed[id] = map[string]interface{}{"type": "notFound"}
+			continue
+		}
+		destroyed = append(destroyed, id)
+	}
+
+	newState, _ := h.stateManager.CurrentState(ctx, accountID, "AddressBook")
+	resp := map[string]interface{}{
 		"accountId": a.AccountID,
 		"oldState":  stateStr,
-		"newState":  stateStr,
-	})
+		"newState":  newState,
+	}
+	if a.Create != nil { resp["created"] = created; resp["notCreated"] = notCreated }
+	if a.Update != nil { resp["updated"] = updated; resp["notUpdated"] = notUpdated }
+	if a.Destroy != nil { resp["destroyed"] = destroyed; resp["notDestroyed"] = notDestroyed }
+	return marshalJSON(resp)
 }
 
 func addressBookToJMAP(book *domain.AddressBook) map[string]interface{} {

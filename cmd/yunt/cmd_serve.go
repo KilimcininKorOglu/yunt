@@ -26,6 +26,7 @@ import (
 
 	jmapserver "yunt/internal/jmap"
 	"yunt/internal/domain"
+	"yunt/internal/jmap/push"
 	"yunt/internal/jmap/state"
 	"yunt/internal/jmap/thread"
 	"yunt/internal/service"
@@ -329,6 +330,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 				ServerConfig:   &cfg.Server,
 			})
 			jmapHandler.RegisterRoutes(apiSrv.Echo(), authMiddleware)
+
+			if relayService != nil {
+				scheduler := push.NewDelayedSendScheduler(repo, relayService, messageService, log.Logger)
+				scheduler.Start()
+				defer scheduler.Stop()
+			}
+
 			log.Info().Msg("JMAP server enabled")
 		}
 

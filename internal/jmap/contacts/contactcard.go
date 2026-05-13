@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"yunt/internal/domain"
 	"yunt/internal/jmap/core"
@@ -148,7 +149,10 @@ func (h *ContactCardHandler) QueryChanges(ctx context.Context, accountID domain.
 // Set implements ContactCard/set.
 func (h *ContactCardHandler) Set(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
 	var a struct {
-		AccountID string `json:"accountId"`
+		AccountID string                            `json:"accountId"`
+		Create    map[string]map[string]interface{} `json:"create"`
+		Update    map[string]map[string]interface{} `json:"update"`
+		Destroy   []string                          `json:"destroy"`
 	}
 	if err := json.Unmarshal(args, &a); err != nil {
 		return nil, core.NewMethodError(core.ErrorInvalidArguments, err.Error())
@@ -156,11 +160,91 @@ func (h *ContactCardHandler) Set(ctx context.Context, accountID domain.ID, args 
 
 	stateStr, _ := h.stateManager.CurrentState(ctx, accountID, "ContactCard")
 
-	return marshalJSON(map[string]interface{}{
+	created := map[string]interface{}{}
+	notCreated := map[string]interface{}{}
+	updated := map[string]interface{}{}
+	notUpdated := map[string]interface{}{}
+	destroyed := []string{}
+	notDestroyed := map[string]interface{}{}
+
+	for tempID, props := range a.Create {
+		uid, _ := props["uid"].(string)
+		if uid == "" {
+			uid = fmt.Sprintf("urn:uuid:%s", tempID)
+		}
+		fullName, _ := props["fullName"].(string)
+		kind, _ := props["kind"].(string)
+		if kind == "" {
+			kind = "individual"
+		}
+
+		abIDs := map[domain.ID]bool{}
+		if abMap, ok := props["addressBookIds"].(map[string]interface{}); ok {
+			for abID := range abMap {
+				abIDs[domain.ID(abID)] = true
+			}
+		}
+		if len(abIDs) == 0 {
+			defBook, err := h.repo.JMAP().AddressBooks().GetDefault(ctx, accountID)
+			if err == nil {
+				abIDs[defBook.ID] = true
+			}
+		}
+
+		card := &domain.ContactCard{
+			ID: domain.ID(fmt.Sprintf("cc-%s-%d", accountID, time.Now().UnixNano())),
+			UID: uid, UserID: accountID, AddressBookIDs: abIDs,
+			Kind: kind, FullName: fullName,
+			CreatedAt: domain.Now(), UpdatedAt: domain.Now(),
+		}
+
+		if err := h.repo.JMAP().ContactCards().Create(ctx, card); err != nil {
+			notCreated[tempID] = map[string]interface{}{"type": "serverFail", "description": err.Error()}
+			continue
+		}
+		created[tempID] = map[string]interface{}{"id": string(card.ID)}
+	}
+
+	for id, patch := range a.Update {
+		card, err := h.repo.JMAP().ContactCards().GetByID(ctx, domain.ID(id))
+		if err != nil {
+			notUpdated[id] = map[string]interface{}{"type": "notFound"}
+			continue
+		}
+		if fn, ok := patch["fullName"].(string); ok {
+			card.FullName = fn
+		}
+		if k, ok := patch["kind"].(string); ok {
+			card.Kind = k
+		}
+		if n, ok := patch["notes"].(string); ok {
+			card.Notes = n
+		}
+		if err := h.repo.JMAP().ContactCards().Update(ctx, card); err != nil {
+			notUpdated[id] = map[string]interface{}{"type": "serverFail", "description": err.Error()}
+			continue
+		}
+		updated[id] = nil
+	}
+
+	for _, id := range a.Destroy {
+		if err := h.repo.JMAP().ContactCards().Delete(ctx, domain.ID(id)); err != nil {
+			notDestroyed[id] = map[string]interface{}{"type": "notFound"}
+			continue
+		}
+		destroyed = append(destroyed, id)
+	}
+
+	newState, _ := h.stateManager.CurrentState(ctx, accountID, "ContactCard")
+	resp := map[string]interface{}{
 		"accountId": a.AccountID,
 		"oldState":  stateStr,
-		"newState":  stateStr,
-	})
+		"newState":  newState,
+	}
+	if a.Create != nil { resp["created"] = created; resp["notCreated"] = notCreated }
+	if a.Update != nil { resp["updated"] = updated; resp["notUpdated"] = notUpdated }
+	if a.Destroy != nil { resp["destroyed"] = destroyed; resp["notDestroyed"] = notDestroyed }
+	return marshalJSON(resp)
 }
 
 func contactCardToJMAP(card *domain.ContactCard) map[string]interface{} {
