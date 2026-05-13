@@ -159,7 +159,10 @@ type APIConfig struct {
 	// CORSAllowedOrigins is a list of allowed CORS origins.
 	CORSAllowedOrigins []string `yaml:"corsAllowedOrigins" env:"YUNT_API_CORS_ALLOWED_ORIGINS"`
 
-	// RateLimit is the number of requests per minute per IP.
+	// EnableRateLimit determines if rate limiting is enabled. Disabled by default.
+	EnableRateLimit bool `yaml:"enableRateLimit" env:"YUNT_API_ENABLE_RATE_LIMIT"`
+
+	// RateLimit is the number of requests per minute per IP (when rate limiting is enabled).
 	RateLimit int `yaml:"rateLimit" env:"YUNT_API_RATE_LIMIT"`
 
 	// EnableSwagger determines if Swagger documentation is enabled.

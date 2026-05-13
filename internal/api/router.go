@@ -24,6 +24,8 @@ type RouterConfig struct {
 	EnableSwagger bool
 	// EnableMetrics determines if Prometheus /metrics endpoint is enabled.
 	EnableMetrics bool
+	// EnableRateLimit determines if rate limiting is enabled.
+	EnableRateLimit bool
 }
 
 // version holds the application version (set at build time).
@@ -71,8 +73,10 @@ func NewRouter(cfg RouterConfig) *Router {
 	// Logger middleware (skip health check endpoints to reduce noise)
 	e.Use(middleware.LoggerWithConfig(cfg.Logger, "/health", "/healthz", "/ready"))
 
-	// Rate limiting middleware
-	e.Use(middleware.RateLimitWithLogger(cfg.Logger))
+	// Rate limiting middleware (disabled by default)
+	if cfg.EnableRateLimit {
+		e.Use(middleware.RateLimitWithLogger(cfg.Logger))
+	}
 
 	// Prometheus metrics middleware
 	if cfg.EnableMetrics {

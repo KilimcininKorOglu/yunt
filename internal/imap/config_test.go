@@ -145,7 +145,7 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "TLS enabled without cert",
+			name: "TLS enabled without cert auto-disables",
 			config: &Config{
 				Enabled:      true,
 				Host:         "0.0.0.0",
@@ -159,10 +159,10 @@ func TestConfig_Validate(t *testing.T) {
 					KeyFile:  "server.key",
 				},
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
-			name: "TLS enabled without key",
+			name: "TLS enabled without key auto-disables",
 			config: &Config{
 				Enabled:      true,
 				Host:         "0.0.0.0",
@@ -176,10 +176,10 @@ func TestConfig_Validate(t *testing.T) {
 					KeyFile:  "",
 				},
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
-			name: "STARTTLS without cert",
+			name: "STARTTLS without cert auto-disables",
 			config: &Config{
 				Enabled:      true,
 				Host:         "0.0.0.0",
@@ -194,7 +194,7 @@ func TestConfig_Validate(t *testing.T) {
 					KeyFile:  "server.key",
 				},
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 

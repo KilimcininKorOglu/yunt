@@ -135,6 +135,7 @@ func Default() *Config {
 			Port:               DefaultAPIPort,
 			ReadTimeout:        DefaultAPIReadTimeout,
 			WriteTimeout:       DefaultAPIWriteTimeout,
+			EnableRateLimit:    false,
 			RateLimit:          DefaultAPIRateLimit,
 			EnableSwagger:      DefaultAPIEnableSwagger,
 			CORSAllowedOrigins: []string{"*"},
