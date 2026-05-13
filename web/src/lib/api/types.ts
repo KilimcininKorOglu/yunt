@@ -435,6 +435,8 @@ export interface SystemStats {
 	};
 	uptime: number;
 	timestamp: Timestamp;
+	relayEnabled?: boolean;
+	jmapEnabled?: boolean;
 }
 
 /** Runtime information */

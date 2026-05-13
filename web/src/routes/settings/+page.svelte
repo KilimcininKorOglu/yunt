@@ -10,13 +10,14 @@
 	import { getUsersApi } from '$lib/api';
 	import type { Webhook } from '$lib/api';
 
-	type Tab = 'general' | 'notifications' | 'webhooks' | 'mailboxes' | 'signature';
+	type Tab = 'general' | 'notifications' | 'webhooks' | 'mailboxes' | 'signature' | 'jmap';
 
 	const tabs: { id: Tab; label: string }[] = [
 		{ id: 'general', label: 'General' },
 		{ id: 'signature', label: 'Signature' },
 		{ id: 'webhooks', label: 'Webhooks' },
-		{ id: 'mailboxes', label: 'Mailboxes' }
+		{ id: 'mailboxes', label: 'Mailboxes' },
+		{ id: 'jmap', label: 'JMAP' }
 	];
 
 	let activeTab = $state<Tab>('general');
@@ -240,6 +241,63 @@
 			{:else if activeTab === 'mailboxes'}
 				<h2>Mailboxes</h2>
 				<MailboxSettings />
+			{:else if activeTab === 'jmap'}
+				<h2>JMAP Connection</h2>
+				<p class="info-text">Connect any JMAP-compatible email client using the settings below.</p>
+
+				<div class="info-box" style="margin-top: 12px;">
+					<h3>Session URL</h3>
+					<div class="jmap-field">
+						<code>{window.location.origin}/.well-known/jmap</code>
+					</div>
+				</div>
+
+				<div class="info-box" style="margin-top: 12px;">
+					<h3>API Endpoint</h3>
+					<div class="jmap-field">
+						<code>{window.location.origin}/jmap/api</code>
+					</div>
+				</div>
+
+				<div class="info-box" style="margin-top: 12px;">
+					<h3>Upload URL</h3>
+					<div class="jmap-field">
+						<code>{window.location.origin}/jmap/upload/&#123;accountId&#125;/</code>
+					</div>
+				</div>
+
+				<div class="info-box" style="margin-top: 12px;">
+					<h3>Download URL</h3>
+					<div class="jmap-field">
+						<code>{window.location.origin}/jmap/download/&#123;accountId&#125;/&#123;blobId&#125;/&#123;name&#125;?accept=&#123;type&#125;</code>
+					</div>
+				</div>
+
+				<div class="info-box" style="margin-top: 12px;">
+					<h3>EventSource URL</h3>
+					<div class="jmap-field">
+						<code>{window.location.origin}/jmap/eventsource</code>
+					</div>
+				</div>
+
+				<div class="info-box" style="margin-top: 12px;">
+					<h3>Authentication</h3>
+					<p>Use HTTP Bearer token authentication. Obtain a token via <code>POST /api/v1/auth/login</code> and include it as <code>Authorization: Bearer &lt;token&gt;</code> header.</p>
+				</div>
+
+				<div class="info-box" style="margin-top: 12px;">
+					<h3>Supported Capabilities</h3>
+					<table class="msg-table" style="margin-top: 8px;">
+						<thead><tr><th>Capability</th><th>RFC</th></tr></thead>
+						<tbody>
+							<tr><td>urn:ietf:params:jmap:core</td><td>8620</td></tr>
+							<tr><td>urn:ietf:params:jmap:mail</td><td>8621</td></tr>
+							<tr><td>urn:ietf:params:jmap:submission</td><td>8621</td></tr>
+							<tr><td>urn:ietf:params:jmap:vacationresponse</td><td>8621</td></tr>
+							<tr><td>urn:ietf:params:jmap:contacts</td><td>9610</td></tr>
+						</tbody>
+					</table>
+				</div>
 			{/if}
 		</div>
 	</div>

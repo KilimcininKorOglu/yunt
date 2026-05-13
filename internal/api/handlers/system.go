@@ -25,6 +25,7 @@ type SystemHandler struct {
 	startTime      time.Time
 	version        string
 	relayEnabled   bool
+	jmapEnabled    bool
 }
 
 // SystemHandlerConfig contains configuration for creating a SystemHandler.
@@ -35,6 +36,7 @@ type SystemHandlerConfig struct {
 	Config         *config.Config
 	Version        string
 	RelayEnabled   bool
+	JMAPEnabled    bool
 }
 
 // NewSystemHandler creates a new SystemHandler.
@@ -47,6 +49,7 @@ func NewSystemHandler(cfg SystemHandlerConfig) *SystemHandler {
 		startTime:      time.Now(),
 		version:        cfg.Version,
 		relayEnabled:   cfg.RelayEnabled,
+		jmapEnabled:    cfg.JMAPEnabled,
 	}
 }
 
@@ -106,6 +109,8 @@ type SystemStats struct {
 	Timestamp time.Time `json:"timestamp"`
 	// RelayEnabled indicates whether the relay service is active.
 	RelayEnabled bool `json:"relayEnabled"`
+	// JMAPEnabled indicates whether JMAP protocol is active.
+	JMAPEnabled bool `json:"jmapEnabled"`
 }
 
 // UserStats contains user-related statistics.
@@ -158,6 +163,7 @@ func (h *SystemHandler) GetStats(c echo.Context) error {
 		Uptime:       int64(time.Since(h.startTime).Seconds()),
 		Timestamp:    time.Now().UTC(),
 		RelayEnabled: h.relayEnabled,
+		JMAPEnabled:  h.jmapEnabled,
 	}
 
 	// Get user stats

@@ -136,6 +136,16 @@
 							<td><code>localhost:8025</code></td>
 						</tr>
 						<tr>
+							<td class="lbl">JMAP</td>
+							<td>
+								{#if stats?.jmapEnabled}
+									<code>localhost:8025/.well-known/jmap</code>
+								{:else}
+									<span style="color:var(--text-muted)">Disabled</span>
+								{/if}
+							</td>
+						</tr>
+						<tr>
 							<td class="lbl">Mailboxes</td>
 							<td>{loading ? '...' : totalMailboxes}</td>
 						</tr>

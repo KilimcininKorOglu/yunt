@@ -299,6 +299,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			Config:         cfg,
 			Version:        version,
 			RelayEnabled:   relayService != nil && relayService.IsEnabled(),
+			JMAPEnabled:    cfg.JMAP.Enabled,
 		})
 		systemHandler.RegisterRoutes(authed)
 
