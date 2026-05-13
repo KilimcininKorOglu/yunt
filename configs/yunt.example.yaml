@@ -150,6 +150,29 @@ api:
   # Enable Swagger API documentation at /api/docs
   enableSwagger: true
 
+# JMAP Configuration (RFC 8620/8621/9610)
+jmap:
+  # Enable or disable JMAP protocol support
+  enabled: true
+
+  # Maximum number of method calls per request
+  maxCallsPerRequest: 64
+
+  # Maximum number of objects in a single /get response
+  maxObjectsInGet: 1000
+
+  # Maximum number of objects in a single /set request
+  maxObjectsInSet: 1000
+
+  # Maximum upload size in bytes (50MB)
+  maxSizeUpload: 52428800
+
+  # Maximum concurrent uploads
+  maxConcurrentUpload: 4
+
+  # Maximum request body size in bytes (10MB)
+  maxSizeRequest: 10485760
+
 # Database Configuration
 database:
   # Database driver: sqlite, postgres, mysql, mongodb

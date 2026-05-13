@@ -11,8 +11,11 @@ import (
 	"yunt/internal/api/middleware"
 	"yunt/internal/config"
 	"yunt/internal/domain"
+	"yunt/internal/jmap/blob"
+	"yunt/internal/jmap/contacts"
 	"yunt/internal/jmap/core"
 	"yunt/internal/jmap/mail"
+	"yunt/internal/jmap/push"
 	"yunt/internal/jmap/state"
 	"yunt/internal/jmap/thread"
 	"yunt/internal/repository"
@@ -36,19 +39,28 @@ type HandlerConfig struct {
 
 // Handler handles JMAP HTTP endpoints.
 type Handler struct {
-	cfg        HandlerConfig
-	dispatcher *Dispatcher
+	cfg            HandlerConfig
+	dispatcher     *Dispatcher
+	blobHandler    *blob.Handler
+	esHandler      *push.EventSourceHandler
 }
 
 // NewHandler creates and initializes a JMAP handler with all method registrations.
 func NewHandler(cfg HandlerConfig) *Handler {
 	h := &Handler{
-		cfg:        cfg,
-		dispatcher: NewDispatcher(cfg.JMAPConfig.MaxCallsPerRequest),
+		cfg:         cfg,
+		dispatcher:  NewDispatcher(cfg.JMAPConfig.MaxCallsPerRequest),
+		blobHandler: blob.NewHandler(cfg.Repo),
 	}
 
+	if cfg.NotifyService != nil {
+		h.esHandler = push.NewEventSourceHandler(cfg.NotifyService, cfg.StateManager, cfg.Repo.Mailboxes())
+	}
+
+	// Core
 	h.dispatcher.Register("Core/echo", h.coreEcho)
 
+	// Mail (RFC 8621)
 	emailHandler := mail.NewEmailHandler(cfg.MessageService, cfg.StateManager, cfg.Repo)
 	h.dispatcher.Register("Email/get", emailHandler.Get)
 	h.dispatcher.Register("Email/query", emailHandler.Query)
@@ -62,6 +74,39 @@ func NewHandler(cfg HandlerConfig) *Handler {
 	threadHandler := mail.NewThreadHandler(cfg.Repo, cfg.StateManager)
 	h.dispatcher.Register("Thread/get", threadHandler.Get)
 	h.dispatcher.Register("Thread/changes", threadHandler.Changes)
+
+	// Identity, EmailSubmission, VacationResponse (RFC 8621)
+	identityHandler := mail.NewIdentityHandler(cfg.Repo, cfg.StateManager)
+	h.dispatcher.Register("Identity/get", identityHandler.Get)
+	h.dispatcher.Register("Identity/changes", identityHandler.Changes)
+	h.dispatcher.Register("Identity/set", identityHandler.Set)
+
+	submissionHandler := mail.NewSubmissionHandler(cfg.Repo, cfg.StateManager)
+	h.dispatcher.Register("EmailSubmission/get", submissionHandler.Get)
+	h.dispatcher.Register("EmailSubmission/changes", submissionHandler.Changes)
+	h.dispatcher.Register("EmailSubmission/query", submissionHandler.Query)
+	h.dispatcher.Register("EmailSubmission/set", submissionHandler.Set)
+
+	vacationHandler := mail.NewVacationHandler(cfg.Repo, cfg.StateManager)
+	h.dispatcher.Register("VacationResponse/get", vacationHandler.Get)
+	h.dispatcher.Register("VacationResponse/set", vacationHandler.Set)
+
+	// PushSubscription (RFC 8620 §7 — no accountId)
+	pushSubHandler := push.NewSubscriptionHandler(cfg.Repo)
+	h.dispatcher.Register("PushSubscription/get", pushSubHandler.Get)
+	h.dispatcher.Register("PushSubscription/set", pushSubHandler.Set)
+
+	// Contacts (RFC 9610)
+	addressBookHandler := contacts.NewAddressBookHandler(cfg.Repo, cfg.StateManager)
+	h.dispatcher.Register("AddressBook/get", addressBookHandler.Get)
+	h.dispatcher.Register("AddressBook/changes", addressBookHandler.Changes)
+	h.dispatcher.Register("AddressBook/set", addressBookHandler.Set)
+
+	contactCardHandler := contacts.NewContactCardHandler(cfg.Repo, cfg.StateManager)
+	h.dispatcher.Register("ContactCard/get", contactCardHandler.Get)
+	h.dispatcher.Register("ContactCard/changes", contactCardHandler.Changes)
+	h.dispatcher.Register("ContactCard/query", contactCardHandler.Query)
+	h.dispatcher.Register("ContactCard/set", contactCardHandler.Set)
 
 	return h
 }
@@ -202,17 +247,20 @@ func (h *Handler) coreEcho(_ context.Context, _ domain.ID, args json.RawMessage)
 
 // Upload handles blob upload (POST /jmap/upload/:accountId).
 func (h *Handler) Upload(c echo.Context) error {
-	return c.JSON(http.StatusNotImplemented, map[string]string{"error": "not yet implemented"})
+	return h.blobHandler.Upload(c)
 }
 
 // Download handles blob download (GET /jmap/download/:accountId/:blobId/:name).
 func (h *Handler) Download(c echo.Context) error {
-	return c.JSON(http.StatusNotImplemented, map[string]string{"error": "not yet implemented"})
+	return h.blobHandler.Download(c)
 }
 
 // EventSource handles JMAP push via SSE (GET /jmap/eventsource).
 func (h *Handler) EventSource(c echo.Context) error {
-	return c.JSON(http.StatusNotImplemented, map[string]string{"error": "not yet implemented"})
+	if h.esHandler == nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "event source not available"})
+	}
+	return h.esHandler.Handle(c)
 }
 
 func intPtr(v int) *int { return &v }
