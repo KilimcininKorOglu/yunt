@@ -160,7 +160,38 @@ func writeAttachmentPart(buf *bytes.Buffer, att AttachmentInput) {
 }
 
 func writeHeader(buf *bytes.Buffer, name, value string) {
-	buf.WriteString(name + ": " + value + "\r\n")
+	line := name + ": " + value
+	if len(line) <= 998 {
+		buf.WriteString(line + "\r\n")
+		return
+	}
+	buf.WriteString(name + ": ")
+	remaining := value
+	lineLen := len(name) + 2
+	first := true
+	for len(remaining) > 0 {
+		available := 998 - lineLen
+		if available <= 0 {
+			available = 998 - 1
+		}
+		chunk := remaining
+		if len(chunk) > available {
+			idx := strings.LastIndexAny(chunk[:available], " ,;")
+			if idx > 0 {
+				chunk = chunk[:idx+1]
+			} else {
+				chunk = chunk[:available]
+			}
+		}
+		if !first {
+			buf.WriteString("\t")
+		}
+		buf.WriteString(chunk)
+		buf.WriteString("\r\n")
+		remaining = remaining[len(chunk):]
+		lineLen = 1
+		first = false
+	}
 }
 
 func writeEncodedHeader(buf *bytes.Buffer, name, value string) {
@@ -182,10 +213,10 @@ func formatAddress(name, addr string) string {
 }
 
 func formatAddressList(addrs []string) string {
-	if len(addrs) <= 3 {
-		return strings.Join(addrs, ", ")
+	joined := strings.Join(addrs, ", ")
+	if len(joined) <= 76 {
+		return joined
 	}
-	// Fold long recipient lists
 	var buf bytes.Buffer
 	for i, addr := range addrs {
 		if i > 0 {
