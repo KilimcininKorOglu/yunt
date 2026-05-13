@@ -10,6 +10,7 @@ Point your application's SMTP settings to `localhost:1025` and every outgoing em
 |--------------------|---------------------------------------------------------------------|
 | SMTP Server        | RFC 5321 compliant mail capture with relay support                  |
 | IMAP Server        | RFC 3501 compliant client access (Thunderbird, Apple Mail, etc.)    |
+| JMAP Server        | RFC 8620/8621/9610 compliant modern JSON API for mail and contacts  |
 | Web UI             | MSN Hotmail 2006 nostalgic interface with compose, drafts, contacts |
 | Internal Delivery  | Send mail between users without external relay                      |
 | External Relay     | Forward mail to external SMTP servers when configured               |
@@ -76,6 +77,7 @@ make build-full
 | SMTP    | 1025 | TCP      |
 | IMAP    | 1143 | TCP      |
 | Web UI  | 8025 | HTTP     |
+| JMAP    | 8025 | HTTP     |
 
 ## Web UI
 
@@ -197,6 +199,34 @@ Connect any IMAP client (Thunderbird, Apple Mail, Outlook) with these settings:
 | Security | None      |
 | Username | admin     |
 | Password | admin123  |
+
+## JMAP
+
+Yunt supports the JMAP protocol (JSON Meta Application Protocol) as a modern alternative to IMAP. JMAP clients can connect to the same HTTP port as the Web UI.
+
+### Endpoints
+
+| Endpoint                                       | Method | Description                |
+|------------------------------------------------|--------|----------------------------|
+| `/.well-known/jmap`                            | GET    | Session discovery          |
+| `/jmap/api`                                    | POST   | API method calls           |
+| `/jmap/upload/{accountId}/`                    | POST   | Binary blob upload         |
+| `/jmap/download/{accountId}/{blobId}/{name}`   | GET    | Binary blob download       |
+| `/jmap/eventsource`                            | GET    | Server-Sent Events push    |
+
+### Supported Capabilities
+
+| Capability                              | RFC   | Description           |
+|-----------------------------------------|-------|-----------------------|
+| `urn:ietf:params:jmap:core`             | 8620  | Core protocol         |
+| `urn:ietf:params:jmap:mail`             | 8621  | Email, Mailbox, Thread|
+| `urn:ietf:params:jmap:submission`       | 8621  | Email submission      |
+| `urn:ietf:params:jmap:vacationresponse` | 8621  | Vacation auto-reply   |
+| `urn:ietf:params:jmap:contacts`         | 9610  | Contacts, AddressBook |
+
+### Methods (28 total)
+
+Core/echo, Mailbox/get/changes/query, Thread/get/changes, Email/get/query/changes, Identity/get/changes/set, EmailSubmission/get/changes/query/set, VacationResponse/get/set, PushSubscription/get/set, AddressBook/get/changes/set, ContactCard/get/changes/query/set.
 
 ## Docker
 
