@@ -1,0 +1,7 @@
+-- +migrate Up
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signature TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_html TEXT NOT NULL DEFAULT '';
+
+-- +migrate Down
+ALTER TABLE users DROP COLUMN IF EXISTS signature;
+ALTER TABLE users DROP COLUMN IF EXISTS signature_html;

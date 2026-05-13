@@ -42,6 +42,12 @@ type User struct {
 	// AvatarURL is an optional URL to the user's profile picture.
 	AvatarURL string `json:"avatarUrl,omitempty"`
 
+	// Signature is the user's plain-text email signature.
+	Signature string `json:"signature,omitempty" db:"signature"`
+
+	// SignatureHTML is the user's HTML email signature.
+	SignatureHTML string `json:"signatureHtml,omitempty" db:"signature_html"`
+
 	// LastLoginAt is the timestamp of the user's last successful login.
 	LastLoginAt *Timestamp `json:"lastLoginAt,omitempty"`
 

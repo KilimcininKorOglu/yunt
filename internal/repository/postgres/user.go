@@ -27,11 +27,13 @@ type userRow struct {
 	DisplayName  sql.NullString `db:"display_name"`
 	Role         string         `db:"role"`
 	Status       string         `db:"status"`
-	AvatarURL    sql.NullString `db:"avatar_url"`
-	LastLoginAt  sql.NullTime   `db:"last_login_at"`
-	DeletedAt    sql.NullTime   `db:"deleted_at"`
-	CreatedAt    time.Time      `db:"created_at"`
-	UpdatedAt    time.Time      `db:"updated_at"`
+	AvatarURL     sql.NullString `db:"avatar_url"`
+	Signature     string         `db:"signature"`
+	SignatureHTML string         `db:"signature_html"`
+	LastLoginAt   sql.NullTime   `db:"last_login_at"`
+	DeletedAt     sql.NullTime   `db:"deleted_at"`
+	CreatedAt     time.Time      `db:"created_at"`
+	UpdatedAt     time.Time      `db:"updated_at"`
 }
 
 // NewUserRepository creates a new PostgreSQL user repository.
@@ -58,6 +60,8 @@ func (r *userRow) toUser() *domain.User {
 	if r.AvatarURL.Valid {
 		user.AvatarURL = r.AvatarURL.String
 	}
+	user.Signature = r.Signature
+	user.SignatureHTML = r.SignatureHTML
 	if r.LastLoginAt.Valid {
 		ts := domain.Timestamp{Time: r.LastLoginAt.Time}
 		user.LastLoginAt = &ts
@@ -68,8 +72,8 @@ func (r *userRow) toUser() *domain.User {
 
 // GetByID retrieves a user by their unique identifier.
 func (u *UserRepository) GetByID(ctx context.Context, id domain.ID) (*domain.User, error) {
-	query := `SELECT id, username, email, password_hash, display_name, role, status, 
-		avatar_url, last_login_at, deleted_at, created_at, updated_at 
+	query := `SELECT id, username, email, password_hash, display_name, role, status,
+		avatar_url, signature, signature_html, last_login_at, deleted_at, created_at, updated_at
 		FROM users WHERE id = $1 AND deleted_at IS NULL`
 
 	var row userRow
@@ -85,8 +89,8 @@ func (u *UserRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Use
 
 // GetByUsername retrieves a user by their username.
 func (u *UserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
-	query := `SELECT id, username, email, password_hash, display_name, role, status, 
-		avatar_url, last_login_at, deleted_at, created_at, updated_at 
+	query := `SELECT id, username, email, password_hash, display_name, role, status,
+		avatar_url, signature, signature_html, last_login_at, deleted_at, created_at, updated_at
 		FROM users WHERE LOWER(username) = LOWER($1) AND deleted_at IS NULL`
 
 	var row userRow
@@ -102,8 +106,8 @@ func (u *UserRepository) GetByUsername(ctx context.Context, username string) (*d
 
 // GetByEmail retrieves a user by their email address.
 func (u *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
-	query := `SELECT id, username, email, password_hash, display_name, role, status, 
-		avatar_url, last_login_at, deleted_at, created_at, updated_at 
+	query := `SELECT id, username, email, password_hash, display_name, role, status,
+		avatar_url, signature, signature_html, last_login_at, deleted_at, created_at, updated_at
 		FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL`
 
 	var row userRow
@@ -163,8 +167,8 @@ func (u *UserRepository) buildListQuery(filter *repository.UserFilter, opts *rep
 	if countOnly {
 		sb.WriteString("SELECT COUNT(*) FROM users WHERE 1=1")
 	} else {
-		sb.WriteString(`SELECT id, username, email, password_hash, display_name, role, status, 
-			avatar_url, last_login_at, deleted_at, created_at, updated_at FROM users WHERE 1=1`)
+		sb.WriteString(`SELECT id, username, email, password_hash, display_name, role, status,
+			avatar_url, signature, signature_html, last_login_at, deleted_at, created_at, updated_at FROM users WHERE 1=1`)
 	}
 
 	// Apply filters
@@ -331,9 +335,9 @@ func (u *UserRepository) Create(ctx context.Context, user *domain.User) error {
 		return domain.NewAlreadyExistsError("user", "email", user.Email)
 	}
 
-	query := `INSERT INTO users (id, username, email, password_hash, display_name, role, status, 
-		avatar_url, last_login_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+	query := `INSERT INTO users (id, username, email, password_hash, display_name, role, status,
+		avatar_url, signature, signature_html, last_login_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 
 	var displayName, avatarURL sql.NullString
 	if user.DisplayName != "" {
@@ -357,6 +361,8 @@ func (u *UserRepository) Create(ctx context.Context, user *domain.User) error {
 		string(user.Role),
 		string(user.Status),
 		avatarURL,
+		user.Signature,
+		user.SignatureHTML,
 		lastLoginAt,
 		user.CreatedAt.Time,
 		user.UpdatedAt.Time,
@@ -379,8 +385,8 @@ func (u *UserRepository) Update(ctx context.Context, user *domain.User) error {
 		return domain.NewNotFoundError("user", string(user.ID))
 	}
 
-	query := `UPDATE users SET username = $1, email = $2, password_hash = $3, display_name = $4, 
-		role = $5, status = $6, avatar_url = $7, last_login_at = $8, updated_at = $9 WHERE id = $10`
+	query := `UPDATE users SET username = $1, email = $2, password_hash = $3, display_name = $4,
+		role = $5, status = $6, avatar_url = $7, signature = $8, signature_html = $9, last_login_at = $10, updated_at = $11 WHERE id = $12`
 
 	var displayName, avatarURL sql.NullString
 	if user.DisplayName != "" {
@@ -403,6 +409,8 @@ func (u *UserRepository) Update(ctx context.Context, user *domain.User) error {
 		string(user.Role),
 		string(user.Status),
 		avatarURL,
+		user.Signature,
+		user.SignatureHTML,
 		lastLoginAt,
 		time.Now().UTC(),
 		string(user.ID),

@@ -29,8 +29,10 @@ type userDocument struct {
 	DisplayName  string     `bson:"displayName,omitempty"`
 	Role         string     `bson:"role"`
 	Status       string     `bson:"status"`
-	AvatarURL    string     `bson:"avatarUrl,omitempty"`
-	LastLoginAt  *time.Time `bson:"lastLoginAt,omitempty"`
+	AvatarURL     string     `bson:"avatarUrl,omitempty"`
+	Signature     string     `bson:"signature,omitempty"`
+	SignatureHTML string     `bson:"signatureHtml,omitempty"`
+	LastLoginAt   *time.Time `bson:"lastLoginAt,omitempty"`
 	DeletedAt    *time.Time `bson:"deletedAt,omitempty"`
 	CreatedAt    time.Time  `bson:"createdAt"`
 	UpdatedAt    time.Time  `bson:"updatedAt"`
@@ -56,8 +58,10 @@ func (u *UserRepository) toDocument(user *domain.User) *userDocument {
 		DisplayName:  user.DisplayName,
 		Role:         string(user.Role),
 		Status:       string(user.Status),
-		AvatarURL:    user.AvatarURL,
-		CreatedAt:    user.CreatedAt.Time,
+		AvatarURL:     user.AvatarURL,
+		Signature:     user.Signature,
+		SignatureHTML: user.SignatureHTML,
+		CreatedAt:     user.CreatedAt.Time,
 		UpdatedAt:    user.UpdatedAt.Time,
 	}
 
@@ -79,8 +83,10 @@ func (u *UserRepository) toDomain(doc *userDocument) *domain.User {
 		DisplayName:  doc.DisplayName,
 		Role:         domain.UserRole(doc.Role),
 		Status:       domain.UserStatus(doc.Status),
-		AvatarURL:    doc.AvatarURL,
-		CreatedAt:    domain.Timestamp{Time: doc.CreatedAt},
+		AvatarURL:     doc.AvatarURL,
+		Signature:     doc.Signature,
+		SignatureHTML: doc.SignatureHTML,
+		CreatedAt:     domain.Timestamp{Time: doc.CreatedAt},
 		UpdatedAt:    domain.Timestamp{Time: doc.UpdatedAt},
 	}
 
