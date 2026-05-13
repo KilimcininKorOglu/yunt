@@ -21,11 +21,13 @@
 		onPageChange
 	}: Props = $props();
 
-	function formatRole(role: UserRole): string {
+	function formatRole(role: UserRole | undefined): string {
+		if (!role) return '-';
 		return role.charAt(0).toUpperCase() + role.slice(1);
 	}
 
-	function formatStatus(status: UserStatus): string {
+	function formatStatus(status: UserStatus | undefined): string {
+		if (!status) return '-';
 		return status.charAt(0).toUpperCase() + status.slice(1);
 	}
 

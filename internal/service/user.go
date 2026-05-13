@@ -36,7 +36,7 @@ func (s *UserService) WithWebhookService(ws *WebhookService) {
 // UserListResponse represents a paginated list of users.
 type UserListResponse struct {
 	// Users contains the user list.
-	Users []*domain.UserInfo `json:"users"`
+	Users []*domain.User `json:"users"`
 	// Total is the total number of users matching the filter.
 	Total int64 `json:"total"`
 	// Page is the current page number.
@@ -76,11 +76,7 @@ func (s *UserService) List(ctx context.Context, filter *repository.UserFilter, p
 		return nil, domain.NewInternalError("failed to list users", err)
 	}
 
-	// Convert users to UserInfo (without password hash)
-	users := make([]*domain.UserInfo, len(result.Items))
-	for i, user := range result.Items {
-		users[i] = domain.UserInfoFromUser(user)
-	}
+	users := result.Items
 
 	// Calculate total pages
 	totalPages := int(result.Total) / pageSize

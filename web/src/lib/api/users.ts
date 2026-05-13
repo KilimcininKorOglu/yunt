@@ -45,7 +45,23 @@ export class UsersApi {
 			search: filter?.search
 		});
 
-		return this.client.get<PaginatedData<UserProfile>>('/api/v1/users', { params });
+		const raw = await this.client.get<Record<string, unknown>>('/api/v1/users', { params });
+		const users = (raw as Record<string, unknown>).users as UserProfile[] ?? [];
+		const total = (raw as Record<string, unknown>).total as number ?? 0;
+		const page = (raw as Record<string, unknown>).page as number ?? 1;
+		const pageSize2 = (raw as Record<string, unknown>).pageSize as number ?? 20;
+		const totalPages = (raw as Record<string, unknown>).totalPages as number ?? 1;
+		return {
+			items: users,
+			pagination: {
+				page,
+				pageSize: pageSize2,
+				totalItems: total,
+				totalPages,
+				hasNext: page < totalPages,
+				hasPrev: page > 1
+			}
+		};
 	}
 
 	/**
