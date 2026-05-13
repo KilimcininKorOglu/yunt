@@ -5,6 +5,7 @@ package smtp
 import (
 	"crypto/tls"
 	"fmt"
+	"strings"
 	"time"
 
 	"yunt/internal/config"
@@ -25,6 +26,9 @@ type Config struct {
 
 	// Domain is the server hostname used in SMTP HELO/EHLO.
 	Domain string
+
+	// LocalDomains lists all domains considered local (not relayed).
+	LocalDomains []string
 
 	// MaxMessageSize is the maximum message size in bytes.
 	MaxMessageSize int64
@@ -71,6 +75,7 @@ func NewConfig(cfg *config.Config) (*Config, error) {
 		Host:              cfg.SMTP.Host,
 		Port:              cfg.SMTP.Port,
 		Domain:            cfg.Server.Domain,
+		LocalDomains:      cfg.Server.LocalDomains,
 		MaxMessageSize:    cfg.SMTP.MaxMessageSize,
 		MaxRecipients:     cfg.SMTP.MaxRecipients,
 		ReadTimeout:       cfg.SMTP.ReadTimeout,
@@ -114,6 +119,16 @@ func NewDefaultConfig() *Config {
 // Addr returns the server address in host:port format.
 func (c *Config) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+// IsLocalDomain checks if the given domain is local.
+func (c *Config) IsLocalDomain(domain string) bool {
+	for _, d := range c.LocalDomains {
+		if strings.EqualFold(d, domain) {
+			return true
+		}
+	}
+	return strings.EqualFold(c.Domain, domain)
 }
 
 // Validate validates the configuration and returns an error if invalid.

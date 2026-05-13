@@ -93,6 +93,7 @@ func Default() *Config {
 		Server: ServerConfig{
 			Name:            DefaultServerName,
 			Domain:          DefaultServerDomain,
+			LocalDomains:    []string{"localhost"},
 			GracefulTimeout: DefaultServerGracefulTimeout,
 		},
 		SMTP: SMTPConfig{

@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"yunt/internal/api"
 	"yunt/internal/api/middleware"
+	"yunt/internal/config"
 	"yunt/internal/domain"
 	"yunt/internal/parser"
 	"yunt/internal/repository"
@@ -29,6 +31,7 @@ type MessageHandler struct {
 	relayService   *service.RelayService
 	userService    *service.UserService
 	repo           repository.Repository
+	serverConfig   *config.ServerConfig
 }
 
 // NewMessageHandler creates a new MessageHandler.
@@ -65,6 +68,12 @@ func (h *MessageHandler) WithUserService(us *service.UserService) *MessageHandle
 // WithRepo sets the repository for direct data access operations (e.g., draft management).
 func (h *MessageHandler) WithRepo(r repository.Repository) *MessageHandler {
 	h.repo = r
+	return h
+}
+
+// WithServerConfig sets the server config used for local-domain detection during delivery.
+func (h *MessageHandler) WithServerConfig(sc *config.ServerConfig) *MessageHandler {
+	h.serverConfig = sc
 	return h
 }
 
@@ -1050,6 +1059,137 @@ func (h *MessageHandler) BulkUnstar(c echo.Context) error {
 	})
 }
 
+// DeliveryResult holds the outcome of a deliverMessage call.
+type DeliveryResult struct {
+	SentMessageID     string   `json:"messageId"`
+	InternalDelivered []string `json:"internalDelivered,omitempty"`
+	ExternalDelivered []string `json:"externalDelivered,omitempty"`
+	FailedRecipients  []string `json:"failedRecipients,omitempty"`
+}
+
+// extractDomain returns the domain part of an email address.
+func extractDomain(email string) string {
+	if idx := strings.LastIndex(email, "@"); idx != -1 {
+		return email[idx+1:]
+	}
+	return ""
+}
+
+// deliverMessage stores a message in the Sent mailbox, delivers it to local mailboxes,
+// and relays any external recipients. On total failure the Sent copy is rolled back.
+func (h *MessageHandler) deliverMessage(
+	ctx context.Context,
+	fromAddr string,
+	allRecipients []string,
+	forSent, forRelay []byte,
+	userID domain.ID,
+	userEmail string,
+) (*DeliveryResult, error) {
+	// --- a) Store to Sent mailbox ---
+	mailboxes, err := h.mailboxService.ListMailboxes(ctx, userID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list mailboxes")
+	}
+
+	var sentMailboxID domain.ID
+	for _, mb := range mailboxes.Items {
+		if strings.EqualFold(mb.Name, "Sent") {
+			sentMailboxID = mb.ID
+			break
+		}
+	}
+
+	if sentMailboxID.IsEmpty() {
+		localPart := fromAddr
+		if idx := strings.LastIndex(fromAddr, "@"); idx >= 0 {
+			localPart = fromAddr[:idx]
+		}
+		msgDomain := extractDomain(fromAddr)
+		sentAddr := localPart + "+sent@" + msgDomain
+		created, createErr := h.mailboxService.CreateMailbox(ctx, &service.CreateMailboxInput{
+			UserID:  userID,
+			Name:    "Sent",
+			Address: sentAddr,
+		})
+		if createErr != nil {
+			return nil, fmt.Errorf("failed to create Sent mailbox")
+		}
+		sentMailboxID = created.ID
+	}
+
+	storeResult, err := h.messageService.StoreMessage(ctx, &service.StoreMessageInput{
+		RawData:            forSent,
+		TargetMailboxID:    sentMailboxID,
+		SkipDuplicateCheck: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to store sent message")
+	}
+
+	_ = h.messageService.MarkAsRead(ctx, storeResult.Message.ID)
+
+	result := &DeliveryResult{
+		SentMessageID:     storeResult.Message.ID.String(),
+		InternalDelivered: []string{},
+		ExternalDelivered: []string{},
+		FailedRecipients:  []string{},
+	}
+
+	// --- b) Split recipients by domain ---
+	var internalRecipients, externalRecipients []string
+	for _, addr := range allRecipients {
+		d := extractDomain(addr)
+		if h.serverConfig != nil && h.serverConfig.IsLocalDomain(d) {
+			internalRecipients = append(internalRecipients, addr)
+		} else {
+			externalRecipients = append(externalRecipients, addr)
+		}
+	}
+
+	// --- c) Internal delivery ---
+	for _, addr := range internalRecipients {
+		mailbox, findErr := h.repo.Mailboxes().FindMatchingMailbox(ctx, addr)
+		if findErr != nil || mailbox == nil {
+			result.FailedRecipients = append(result.FailedRecipients, addr)
+			continue
+		}
+		_, storeErr := h.messageService.StoreMessage(ctx, &service.StoreMessageInput{
+			RawData:            forRelay,
+			TargetMailboxID:    mailbox.ID,
+			SkipDuplicateCheck: true,
+		})
+		if storeErr != nil {
+			result.FailedRecipients = append(result.FailedRecipients, addr)
+		} else {
+			result.InternalDelivered = append(result.InternalDelivered, addr)
+		}
+	}
+
+	// --- d) External delivery ---
+	if len(externalRecipients) > 0 {
+		if h.relayService != nil && h.relayService.IsEnabled() {
+			relayResult := h.relayService.Relay(ctx, fromAddr, externalRecipients, forRelay)
+			if relayResult.Success {
+				result.ExternalDelivered = append(result.ExternalDelivered, relayResult.Recipients...)
+				result.FailedRecipients = append(result.FailedRecipients, relayResult.FailedRecipients...)
+			} else {
+				result.FailedRecipients = append(result.FailedRecipients, externalRecipients...)
+			}
+		} else {
+			result.FailedRecipients = append(result.FailedRecipients, externalRecipients...)
+		}
+	}
+
+	// --- e) If ALL recipients failed, roll back the Sent copy ---
+	totalDelivered := len(result.InternalDelivered) + len(result.ExternalDelivered)
+	if len(allRecipients) > 0 && totalDelivered == 0 {
+		_ = h.messageService.DeleteMessageForUser(ctx, storeResult.Message.ID, userID)
+		return nil, fmt.Errorf("delivery failed: all recipients failed")
+	}
+
+	return result, nil
+}
+
 // SendMessageInput represents the input for sending an outbound message via relay.
 type SendMessageInput struct {
 	FromMailboxID string   `json:"fromMailboxId" validate:"required"`
@@ -1081,11 +1221,6 @@ type SendMessageResponse struct {
 // @Failure 503 {object} api.Response{error=api.ErrorDetail}
 // @Router /messages/send [post]
 func (h *MessageHandler) SendMessage(c echo.Context) error {
-	// Relay must be configured and enabled
-	if h.relayService == nil || !h.relayService.IsEnabled() {
-		return api.ServiceUnavailable(c, "relay service is not enabled")
-	}
-
 	userID := middleware.GetUserID(c)
 	if userID.IsEmpty() {
 		return api.Unauthorized(c, "authentication required")
@@ -1162,65 +1297,21 @@ func (h *MessageHandler) SendMessage(c echo.Context) error {
 	}
 	forSent, forRelay := parser.BuildRawMessage(opts)
 
-	// Find or create the Sent mailbox
-	mailboxes, err := h.mailboxService.ListMailboxes(c.Request().Context(), userID, nil)
-	if err != nil {
-		return api.InternalServerError(c, "failed to list mailboxes")
-	}
-
-	var sentMailboxID domain.ID
-	for _, mb := range mailboxes.Items {
-		if strings.EqualFold(mb.Name, "Sent") {
-			sentMailboxID = mb.ID
-			break
-		}
-	}
-
-	if sentMailboxID.IsEmpty() {
-		// Create a Sent mailbox for this user
-		localPart := fromMailbox.GetLocalPart()
-		sentAddr := localPart + "+sent@" + msgDomain
-		created, createErr := h.mailboxService.CreateMailbox(c.Request().Context(), &service.CreateMailboxInput{
-			UserID:  userID,
-			Name:    "Sent",
-			Address: sentAddr,
-		})
-		if createErr != nil {
-			return api.InternalServerError(c, "failed to create Sent mailbox")
-		}
-		sentMailboxID = created.ID
-	}
-
-	// Store the message in the Sent mailbox
-	storeResult, err := h.messageService.StoreMessage(c.Request().Context(), &service.StoreMessageInput{
-		RawData:            forSent,
-		TargetMailboxID:    sentMailboxID,
-		SkipDuplicateCheck: true,
-	})
-	if err != nil {
-		return api.InternalServerError(c, "failed to store sent message")
-	}
-
-	// Mark it as read immediately (sent messages are not unread)
-	_ = h.messageService.MarkAsRead(c.Request().Context(), storeResult.Message.ID)
-
-	// Collect all relay recipients (To + Cc + Bcc)
+	// Collect all recipients (To + Cc + Bcc)
 	allRecipients := make([]string, 0, len(input.To)+len(input.Cc)+len(input.Bcc))
 	allRecipients = append(allRecipients, input.To...)
 	allRecipients = append(allRecipients, input.Cc...)
 	allRecipients = append(allRecipients, input.Bcc...)
 
-	// Relay the message
-	result := h.relayService.Relay(c.Request().Context(), fromMailbox.Address, allRecipients, forRelay)
-	if !result.Success {
-		// Roll back: delete the stored sent message so the user sees no phantom
-		_ = h.messageService.DeleteMessageForUser(c.Request().Context(), storeResult.Message.ID, userID)
-		return api.InternalServerError(c, "relay failed: "+result.Error.Error())
+	result, err := h.deliverMessage(c.Request().Context(), fromMailbox.Address, allRecipients, forSent, forRelay, userID, fromMailbox.Address)
+	if err != nil {
+		return api.InternalServerError(c, err.Error())
 	}
 
+	delivered := append(result.InternalDelivered, result.ExternalDelivered...)
 	return api.OK(c, &SendMessageResponse{
-		MessageID:  storeResult.Message.ID.String(),
-		Recipients: result.Recipients,
+		MessageID:  result.SentMessageID,
+		Recipients: delivered,
 	})
 }
 
@@ -1428,13 +1519,10 @@ func (h *MessageHandler) UpdateDraft(c echo.Context) error {
 	return api.OK(c, msg)
 }
 
-// SendDraft sends an existing draft message via the relay service.
+// SendDraft sends an existing draft message.
 func (h *MessageHandler) SendDraft(c echo.Context) error {
 	if h.repo == nil {
 		return api.InternalServerError(c, "repository not configured")
-	}
-	if h.relayService == nil || !h.relayService.IsEnabled() {
-		return api.ServiceUnavailable(c, "relay service is not enabled")
 	}
 
 	userID := middleware.GetUserID(c)
@@ -1485,10 +1573,7 @@ func (h *MessageHandler) SendDraft(c echo.Context) error {
 	}
 
 	fromAddr := msg.From.Address
-	msgDomain := ""
-	if idx := strings.LastIndex(fromAddr, "@"); idx >= 0 {
-		msgDomain = fromAddr[idx+1:]
-	}
+	msgDomain := extractDomain(fromAddr)
 
 	toStrs := make([]string, len(msg.To))
 	for i, addr := range msg.To {
@@ -1516,65 +1601,23 @@ func (h *MessageHandler) SendDraft(c echo.Context) error {
 	}
 	forSent, forRelay := parser.BuildRawMessage(opts)
 
-	// Find or create Sent mailbox
-	mailboxes, listErr := h.mailboxService.ListMailboxes(c.Request().Context(), userID, nil)
-	if listErr != nil {
-		return api.InternalServerError(c, "failed to list mailboxes")
-	}
-
-	var sentMailboxID domain.ID
-	for _, mb := range mailboxes.Items {
-		if strings.EqualFold(mb.Name, "Sent") {
-			sentMailboxID = mb.ID
-			break
-		}
-	}
-
-	if sentMailboxID.IsEmpty() {
-		localPart := fromAddr
-		if idx := strings.LastIndex(fromAddr, "@"); idx >= 0 {
-			localPart = fromAddr[:idx]
-		}
-		sentAddr := localPart + "+sent@" + msgDomain
-		created, createErr := h.mailboxService.CreateMailbox(c.Request().Context(), &service.CreateMailboxInput{
-			UserID:  userID,
-			Name:    "Sent",
-			Address: sentAddr,
-		})
-		if createErr != nil {
-			return api.InternalServerError(c, "failed to create Sent mailbox")
-		}
-		sentMailboxID = created.ID
-	}
-
-	storeResult, storeErr := h.messageService.StoreMessage(c.Request().Context(), &service.StoreMessageInput{
-		RawData:            forSent,
-		TargetMailboxID:    sentMailboxID,
-		SkipDuplicateCheck: true,
-	})
-	if storeErr != nil {
-		return api.InternalServerError(c, "failed to store sent message")
-	}
-
-	_ = h.messageService.MarkAsRead(c.Request().Context(), storeResult.Message.ID)
-
 	allRecipients := make([]string, 0, len(toStrs)+len(ccStrs)+len(bccStrs))
 	allRecipients = append(allRecipients, toStrs...)
 	allRecipients = append(allRecipients, ccStrs...)
 	allRecipients = append(allRecipients, bccStrs...)
 
-	result := h.relayService.Relay(c.Request().Context(), fromAddr, allRecipients, forRelay)
-	if !result.Success {
-		_ = h.messageService.DeleteMessageForUser(c.Request().Context(), storeResult.Message.ID, userID)
-		return api.InternalServerError(c, "relay failed: "+result.Error.Error())
+	result, err := h.deliverMessage(c.Request().Context(), fromAddr, allRecipients, forSent, forRelay, userID, fromAddr)
+	if err != nil {
+		return api.InternalServerError(c, err.Error())
 	}
 
 	// Delete the draft on successful send
 	_ = h.messageService.DeleteMessageForUser(c.Request().Context(), draftID, userID)
 
+	delivered := append(result.InternalDelivered, result.ExternalDelivered...)
 	return api.OK(c, &SendMessageResponse{
-		MessageID:  storeResult.Message.ID.String(),
-		Recipients: result.Recipients,
+		MessageID:  result.SentMessageID,
+		Recipients: delivered,
 	})
 }
 

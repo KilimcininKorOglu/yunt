@@ -318,7 +318,7 @@ func (s *Session) Rcpt(to string, opts *smtp.RcptOptions) error {
 			atIdx := strings.LastIndex(to, "@")
 			if atIdx != -1 {
 				recipientDomain := to[atIdx+1:]
-				if !strings.EqualFold(recipientDomain, s.backend.server.config.Domain) {
+				if !s.backend.server.config.IsLocalDomain(recipientDomain) {
 					metrics.SMTPMessagesRejected.WithLabelValues("relay_denied").Inc()
 					return &smtp.SMTPError{
 						Code:         550,

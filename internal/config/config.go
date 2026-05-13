@@ -2,7 +2,10 @@
 // It supports YAML configuration files with environment variable overrides.
 package config
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Config represents the complete configuration for the Yunt mail server.
 type Config struct {
@@ -42,8 +45,43 @@ type ServerConfig struct {
 	// Domain is the primary mail domain.
 	Domain string `yaml:"domain" env:"YUNT_SERVER_DOMAIN"`
 
+	// LocalDomains lists all domains considered local for internal delivery.
+	// Messages to these domains are delivered directly without relay.
+	// The primary Domain is always included automatically.
+	LocalDomains []string `yaml:"localDomains" env:"YUNT_SERVER_LOCAL_DOMAINS"`
+
 	// GracefulTimeout is the duration to wait for graceful shutdown.
 	GracefulTimeout time.Duration `yaml:"gracefulTimeout" env:"YUNT_SERVER_GRACEFUL_TIMEOUT"`
+}
+
+// IsLocalDomain checks if the given domain is in the local domains list.
+func (c *ServerConfig) IsLocalDomain(domain string) bool {
+	domain = strings.ToLower(domain)
+	for _, d := range c.LocalDomains {
+		if strings.ToLower(d) == domain {
+			return true
+		}
+	}
+	return false
+}
+
+// NormalizeLocalDomains ensures the primary Domain is always in LocalDomains.
+func (c *ServerConfig) NormalizeLocalDomains() {
+	if c.Domain != "" {
+		found := false
+		for _, d := range c.LocalDomains {
+			if strings.EqualFold(d, c.Domain) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			c.LocalDomains = append(c.LocalDomains, c.Domain)
+		}
+	}
+	if len(c.LocalDomains) == 0 {
+		c.LocalDomains = []string{"localhost"}
+	}
 }
 
 // SMTPConfig contains SMTP server configuration.

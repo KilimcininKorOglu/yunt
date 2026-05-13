@@ -276,7 +276,7 @@
 	<div class="toolbar-left">
 		<button type="button" class="hotmail-btn toolbar-btn-primary"
 			onclick={handleSend}
-			disabled={sending || !relayEnabled}>
+			disabled={sending}>
 			{sending ? 'Sending...' : 'Send'}
 		</button>
 		<span class="toolbar-sep">|</span>
@@ -291,7 +291,7 @@
 
 {#if !relayEnabled}
 	<div class="alert alert-info" style="margin:8px 10px;">
-		Mail sending requires relay configuration. Configure SMTP relay in server settings to enable sending.
+		External delivery requires relay configuration. Internal delivery (local domains) is always available.
 	</div>
 {/if}
 

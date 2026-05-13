@@ -37,6 +37,8 @@ func (e ValidationErrors) Error() string {
 
 // Validate validates the configuration and returns any errors.
 func Validate(cfg *Config) error {
+	cfg.Server.NormalizeLocalDomains()
+
 	var errs ValidationErrors
 
 	errs = append(errs, validateServer(&cfg.Server)...)
