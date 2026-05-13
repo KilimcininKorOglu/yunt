@@ -1,50 +1,42 @@
 # Yunt - Development Mail Server
 
-Yunt is a lightweight, powerful mail server written in Go, designed for developers and test environments. The name comes from the Gokturk Turkish word for "horse" - just as mounted couriers carried letters, Yunt safely delivers your emails.
+Yunt is a lightweight, powerful mail server written in Go, designed for developers and test environments. The name comes from the Gokturk Turkish word for "horse" -- just as mounted couriers carried letters, Yunt safely delivers your emails.
 
-Point your application's SMTP settings to `localhost:1025` and every outgoing email is captured by Yunt instead of reaching real users. Browse captured emails through the Web UI at `localhost:8025`, connect with any IMAP client like Thunderbird on `localhost:1143`, or access everything programmatically via the REST API. Think of it as a safer, more feature-rich alternative to MailHog or Mailpit, with full IMAP support, multiple database backends, and production-grade observability.
+Point your application's SMTP settings to `localhost:1025` and every outgoing email is captured by Yunt instead of reaching real users. Browse captured emails through the Web UI at `localhost:8025`, compose and send emails internally between users, connect with any IMAP client like Thunderbird on `localhost:1143`, or access everything programmatically via the REST API.
 
 ## Features
 
-| Feature               | Description                                                 |
-|-----------------------|-------------------------------------------------------------|
-| SMTP Server           | Mail capture and relay support                              |
-| IMAP Server           | Mail client support (Thunderbird, etc.)                     |
-| Web UI                | MSN Hotmail 2006 nostalgic interface                        |
-| REST API              | Full-featured API for integration                           |
-| Multi-user Support    | Team collaboration with isolated mailboxes                  |
-| Multi-database        | SQLite, PostgreSQL, MySQL, MongoDB                          |
-| Prometheus Metrics    | /metrics endpoint with Grafana dashboard                    |
-| Circuit Breaker       | Automatic database failure recovery                         |
-| Storage Backend       | Pluggable attachment storage (filesystem, S3)               |
-| Real-time Updates     | Server-Sent Events for instant notifications                |
+| Feature            | Description                                                         |
+|--------------------|---------------------------------------------------------------------|
+| SMTP Server        | RFC 5321 compliant mail capture with relay support                  |
+| IMAP Server        | RFC 3501 compliant client access (Thunderbird, Apple Mail, etc.)    |
+| Web UI             | MSN Hotmail 2006 nostalgic interface with compose, drafts, contacts |
+| Internal Delivery  | Send mail between users without external relay                      |
+| External Relay     | Forward mail to external SMTP servers when configured               |
+| REST API           | Full-featured API for integration and automation                    |
+| Draft System       | Save, edit, attach files, and send drafts                           |
+| Email Signatures   | Per-user signatures auto-appended to outgoing mail                  |
+| Multi-user         | Role-based access (admin, user, viewer) with isolated mailboxes     |
+| Multi-database     | SQLite, PostgreSQL, MySQL, MongoDB                                  |
+| Real-time Updates  | Server-Sent Events for instant notifications                        |
+| Prometheus Metrics | /metrics endpoint with Grafana dashboard                            |
+| Attachment Storage | Pluggable storage backends (database, filesystem, S3)               |
+| Circuit Breaker    | Automatic database failure recovery                                 |
 
 ## Quick Start
 
 ### Using Docker (Recommended)
 
-The fastest way to get started is using Docker. Multi-platform images are available for both AMD64 and ARM64 architectures.
-
 ```bash
-# Pull the latest image
-docker pull ghcr.io/yunt/yunt:latest
-
-# Run with default settings
-docker run -d \
-  -p 1025:1025 \
-  -p 1143:1143 \
-  -p 8025:8025 \
-  ghcr.io/yunt/yunt:latest
-
-# Run with persistent data
 docker run -d \
   -p 1025:1025 \
   -p 1143:1143 \
   -p 8025:8025 \
   -v yunt-data:/var/lib/yunt \
-  -v ./yunt.yaml:/etc/yunt/yunt.yaml:ro \
-  ghcr.io/yunt/yunt:latest
+  ghcr.io/kilimcininkorglu/yunt:latest
 ```
+
+Open `http://localhost:8025` in your browser. Default credentials: `admin` / `admin123`.
 
 ### Using Docker Compose
 
@@ -62,143 +54,203 @@ docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d
 docker compose -f docker-compose.yml -f docker-compose.mongodb.yml up -d
 ```
 
-Each override file adds the database service and mounts the appropriate config YAML.
-
 ### Building from Source
 
-#### Prerequisites
-
-- Go 1.25 or higher
-- Make (optional, for build commands)
-
-#### Build
+Requires Go 1.25+ and Node.js 22+ (for Web UI).
 
 ```bash
-# Build the binary
-make build
+# Build everything (Web UI + Go binary)
+make build-full
 
-# Or using Go directly
-go build -o bin/yunt ./cmd/yunt
-```
-
-#### Run
-
-```bash
-# Start the server with default configuration
+# Start the server
 ./bin/yunt serve
 
-# Start with a custom configuration file
-./bin/yunt serve --config /path/to/yunt.yaml
+# Or with custom config
+./bin/yunt serve --config configs/yunt.example.yaml
 ```
 
 ## Default Ports
 
-| Service | Port  |
-|---------|-------|
-| SMTP    | 1025  |
-| IMAP    | 1143  |
-| Web UI  | 8025  |
+| Service | Port | Protocol |
+|---------|------|----------|
+| SMTP    | 1025 | TCP      |
+| IMAP    | 1143 | TCP      |
+| Web UI  | 8025 | HTTP     |
+
+## Web UI
+
+The Web UI uses a nostalgic MSN Hotmail 2006 design with full email functionality:
+
+- **Inbox** -- View, search, filter, sort, star, and manage received emails
+- **Compose** -- Send emails to internal users (and external via relay), with rich text editor, file attachments, and auto-save drafts
+- **Message View** -- Read emails with HTML rendering, download attachments, reply, forward
+- **Contacts** -- Auto-collected sender addresses from received emails
+- **Calendar** -- Monthly calendar view
+- **Settings** -- Profile, email signature, notification preferences, mailbox management, webhook configuration
+- **User Management** -- Admin panel for creating and managing users (admin only)
+
+## Mail Delivery
+
+### Internal Delivery
+
+Yunt supports internal mail delivery without any external relay configuration. Messages sent to addresses on local domains are delivered directly to the recipient's mailbox:
+
+```
+admin@localhost  -->  test@localhost     (delivered internally)
+admin@localhost  -->  user@localhost     (delivered internally)
+```
+
+Local domains include `localhost` by default. Additional domains can be configured:
+
+```yaml
+server:
+  domain: mail.example.com
+  localDomains:
+    - localhost
+    - mail.example.com
+    - dev.example.com
+```
+
+### External Relay
+
+For sending to external addresses, configure an SMTP relay:
+
+```yaml
+smtp:
+  allowRelay: true
+  relayHost: smtp.gmail.com
+  relayPort: 587
+  relayUsername: your-email@gmail.com
+  relayPassword: your-app-password
+```
+
+Mixed recipients are supported -- internal addresses are delivered directly, external addresses go through the relay.
+
+## REST API
+
+The API is available at `http://localhost:8025/api/v1/`. Authentication uses JWT tokens.
+
+### Key Endpoints
+
+| Method | Endpoint                          | Description                |
+|--------|-----------------------------------|----------------------------|
+| POST   | `/api/v1/auth/login`              | Authenticate and get token |
+| GET    | `/api/v1/messages`                | List messages              |
+| GET    | `/api/v1/messages/:id`            | Get message details        |
+| POST   | `/api/v1/messages/send`           | Send a message             |
+| POST   | `/api/v1/messages/draft`          | Save a draft               |
+| PUT    | `/api/v1/messages/draft/:id`      | Update a draft             |
+| POST   | `/api/v1/messages/draft/:id/send` | Send a draft               |
+| GET    | `/api/v1/mailboxes`               | List mailboxes             |
+| GET    | `/api/v1/stats`                   | Server statistics          |
+| GET    | `/api/v1/users`                   | List users (admin)         |
+| GET    | `/api/v1/events/stream`           | SSE event stream           |
+
+### Sending a Message
+
+```bash
+# Login
+TOKEN=$(curl -s -X POST http://localhost:8025/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin123"}' \
+  | jq -r '.data.tokens.accessToken')
+
+# Send to internal recipient
+curl -X POST http://localhost:8025/api/v1/messages/send \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "fromMailboxId": "MAILBOX_ID",
+    "to": ["test@localhost"],
+    "subject": "Hello",
+    "textBody": "This is a test message."
+  }'
+```
 
 ## Configuration
 
-Yunt can be configured via YAML file or environment variables. See `configs/yunt.example.yaml` for all available options.
-
-Environment variables use the `YUNT_` prefix. For example:
-- `YUNT_SMTP_PORT=2025`
-- `YUNT_DATABASE_DRIVER=postgres`
-
-## Project Structure
-
-```
-yunt/
-├── cmd/yunt/           # Application entry point
-├── internal/
-│   ├── config/         # Configuration management
-│   ├── domain/         # Domain models
-│   ├── repository/     # Data access layer
-│   ├── service/        # Business logic
-│   ├── smtp/           # SMTP server
-│   ├── imap/           # IMAP server
-│   ├── api/            # REST API and Web UI
-│   └── parser/         # MIME parser
-├── web/                # SvelteKit Web UI source
-├── webui/              # Embedded Web UI (go:embed)
-├── configs/            # Configuration examples + Grafana dashboard
-├── scripts/            # Build and utility scripts
-├── go.mod              # Go module definition
-└── Makefile            # Build automation
-```
-
-## Docker
-
-### Available Images
-
-Multi-platform Docker images are automatically built and published to GitHub Container Registry (ghcr.io) for both AMD64 and ARM64 architectures.
-
-| Tag            | Description                                    |
-|----------------|------------------------------------------------|
-| `latest`       | Latest stable release from main branch         |
-| `v1.2.3`       | Specific version release                       |
-| `1.2`          | Major.minor version (tracks latest patch)      |
-| `sha-abc1234`  | Specific commit SHA                            |
-
-### Building Multi-Platform Images Locally
-
-```bash
-# Build for local testing (single platform)
-./scripts/docker-build.sh -l
-
-# Build for specific platform
-./scripts/docker-build.sh -p linux/arm64 -l
-
-# Build and push to registry
-./scripts/docker-build.sh -t v1.0.0 -P
-
-# Build with registry cache
-./scripts/docker-build.sh -t latest -P -c
-```
+Yunt is configured via YAML file or environment variables with the `YUNT_` prefix.
 
 ### Environment Variables
 
-| Variable               | Default                    | Description              |
-|------------------------|----------------------------|--------------------------|
-| `YUNT_DATABASE_DSN`    | `/var/lib/yunt/yunt.db`    | Database connection      |
-| `YUNT_LOGGING_OUTPUT`  | `stdout`                   | Log output destination   |
-| `YUNT_LOGGING_FORMAT`  | `json`                     | Log format (json/text)   |
-| `YUNT_SMTP_PORT`       | `1025`                     | SMTP server port         |
-| `YUNT_IMAP_PORT`       | `1143`                     | IMAP server port         |
-| `YUNT_API_PORT`        | `8025`                     | Web UI/API port          |
+| Variable                     | Default     | Description                   |
+|------------------------------|-------------|-------------------------------|
+| `YUNT_SERVER_DOMAIN`         | `localhost` | Primary mail domain           |
+| `YUNT_DATABASE_DRIVER`       | `sqlite`    | sqlite/postgres/mysql/mongodb |
+| `YUNT_DATABASE_DSN`          | `yunt.db`   | Database connection string    |
+| `YUNT_SMTP_PORT`             | `1025`      | SMTP server port              |
+| `YUNT_IMAP_PORT`             | `1143`      | IMAP server port              |
+| `YUNT_API_PORT`              | `8025`      | Web UI and API port           |
+| `YUNT_SMTP_ALLOW_RELAY`      | `false`     | Enable external relay         |
+| `YUNT_API_ENABLE_RATE_LIMIT` | `false`     | Enable API rate limiting      |
+
+See `configs/yunt.example.yaml` for all available options.
+
+## IMAP Client Setup
+
+Connect any IMAP client (Thunderbird, Apple Mail, Outlook) with these settings:
+
+| Setting  | Value     |
+|----------|-----------|
+| Server   | localhost |
+| Port     | 1143      |
+| Security | None      |
+| Username | admin     |
+| Password | admin123  |
+
+## Docker
+
+### Images
+
+Multi-platform Docker images (AMD64/ARM64) are published to GitHub Container Registry.
+
+| Tag           | Description           |
+|---------------|-----------------------|
+| `latest`      | Latest stable release |
+| `v1.2.3`      | Specific version      |
+| `sha-abc1234` | Specific commit       |
 
 ### Volumes
 
-| Path               | Description                             |
-|--------------------|-----------------------------------------|
-| `/var/lib/yunt`    | Data directory (database, attachments)  |
-| `/etc/yunt`        | Configuration files                     |
+| Path            | Description                            |
+|-----------------|----------------------------------------|
+| `/var/lib/yunt` | Data directory (database, attachments) |
 
 ## Development
 
 ```bash
-# Run tests
-make test
-
-# Run linter
-make lint
-
-# Format code
-make fmt
-
-# Build Web UI + Go binary
-make build-full
-
-# Web UI development
-make web-install    # Install dependencies
-make web-dev        # Start Vite dev server (port 3000)
-make web-build      # Production build
+make test           # Run all tests
+make lint           # Run linter
+make fmt            # Format code
+make build-full     # Build Web UI + Go binary
+make web-dev        # Web UI dev server (port 3000)
 make web-check      # Type checking
+make clean          # Clean build artifacts
+```
 
-# Clean build artifacts
-make clean
+### Running a Single Test
+
+```bash
+go test -v -run TestFunctionName ./internal/package/...
+```
+
+## Architecture
+
+```
+cmd/yunt/           CLI entry point (Cobra: serve, migrate, user, health, version)
+internal/
+  config/           Configuration (Viper: YAML + env vars)
+  domain/           Pure domain models
+  repository/       Data access (4 database drivers)
+  service/          Business logic
+  api/              REST API (Echo v4) + Web UI
+  smtp/             SMTP server (go-smtp)
+  imap/             IMAP server (go-imap/v2)
+  parser/           MIME parser and message builder
+  storage/          Attachment storage backends
+web/                SvelteKit 2 + Svelte 5 (Web UI source)
+webui/              Embedded static files (go:embed)
+configs/            Configuration examples + Grafana dashboard
 ```
 
 ## License
