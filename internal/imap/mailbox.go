@@ -187,11 +187,18 @@ func (s *MailboxStatus) ToIMAPStatusData(options *imap.StatusOptions) *imap.Stat
 }
 
 // generateUIDValidity generates a UID validity value for a mailbox.
-// This is based on the mailbox creation time for consistency.
+// Uses a hash of the mailbox ID to avoid collisions between mailboxes
+// created in the same second (RFC 3501 §2.3.1.1).
 func generateUIDValidity(mailbox *domain.Mailbox) uint32 {
-	// Use the lower 32 bits of the creation timestamp as UID validity
-	// This ensures the value is stable but changes if the mailbox is recreated
-	return uint32(mailbox.CreatedAt.Unix() & 0xFFFFFFFF)
+	ts := uint32(mailbox.CreatedAt.Unix() & 0xFFFFFFFF)
+	if ts == 0 {
+		ts = 1
+	}
+	idHash := uint32(0)
+	for _, b := range []byte(mailbox.ID) {
+		idHash = idHash*31 + uint32(b)
+	}
+	return ts ^ (idHash & 0xFFFF)
 }
 
 // SelectData contains the result of selecting a mailbox.
@@ -238,7 +245,7 @@ func NewSelectData(mailbox *domain.Mailbox) *SelectData {
 		},
 		NumMessages: uint32(mailbox.MessageCount),
 		NumRecent:   0,
-		FirstUnseen: 1, // Simplified: first message is unseen if there are unseen messages
+		FirstUnseen: 0,
 		UIDNext:     imap.UID(mailbox.UIDNext),
 		UIDValidity: generateUIDValidity(mailbox),
 	}
@@ -246,13 +253,18 @@ func NewSelectData(mailbox *domain.Mailbox) *SelectData {
 
 // ToIMAPSelectData converts SelectData to IMAP SelectData.
 func (s *SelectData) ToIMAPSelectData() *imap.SelectData {
-	return &imap.SelectData{
+	data := &imap.SelectData{
 		Flags:          s.Flags,
 		PermanentFlags: s.PermanentFlags,
 		NumMessages:    s.NumMessages,
+		NumRecent:      s.NumRecent,
 		UIDNext:        s.UIDNext,
 		UIDValidity:    s.UIDValidity,
 	}
+	if s.FirstUnseen > 0 {
+		data.FirstUnseenSeqNum = s.FirstUnseen
+	}
+	return data
 }
 
 // MailboxPath represents a parsed mailbox path with hierarchy information.
