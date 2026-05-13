@@ -198,6 +198,44 @@ func (s *Seeder) createDefaultMailboxes(ctx context.Context, userID domain.ID, c
 		return fmt.Errorf("failed to create inbox mailbox: %w", err)
 	}
 
+	// Create Sent mailbox
+	sent := &domain.Mailbox{
+		ID:          domain.ID(uuid.New().String()),
+		UserID:      userID,
+		Name:        "Sent",
+		Address:     fmt.Sprintf("%s.sent@.internal", config.AdminUsername),
+		Description: "Sent messages",
+		IsDefault:   false,
+		IsCatchAll:  false,
+		Type:        domain.MailboxTypeSystem,
+		UIDNext:     1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := s.repo.Mailboxes().Create(ctx, sent); err != nil {
+		return fmt.Errorf("failed to create sent mailbox: %w", err)
+	}
+
+	// Create Drafts mailbox
+	drafts := &domain.Mailbox{
+		ID:          domain.ID(uuid.New().String()),
+		UserID:      userID,
+		Name:        "Drafts",
+		Address:     fmt.Sprintf("%s.drafts@.internal", config.AdminUsername),
+		Description: "Draft messages",
+		IsDefault:   false,
+		IsCatchAll:  false,
+		Type:        domain.MailboxTypeSystem,
+		UIDNext:     1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := s.repo.Mailboxes().Create(ctx, drafts); err != nil {
+		return fmt.Errorf("failed to create drafts mailbox: %w", err)
+	}
+
 	// Create catch-all mailbox if configured
 	if config.CreateCatchAll && config.CatchAllAddress != "" {
 		catchAll := &domain.Mailbox{
@@ -291,6 +329,46 @@ func (s *Seeder) CreateUserWithMailbox(ctx context.Context, username, email, pas
 		// Rollback user creation if mailbox creation fails
 		s.repo.Users().Delete(ctx, userID)
 		return nil, nil, fmt.Errorf("failed to create mailbox: %w", err)
+	}
+
+	// Create Sent mailbox
+	sentMailbox := &domain.Mailbox{
+		ID:          domain.ID(uuid.New().String()),
+		UserID:      userID,
+		Name:        "Sent",
+		Address:     fmt.Sprintf("%s.sent@.internal", username),
+		Description: "Sent messages",
+		IsDefault:   false,
+		IsCatchAll:  false,
+		Type:        domain.MailboxTypeSystem,
+		UIDNext:     1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := s.repo.Mailboxes().Create(ctx, sentMailbox); err != nil {
+		_ = s.repo.Users().Delete(ctx, userID)
+		return nil, nil, fmt.Errorf("failed to create sent mailbox: %w", err)
+	}
+
+	// Create Drafts mailbox
+	draftsMailbox := &domain.Mailbox{
+		ID:          domain.ID(uuid.New().String()),
+		UserID:      userID,
+		Name:        "Drafts",
+		Address:     fmt.Sprintf("%s.drafts@.internal", username),
+		Description: "Draft messages",
+		IsDefault:   false,
+		IsCatchAll:  false,
+		Type:        domain.MailboxTypeSystem,
+		UIDNext:     1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := s.repo.Mailboxes().Create(ctx, draftsMailbox); err != nil {
+		_ = s.repo.Users().Delete(ctx, userID)
+		return nil, nil, fmt.Errorf("failed to create drafts mailbox: %w", err)
 	}
 
 	return user, mailbox, nil
