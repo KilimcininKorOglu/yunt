@@ -7,12 +7,14 @@
 	import WebhookList from '$components/WebhookList.svelte';
 	import WebhookForm from '$components/WebhookForm.svelte';
 	import MailboxSettings from '$components/MailboxSettings.svelte';
+	import { getUsersApi } from '$lib/api';
 	import type { Webhook } from '$lib/api';
 
-	type Tab = 'general' | 'notifications' | 'webhooks' | 'mailboxes';
+	type Tab = 'general' | 'notifications' | 'webhooks' | 'mailboxes' | 'signature';
 
 	const tabs: { id: Tab; label: string }[] = [
 		{ id: 'general', label: 'General' },
+		{ id: 'signature', label: 'Signature' },
 		{ id: 'webhooks', label: 'Webhooks' },
 		{ id: 'mailboxes', label: 'Mailboxes' }
 	];
@@ -44,6 +46,25 @@
 	function closeWebhookForm(): void {
 		showWebhookForm = false;
 		editingWebhook = undefined;
+	}
+
+	let signature = $state(authStore.user?.signature ?? '');
+	let savingSignature = $state(false);
+	let signatureSuccess = $state<string | null>(null);
+
+	async function handleSaveSignature(): Promise<void> {
+		savingSignature = true;
+		signatureSuccess = null;
+		try {
+			const usersApi = getUsersApi();
+			await usersApi.updateMyProfile({ signature } as Record<string, unknown>);
+			signatureSuccess = 'Signature saved.';
+			setTimeout(() => { signatureSuccess = null; }, 3000);
+		} catch {
+			signatureSuccess = null;
+		} finally {
+			savingSignature = false;
+		}
 	}
 
 	function handleWebhookSuccess(): void {
@@ -166,6 +187,38 @@
 						Sign Out
 					</button>
 				</div>
+			{:else if activeTab === 'signature'}
+				<h2>Email Signature</h2>
+				<p style="color:var(--text-muted);font-size:11px;margin-bottom:8px;">
+					Your signature will be automatically appended to outgoing messages.
+				</p>
+				{#if signatureSuccess}
+					<div class="alert alert-success" style="margin-bottom:8px;">{signatureSuccess}</div>
+				{/if}
+				<div class="info-box">
+					<div class="info-box-header">Signature</div>
+					<div class="info-box-body">
+						<textarea
+							class="hotmail-input"
+							style="width:100%;min-height:120px;font-family:Verdana,sans-serif;font-size:11px;"
+							bind:value={signature}
+							placeholder="Type your email signature here..."
+						></textarea>
+						<div style="margin-top:8px;">
+							<button type="button" class="hotmail-btn toolbar-btn-primary" onclick={handleSaveSignature} disabled={savingSignature}>
+								{savingSignature ? 'Saving...' : 'Save Signature'}
+							</button>
+						</div>
+					</div>
+				</div>
+
+				{#if signature}
+					<div class="info-box" style="margin-top:12px;">
+						<div class="info-box-header">Preview</div>
+						<div class="info-box-body" style="font-family:Verdana,sans-serif;font-size:11px;white-space:pre-wrap;">---
+{signature}</div>
+					</div>
+				{/if}
 			{:else if activeTab === 'webhooks'}
 				<h2>Webhooks</h2>
 				{#if !showWebhookForm}
