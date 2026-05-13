@@ -138,45 +138,26 @@ func (h *FetchHandler) fetchMessage(ctx context.Context, w *imapserver.FetchWrit
 	}
 
 	// Handle BODY sections
+	shouldMarkRead := false
 	for _, section := range options.BodySection {
 		if err := h.fetchBodySection(ctx, respWriter, msg, section); err != nil {
 			return err
 		}
-
-		// Mark message as read if not PEEK and specifier is not header-only
 		if !section.Peek && section.Specifier != imap.PartSpecifierHeader &&
 			section.Specifier != imap.PartSpecifierMIME {
-			h.markAsRead(ctx, msg)
+			shouldMarkRead = true
 		}
+	}
+	if shouldMarkRead {
+		h.markAsRead(ctx, msg)
 	}
 
 	return nil
 }
 
-// getMessageFlags returns the IMAP flags for a message.
+// getMessageFlags returns the IMAP flags for a message using the canonical FlagSet.
 func (h *FetchHandler) getMessageFlags(msg *domain.Message) []imap.Flag {
-	var flags []imap.Flag
-
-	// \Seen flag
-	if msg.Status == domain.MessageRead {
-		flags = append(flags, imap.FlagSeen)
-	}
-
-	// \Flagged (starred)
-	if msg.IsStarred {
-		flags = append(flags, imap.FlagFlagged)
-	}
-
-	// \Answered - check if In-Reply-To or References exist
-	// This is a simplified check; in reality, you'd track this explicitly
-	if msg.InReplyTo != "" {
-		flags = append(flags, imap.FlagAnswered)
-	}
-
-	// \Draft - check if in Drafts mailbox
-	// For now, we don't have draft status
-
-	return flags
+	return NewFlagSetFromMessage(msg).ToSlice()
 }
 
 // buildEnvelope builds the IMAP envelope structure for a message.

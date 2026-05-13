@@ -482,24 +482,9 @@ func (m *MessageMatcher) matchHeader(msg *domain.Message, crit HeaderCriterion) 
 	return containsIgnoreCase(headerValue, crit.Value)
 }
 
-// getMessageFlags returns the IMAP flags for a message.
+// getMessageFlags returns the IMAP flags for a message using the canonical FlagSet.
 func (m *MessageMatcher) getMessageFlags(msg *domain.Message) []imap.Flag {
-	var flags []imap.Flag
-
-	if msg.Status == domain.MessageRead {
-		flags = append(flags, imap.FlagSeen)
-	}
-	if msg.IsStarred {
-		flags = append(flags, imap.FlagFlagged)
-	}
-	if msg.InReplyTo != "" {
-		flags = append(flags, imap.FlagAnswered)
-	}
-	if msg.IsSpam {
-		flags = append(flags, imap.FlagJunk)
-	}
-
-	return flags
+	return NewFlagSetFromMessage(msg).ToSlice()
 }
 
 // containsIgnoreCase checks if s contains substr (case-insensitive).

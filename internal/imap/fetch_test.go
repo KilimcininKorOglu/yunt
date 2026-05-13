@@ -348,9 +348,9 @@ func TestFetchHandler_GetMessageFlags(t *testing.T) {
 			hasFlag:  true,
 		},
 		{
-			name: "message with InReplyTo has Answered flag",
+			name: "message with IsAnswered has Answered flag",
 			msg: &domain.Message{
-				InReplyTo: "some-message-id@example.com",
+				IsAnswered: true,
 			},
 			wantFlag: imap.FlagAnswered,
 			hasFlag:  true,
