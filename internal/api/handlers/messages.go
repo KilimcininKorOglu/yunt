@@ -3,11 +3,13 @@ package handlers
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	"yunt/internal/api"
@@ -26,6 +28,7 @@ type MessageHandler struct {
 	notifyService  *service.NotifyService
 	relayService   *service.RelayService
 	userService    *service.UserService
+	repo           repository.Repository
 }
 
 // NewMessageHandler creates a new MessageHandler.
@@ -59,6 +62,12 @@ func (h *MessageHandler) WithUserService(us *service.UserService) *MessageHandle
 	return h
 }
 
+// WithRepo sets the repository for direct data access operations (e.g., draft management).
+func (h *MessageHandler) WithRepo(r repository.Repository) *MessageHandler {
+	h.repo = r
+	return h
+}
+
 // RegisterRoutes registers the message routes on the given group.
 func (h *MessageHandler) RegisterRoutes(g *echo.Group) {
 	messages := g.Group("/messages", middleware.Auth(h.authService))
@@ -89,6 +98,13 @@ func (h *MessageHandler) RegisterRoutes(g *echo.Group) {
 	messages.POST("/bulk/move", h.BulkMove)
 	messages.POST("/bulk/star", h.BulkStar)
 	messages.POST("/bulk/unstar", h.BulkUnstar)
+
+	// Draft operations
+	messages.POST("/draft", h.SaveDraft)
+	messages.PUT("/draft/:id", h.UpdateDraft)
+	messages.POST("/draft/:id/send", h.SendDraft)
+	messages.POST("/draft/:id/attachments", h.UploadDraftAttachment)
+	messages.DELETE("/draft/:id/attachments/:attachmentId", h.DeleteDraftAttachment)
 }
 
 // ListMessages handles requests to list messages with filters.
@@ -1206,6 +1222,460 @@ func (h *MessageHandler) SendMessage(c echo.Context) error {
 		MessageID:  storeResult.Message.ID.String(),
 		Recipients: result.Recipients,
 	})
+}
+
+// DraftInput represents the input for creating or updating a draft message.
+type DraftInput struct {
+	FromMailboxID string   `json:"fromMailboxId" validate:"required"`
+	To            []string `json:"to"`
+	Cc            []string `json:"cc"`
+	Bcc           []string `json:"bcc"`
+	Subject       string   `json:"subject"`
+	TextBody      string   `json:"textBody"`
+	HTMLBody      string   `json:"htmlBody"`
+}
+
+// SaveDraftResponse is the success payload returned by SaveDraft.
+type SaveDraftResponse struct {
+	MessageID string `json:"messageId"`
+}
+
+// AttachmentSummaryResponse represents a brief summary of an uploaded attachment.
+type AttachmentSummaryResponse struct {
+	ID          string `json:"id"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"contentType"`
+	Size        int64  `json:"size"`
+}
+
+// findOrCreateDraftsMailbox finds or creates the Drafts mailbox for a user.
+func (h *MessageHandler) findOrCreateDraftsMailbox(c echo.Context, userID domain.ID, fromMailbox *domain.Mailbox) (domain.ID, error) {
+	ctx := c.Request().Context()
+
+	mailboxes, err := h.mailboxService.ListMailboxes(ctx, userID, nil)
+	if err != nil {
+		return domain.ID(""), err
+	}
+
+	for _, mb := range mailboxes.Items {
+		if strings.EqualFold(mb.Name, "Drafts") {
+			return mb.ID, nil
+		}
+	}
+
+	localPart := fromMailbox.GetLocalPart()
+	draftsAddr := localPart + ".drafts@.internal"
+	created, createErr := h.mailboxService.CreateMailbox(ctx, &service.CreateMailboxInput{
+		UserID:  userID,
+		Name:    "Drafts",
+		Address: draftsAddr,
+	})
+	if createErr != nil {
+		return domain.ID(""), createErr
+	}
+	return created.ID, nil
+}
+
+// SaveDraft saves a new draft message.
+func (h *MessageHandler) SaveDraft(c echo.Context) error {
+	if h.repo == nil {
+		return api.InternalServerError(c, "repository not configured")
+	}
+
+	userID := middleware.GetUserID(c)
+	if userID.IsEmpty() {
+		return api.Unauthorized(c, "authentication required")
+	}
+
+	var input DraftInput
+	if err := c.Bind(&input); err != nil {
+		return api.BadRequest(c, "invalid request body")
+	}
+	if input.FromMailboxID == "" {
+		return api.BadRequest(c, "fromMailboxId is required")
+	}
+
+	fromMailboxID := domain.ID(input.FromMailboxID)
+	fromMailbox, err := h.mailboxService.GetMailbox(c.Request().Context(), fromMailboxID, userID)
+	if err != nil {
+		return api.FromError(c, err)
+	}
+
+	msgDomain := fromMailbox.GetDomain()
+	opts := parser.BuildMessageOpts{
+		From:     fromMailbox.Address,
+		To:       input.To,
+		Cc:       input.Cc,
+		Bcc:      input.Bcc,
+		Subject:  input.Subject,
+		TextBody: input.TextBody,
+		HTMLBody: input.HTMLBody,
+		Domain:   msgDomain,
+	}
+	forSent, _ := parser.BuildRawMessage(opts)
+
+	draftsMailboxID, err := h.findOrCreateDraftsMailbox(c, userID, fromMailbox)
+	if err != nil {
+		return api.InternalServerError(c, "failed to find or create Drafts mailbox")
+	}
+
+	storeResult, err := h.messageService.StoreMessage(c.Request().Context(), &service.StoreMessageInput{
+		RawData:            forSent,
+		TargetMailboxID:    draftsMailboxID,
+		SkipDuplicateCheck: true,
+	})
+	if err != nil {
+		return api.InternalServerError(c, "failed to store draft")
+	}
+
+	_ = h.messageService.MarkAsRead(c.Request().Context(), storeResult.Message.ID)
+
+	if err := h.repo.Messages().MarkAsDraft(c.Request().Context(), storeResult.Message.ID); err != nil {
+		return api.InternalServerError(c, "failed to mark message as draft")
+	}
+
+	return api.Created(c, &SaveDraftResponse{
+		MessageID: storeResult.Message.ID.String(),
+	})
+}
+
+// UpdateDraft replaces the content of an existing draft message.
+func (h *MessageHandler) UpdateDraft(c echo.Context) error {
+	if h.repo == nil {
+		return api.InternalServerError(c, "repository not configured")
+	}
+
+	userID := middleware.GetUserID(c)
+	if userID.IsEmpty() {
+		return api.Unauthorized(c, "authentication required")
+	}
+
+	draftID := domain.ID(c.Param("id"))
+	if draftID.IsEmpty() {
+		return api.BadRequest(c, "draft ID is required")
+	}
+
+	msg, err := h.messageService.GetMessageForUser(c.Request().Context(), draftID, userID)
+	if err != nil {
+		return api.FromError(c, err)
+	}
+	if !msg.IsDraft {
+		return api.BadRequest(c, "message is not a draft")
+	}
+
+	var input DraftInput
+	if err := c.Bind(&input); err != nil {
+		return api.BadRequest(c, "invalid request body")
+	}
+
+	fromAddr := msg.From.Address
+	if input.FromMailboxID != "" {
+		fromMailboxID := domain.ID(input.FromMailboxID)
+		fromMailbox, mbErr := h.mailboxService.GetMailbox(c.Request().Context(), fromMailboxID, userID)
+		if mbErr != nil {
+			return api.FromError(c, mbErr)
+		}
+		fromAddr = fromMailbox.Address
+		msg.From = domain.EmailAddress{Address: fromAddr}
+	}
+
+	msgDomain := msg.MailboxID.String()
+	if idx := strings.LastIndex(fromAddr, "@"); idx >= 0 {
+		msgDomain = fromAddr[idx+1:]
+	}
+
+	toStrs := make([]string, len(input.To))
+	copy(toStrs, input.To)
+	ccStrs := make([]string, len(input.Cc))
+	copy(ccStrs, input.Cc)
+	bccStrs := make([]string, len(input.Bcc))
+	copy(bccStrs, input.Bcc)
+
+	opts := parser.BuildMessageOpts{
+		From:     fromAddr,
+		To:       toStrs,
+		Cc:       ccStrs,
+		Bcc:      bccStrs,
+		Subject:  input.Subject,
+		TextBody: input.TextBody,
+		HTMLBody: input.HTMLBody,
+		Domain:   msgDomain,
+	}
+	newRaw, _ := parser.BuildRawMessage(opts)
+
+	msg.Subject = input.Subject
+	msg.TextBody = input.TextBody
+	msg.HTMLBody = input.HTMLBody
+	msg.RawBody = newRaw
+
+	msg.To = make([]domain.EmailAddress, len(input.To))
+	for i, addr := range input.To {
+		msg.To[i] = domain.EmailAddress{Address: addr}
+	}
+	msg.Cc = make([]domain.EmailAddress, len(input.Cc))
+	for i, addr := range input.Cc {
+		msg.Cc[i] = domain.EmailAddress{Address: addr}
+	}
+	msg.Bcc = make([]domain.EmailAddress, len(input.Bcc))
+	for i, addr := range input.Bcc {
+		msg.Bcc[i] = domain.EmailAddress{Address: addr}
+	}
+
+	if err := h.repo.Messages().Update(c.Request().Context(), msg); err != nil {
+		return api.InternalServerError(c, "failed to update draft")
+	}
+
+	return api.OK(c, msg)
+}
+
+// SendDraft sends an existing draft message via the relay service.
+func (h *MessageHandler) SendDraft(c echo.Context) error {
+	if h.repo == nil {
+		return api.InternalServerError(c, "repository not configured")
+	}
+	if h.relayService == nil || !h.relayService.IsEnabled() {
+		return api.ServiceUnavailable(c, "relay service is not enabled")
+	}
+
+	userID := middleware.GetUserID(c)
+	if userID.IsEmpty() {
+		return api.Unauthorized(c, "authentication required")
+	}
+
+	role := middleware.GetUserRole(c)
+	if role == domain.RoleViewer {
+		return api.Forbidden(c, "viewers cannot send messages")
+	}
+
+	draftID := domain.ID(c.Param("id"))
+	if draftID.IsEmpty() {
+		return api.BadRequest(c, "draft ID is required")
+	}
+
+	msg, err := h.messageService.GetMessageForUser(c.Request().Context(), draftID, userID)
+	if err != nil {
+		return api.FromError(c, err)
+	}
+	if !msg.IsDraft {
+		return api.BadRequest(c, "message is not a draft")
+	}
+
+	// Load attachments for the draft
+	attachments, err := h.repo.Attachments().ListByMessage(c.Request().Context(), draftID)
+	if err != nil {
+		return api.InternalServerError(c, "failed to load draft attachments")
+	}
+
+	attInputs := make([]parser.AttachmentInput, 0, len(attachments))
+	for _, att := range attachments {
+		rc, contentErr := h.repo.Attachments().GetContent(c.Request().Context(), att.ID)
+		if contentErr != nil {
+			continue
+		}
+		data, readErr := io.ReadAll(rc)
+		rc.Close()
+		if readErr != nil {
+			continue
+		}
+		attInputs = append(attInputs, parser.AttachmentInput{
+			Filename:    att.Filename,
+			ContentType: att.ContentType,
+			Data:        data,
+		})
+	}
+
+	fromAddr := msg.From.Address
+	msgDomain := ""
+	if idx := strings.LastIndex(fromAddr, "@"); idx >= 0 {
+		msgDomain = fromAddr[idx+1:]
+	}
+
+	toStrs := make([]string, len(msg.To))
+	for i, addr := range msg.To {
+		toStrs[i] = addr.Address
+	}
+	ccStrs := make([]string, len(msg.Cc))
+	for i, addr := range msg.Cc {
+		ccStrs[i] = addr.Address
+	}
+	bccStrs := make([]string, len(msg.Bcc))
+	for i, addr := range msg.Bcc {
+		bccStrs[i] = addr.Address
+	}
+
+	opts := parser.BuildMessageOpts{
+		From:        fromAddr,
+		To:          toStrs,
+		Cc:          ccStrs,
+		Bcc:         bccStrs,
+		Subject:     msg.Subject,
+		TextBody:    msg.TextBody,
+		HTMLBody:    msg.HTMLBody,
+		Attachments: attInputs,
+		Domain:      msgDomain,
+	}
+	forSent, forRelay := parser.BuildRawMessage(opts)
+
+	// Find or create Sent mailbox
+	mailboxes, listErr := h.mailboxService.ListMailboxes(c.Request().Context(), userID, nil)
+	if listErr != nil {
+		return api.InternalServerError(c, "failed to list mailboxes")
+	}
+
+	var sentMailboxID domain.ID
+	for _, mb := range mailboxes.Items {
+		if strings.EqualFold(mb.Name, "Sent") {
+			sentMailboxID = mb.ID
+			break
+		}
+	}
+
+	if sentMailboxID.IsEmpty() {
+		localPart := fromAddr
+		if idx := strings.LastIndex(fromAddr, "@"); idx >= 0 {
+			localPart = fromAddr[:idx]
+		}
+		sentAddr := localPart + "+sent@" + msgDomain
+		created, createErr := h.mailboxService.CreateMailbox(c.Request().Context(), &service.CreateMailboxInput{
+			UserID:  userID,
+			Name:    "Sent",
+			Address: sentAddr,
+		})
+		if createErr != nil {
+			return api.InternalServerError(c, "failed to create Sent mailbox")
+		}
+		sentMailboxID = created.ID
+	}
+
+	storeResult, storeErr := h.messageService.StoreMessage(c.Request().Context(), &service.StoreMessageInput{
+		RawData:            forSent,
+		TargetMailboxID:    sentMailboxID,
+		SkipDuplicateCheck: true,
+	})
+	if storeErr != nil {
+		return api.InternalServerError(c, "failed to store sent message")
+	}
+
+	_ = h.messageService.MarkAsRead(c.Request().Context(), storeResult.Message.ID)
+
+	allRecipients := make([]string, 0, len(toStrs)+len(ccStrs)+len(bccStrs))
+	allRecipients = append(allRecipients, toStrs...)
+	allRecipients = append(allRecipients, ccStrs...)
+	allRecipients = append(allRecipients, bccStrs...)
+
+	result := h.relayService.Relay(c.Request().Context(), fromAddr, allRecipients, forRelay)
+	if !result.Success {
+		_ = h.messageService.DeleteMessageForUser(c.Request().Context(), storeResult.Message.ID, userID)
+		return api.InternalServerError(c, "relay failed: "+result.Error.Error())
+	}
+
+	// Delete the draft on successful send
+	_ = h.messageService.DeleteMessageForUser(c.Request().Context(), draftID, userID)
+
+	return api.OK(c, &SendMessageResponse{
+		MessageID:  storeResult.Message.ID.String(),
+		Recipients: result.Recipients,
+	})
+}
+
+// UploadDraftAttachment uploads a file and attaches it to a draft message.
+func (h *MessageHandler) UploadDraftAttachment(c echo.Context) error {
+	if h.repo == nil {
+		return api.InternalServerError(c, "repository not configured")
+	}
+
+	userID := middleware.GetUserID(c)
+	if userID.IsEmpty() {
+		return api.Unauthorized(c, "authentication required")
+	}
+
+	draftID := domain.ID(c.Param("id"))
+	if draftID.IsEmpty() {
+		return api.BadRequest(c, "draft ID is required")
+	}
+
+	msg, err := h.messageService.GetMessageForUser(c.Request().Context(), draftID, userID)
+	if err != nil {
+		return api.FromError(c, err)
+	}
+	if !msg.IsDraft {
+		return api.BadRequest(c, "message is not a draft")
+	}
+
+	file, fileHeader, err := c.Request().FormFile("file")
+	if err != nil {
+		return api.BadRequest(c, "file is required")
+	}
+	defer file.Close()
+
+	contentType := fileHeader.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	attID := domain.ID(uuid.New().String())
+	att := domain.NewAttachment(attID, draftID, fileHeader.Filename, contentType, fileHeader.Size)
+
+	if err := h.repo.Attachments().CreateWithContent(c.Request().Context(), att, file); err != nil {
+		return api.InternalServerError(c, "failed to store attachment")
+	}
+
+	// Update draft's attachment count
+	count, countErr := h.repo.Attachments().CountByMessage(c.Request().Context(), draftID)
+	if countErr == nil {
+		msg.AttachmentCount = int(count)
+		_ = h.repo.Messages().Update(c.Request().Context(), msg)
+	}
+
+	return api.Created(c, &AttachmentSummaryResponse{
+		ID:          att.ID.String(),
+		Filename:    att.Filename,
+		ContentType: att.ContentType,
+		Size:        att.Size,
+	})
+}
+
+// DeleteDraftAttachment removes an attachment from a draft message.
+func (h *MessageHandler) DeleteDraftAttachment(c echo.Context) error {
+	if h.repo == nil {
+		return api.InternalServerError(c, "repository not configured")
+	}
+
+	userID := middleware.GetUserID(c)
+	if userID.IsEmpty() {
+		return api.Unauthorized(c, "authentication required")
+	}
+
+	draftID := domain.ID(c.Param("id"))
+	if draftID.IsEmpty() {
+		return api.BadRequest(c, "draft ID is required")
+	}
+
+	attachmentID := domain.ID(c.Param("attachmentId"))
+	if attachmentID.IsEmpty() {
+		return api.BadRequest(c, "attachment ID is required")
+	}
+
+	msg, err := h.messageService.GetMessageForUser(c.Request().Context(), draftID, userID)
+	if err != nil {
+		return api.FromError(c, err)
+	}
+	if !msg.IsDraft {
+		return api.BadRequest(c, "message is not a draft")
+	}
+
+	if err := h.repo.Attachments().Delete(c.Request().Context(), attachmentID); err != nil {
+		return api.FromError(c, err)
+	}
+
+	// Update draft's attachment count
+	count, countErr := h.repo.Attachments().CountByMessage(c.Request().Context(), draftID)
+	if countErr == nil {
+		msg.AttachmentCount = int(count)
+		_ = h.repo.Messages().Update(c.Request().Context(), msg)
+	}
+
+	return api.NoContent(c)
 }
 
 // parseMessageFilter extracts message filter options from the request query parameters.

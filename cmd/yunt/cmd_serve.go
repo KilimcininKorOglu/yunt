@@ -257,7 +257,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		authed := v1.Group("", authMiddleware)
 
 		messageHandler := handlers.NewMessageHandler(messageService, mailboxService, authService)
-		messageHandler.WithRelayService(relayService).WithUserService(userService)
+		messageHandler.WithRelayService(relayService).WithUserService(userService).WithRepo(repo)
 		messageHandler.RegisterRoutes(authed)
 
 		mailboxHandler := handlers.NewMailboxHandler(mailboxService, authService)
