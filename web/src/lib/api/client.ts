@@ -256,6 +256,9 @@ export class ApiClient {
 	): Promise<Response> {
 		const url = this.buildUrl(path, options?.params);
 		const headers = this.buildHeaders(options);
+		if (body instanceof FormData) {
+			delete headers['Content-Type'];
+		}
 		const timeout = options?.timeout ?? this.config.timeout;
 
 		const controller = new AbortController();
@@ -268,7 +271,7 @@ export class ApiClient {
 			const response = await fetch(url, {
 				method,
 				headers,
-				body: body !== undefined ? JSON.stringify(body) : undefined,
+				body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
 				signal
 			});
 

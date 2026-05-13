@@ -15,7 +15,12 @@ import type {
 	BulkOperationResponse,
 	AttachmentSummary,
 	Attachment,
-	PaginatedData
+	PaginatedData,
+	SendMessageInput,
+	SendMessageResult,
+	DraftInput,
+	DraftSaveResult,
+	AttachmentUploadResult
 } from './types';
 
 // ============================================================================
@@ -366,6 +371,39 @@ export class MessagesApi {
 	async bulkUnstar(ids: ID[]): Promise<BulkOperationResponse> {
 		const input: BulkIdsInput = { ids };
 		return this.client.post<BulkOperationResponse>('/api/v1/messages/bulk/unstar', input);
+	}
+
+	// ========================================================================
+	// Send & Draft Operations
+	// ========================================================================
+
+	async send(input: SendMessageInput): Promise<SendMessageResult> {
+		return this.client.post<SendMessageResult>('/api/v1/messages/send', input);
+	}
+
+	async saveDraft(input: DraftInput): Promise<DraftSaveResult> {
+		return this.client.post<DraftSaveResult>('/api/v1/messages/draft', input);
+	}
+
+	async updateDraft(id: ID, input: DraftInput): Promise<void> {
+		await this.client.put<void>(`/api/v1/messages/draft/${id}`, input);
+	}
+
+	async sendDraft(id: ID): Promise<SendMessageResult> {
+		return this.client.post<SendMessageResult>(`/api/v1/messages/draft/${id}/send`);
+	}
+
+	async uploadDraftAttachment(draftId: ID, file: File): Promise<AttachmentUploadResult> {
+		const formData = new FormData();
+		formData.append('file', file);
+		return this.client.post<AttachmentUploadResult>(
+			`/api/v1/messages/draft/${draftId}/attachments`,
+			formData
+		);
+	}
+
+	async deleteDraftAttachment(draftId: ID, attachmentId: ID): Promise<void> {
+		await this.client.delete<void>(`/api/v1/messages/draft/${draftId}/attachments/${attachmentId}`);
 	}
 }
 

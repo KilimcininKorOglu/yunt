@@ -572,6 +572,54 @@ export interface PaginatedData<T> {
 export type PaginatedResponse<T> = ApiResponse<PaginatedData<T>>;
 
 // ============================================================================
+// Send / Draft / Signature
+// ============================================================================
+
+/** Input for sending a message */
+export interface SendMessageInput {
+	fromMailboxId: string;
+	to: string[];
+	cc?: string[];
+	bcc?: string[];
+	subject: string;
+	textBody: string;
+	htmlBody?: string;
+}
+
+/** Result of sending a message */
+export interface SendMessageResult {
+	success: boolean;
+	messageId: string;
+	recipients: string[];
+	failedRecipients?: string[];
+}
+
+/** Input for saving a draft */
+export interface DraftInput {
+	fromMailboxId?: string;
+	to?: string[];
+	cc?: string[];
+	bcc?: string[];
+	subject?: string;
+	textBody?: string;
+	htmlBody?: string;
+}
+
+/** Result of saving a draft */
+export interface DraftSaveResult {
+	id: string;
+	mailboxId: string;
+}
+
+/** Attachment summary returned from upload */
+export interface AttachmentUploadResult {
+	id: string;
+	filename: string;
+	contentType: string;
+	size: number;
+}
+
+// ============================================================================
 // List/Filter Options
 // ============================================================================
 
