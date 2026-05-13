@@ -1612,9 +1612,11 @@ func TestStatsRecalculation(t *testing.T) {
 		repo.Messages().Create(ctx, msg)
 	}
 
-	// Mark some as read
+	// Mark some as read (service layer handles counter updates, simulate here)
 	repo.Messages().MarkAsRead(ctx, domain.ID("recalc-msg-0"))
+	repo.Mailboxes().UpdateUnreadCount(ctx, mailbox.ID, -1)
 	repo.Messages().MarkAsRead(ctx, domain.ID("recalc-msg-1"))
+	repo.Mailboxes().UpdateUnreadCount(ctx, mailbox.ID, -1)
 
 	// Verify mailbox counters are accurate
 	mailboxData, _ := repo.Mailboxes().GetByID(ctx, mailbox.ID)
@@ -1714,15 +1716,17 @@ func TestStatsDenormalizedCounters(t *testing.T) {
 		t.Errorf("expected total size 1024, got %d", mb.TotalSize)
 	}
 
-	// Mark as read - unread should decrement
+	// Mark as read - service layer handles counter updates, simulate here
 	repo.Messages().MarkAsRead(ctx, msg.ID)
+	repo.Mailboxes().UpdateUnreadCount(ctx, mailbox.ID, -1)
 	mb, _ = repo.Mailboxes().GetByID(ctx, mailbox.ID)
 	if mb.UnreadCount != 0 {
 		t.Errorf("expected unread count 0 after mark read, got %d", mb.UnreadCount)
 	}
 
-	// Mark as unread - unread should increment
+	// Mark as unread - service layer handles counter updates, simulate here
 	repo.Messages().MarkAsUnread(ctx, msg.ID)
+	repo.Mailboxes().UpdateUnreadCount(ctx, mailbox.ID, 1)
 	mb, _ = repo.Mailboxes().GetByID(ctx, mailbox.ID)
 	if mb.UnreadCount != 1 {
 		t.Errorf("expected unread count 1 after mark unread, got %d", mb.UnreadCount)

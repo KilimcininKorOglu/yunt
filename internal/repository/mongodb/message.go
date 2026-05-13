@@ -817,12 +817,6 @@ func (m *MessageRepository) MarkAsRead(ctx context.Context, id domain.ID) (bool,
 		return false, nil // Already read
 	}
 
-	// Update mailbox unread count
-	msg, err := m.GetByID(ctx, id)
-	if err == nil {
-		m.repo.mailboxes.UpdateUnreadCount(ctx, msg.MailboxID, -1)
-	}
-
 	return true, nil
 }
 
@@ -855,12 +849,6 @@ func (m *MessageRepository) MarkAsUnread(ctx context.Context, id domain.ID) (boo
 			return false, domain.NewNotFoundError("message", string(id))
 		}
 		return false, nil // Already unread
-	}
-
-	// Update mailbox unread count
-	msg, err := m.GetByID(ctx, id)
-	if err == nil {
-		m.repo.mailboxes.UpdateUnreadCount(ctx, msg.MailboxID, 1)
 	}
 
 	return true, nil

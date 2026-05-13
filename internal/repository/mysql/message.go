@@ -819,11 +819,6 @@ func (m *MessageRepository) MarkAsRead(ctx context.Context, id domain.ID) (bool,
 		return false, fmt.Errorf("failed to mark message as read: %w", err)
 	}
 
-	// Update mailbox unread count
-	if err := m.repo.Mailboxes().UpdateUnreadCount(ctx, msg.MailboxID, -1); err != nil {
-		return false, err
-	}
-
 	return true, nil
 }
 
@@ -842,11 +837,6 @@ func (m *MessageRepository) MarkAsUnread(ctx context.Context, id domain.ID) (boo
 	_, err = m.repo.db().ExecContext(ctx, query, time.Now().UTC(), string(id))
 	if err != nil {
 		return false, fmt.Errorf("failed to mark message as unread: %w", err)
-	}
-
-	// Update mailbox unread count
-	if err := m.repo.Mailboxes().UpdateUnreadCount(ctx, msg.MailboxID, 1); err != nil {
-		return false, err
 	}
 
 	return true, nil
