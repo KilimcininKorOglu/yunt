@@ -74,7 +74,7 @@
 		if (pathname.startsWith('/calendar')) return 'calendar';
 		if (pathname.startsWith('/contacts')) return 'contacts';
 		if (pathname.startsWith('/settings')) return 'options';
-		return 'mail';
+		return '';
 	}
 
 	function handleSignOut() {
