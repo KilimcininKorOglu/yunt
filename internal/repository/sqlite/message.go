@@ -1476,7 +1476,7 @@ func (m *MessageRepository) GetDailyCounts(ctx context.Context, dateRange *repos
 	var sb strings.Builder
 	args := make([]interface{}, 0)
 
-	sb.WriteString(`SELECT DATE(received_at) as date, COUNT(*) as count FROM messages WHERE 1=1`)
+	sb.WriteString(`SELECT substr(received_at, 1, 10) as date, COUNT(*) as count FROM messages WHERE 1=1`)
 
 	if dateRange != nil {
 		if dateRange.From != nil {
@@ -1489,7 +1489,7 @@ func (m *MessageRepository) GetDailyCounts(ctx context.Context, dateRange *repos
 		}
 	}
 
-	sb.WriteString(" GROUP BY DATE(received_at) ORDER BY date")
+	sb.WriteString(" GROUP BY substr(received_at, 1, 10) ORDER BY date")
 
 	var counts []repository.DateCount
 	if err := m.repo.db().SelectContext(ctx, &counts, sb.String(), args...); err != nil {
@@ -1504,7 +1504,7 @@ func (m *MessageRepository) GetHourlyCounts(ctx context.Context, dateRange *repo
 	var sb strings.Builder
 	args := make([]interface{}, 0)
 
-	sb.WriteString(`SELECT strftime('%Y-%m-%d %H:00', received_at) as hour, COUNT(*) as count FROM messages WHERE 1=1`)
+	sb.WriteString(`SELECT substr(received_at, 1, 13) || ':00' as hour, COUNT(*) as count FROM messages WHERE 1=1`)
 
 	if dateRange != nil {
 		if dateRange.From != nil {
@@ -1517,7 +1517,7 @@ func (m *MessageRepository) GetHourlyCounts(ctx context.Context, dateRange *repo
 		}
 	}
 
-	sb.WriteString(" GROUP BY strftime('%Y-%m-%d %H:00', received_at) ORDER BY hour")
+	sb.WriteString(" GROUP BY substr(received_at, 1, 13) ORDER BY hour")
 
 	var counts []repository.HourCount
 	if err := m.repo.db().SelectContext(ctx, &counts, sb.String(), args...); err != nil {
