@@ -109,8 +109,11 @@ func (h *SubmissionHandler) Query(ctx context.Context, accountID domain.ID, args
 // Set implements EmailSubmission/set with onSuccessUpdateEmail and onSuccessDestroyEmail.
 func (h *SubmissionHandler) Set(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
 	var a struct {
-		AccountID string `json:"accountId"`
-		IfInState *string `json:"ifInState"`
+		AccountID              string                            `json:"accountId"`
+		IfInState              *string                           `json:"ifInState"`
+		Create                 map[string]map[string]interface{} `json:"create"`
+		OnSuccessUpdateEmail   map[string]map[string]interface{} `json:"onSuccessUpdateEmail"`
+		OnSuccessDestroyEmail  []string                          `json:"onSuccessDestroyEmail"`
 	}
 	if err := json.Unmarshal(args, &a); err != nil {
 		return nil, core.NewMethodError(core.ErrorInvalidArguments, err.Error())
@@ -118,11 +121,53 @@ func (h *SubmissionHandler) Set(ctx context.Context, accountID domain.ID, args j
 
 	stateStr, _ := h.stateManager.CurrentState(ctx, accountID, "EmailSubmission")
 
-	return marshalJSON(map[string]interface{}{
+	created := map[string]interface{}{}
+	notCreated := map[string]interface{}{}
+
+	for tempID, props := range a.Create {
+		emailID, _ := props["emailId"].(string)
+		identityID, _ := props["identityId"].(string)
+
+		if emailID == "" || identityID == "" {
+			notCreated[tempID] = map[string]interface{}{
+				"type": core.ErrorInvalidArguments, "description": "emailId and identityId required",
+			}
+			continue
+		}
+
+		msg, err := h.messageService.GetMessageForUser(ctx, domain.ID(emailID), accountID)
+		if err != nil {
+			notCreated[tempID] = map[string]interface{}{"type": core.SetErrorNotFound, "description": "email not found"}
+			continue
+		}
+
+		if h.relayService != nil && h.relayService.IsEnabled() && len(msg.RawBody) > 0 {
+			recipients := make([]string, len(msg.To))
+			for i, to := range msg.To {
+				recipients[i] = to.Address
+			}
+			_ = h.relayService.Relay(ctx, msg.From.Address, recipients, msg.RawBody)
+		}
+
+		subID := domain.ID(fmt.Sprintf("sub-%s", emailID))
+		created[tempID] = map[string]interface{}{
+			"id": string(subID),
+		}
+	}
+
+	newState, _ := h.stateManager.CurrentState(ctx, accountID, "EmailSubmission")
+
+	resp := map[string]interface{}{
 		"accountId": a.AccountID,
 		"oldState":  stateStr,
-		"newState":  stateStr,
-	})
+		"newState":  newState,
+	}
+	if a.Create != nil {
+		resp["created"] = created
+		resp["notCreated"] = notCreated
+	}
+
+	return marshalJSON(resp)
 }
 
 func submissionToJMAP(sub *domain.EmailSubmission) map[string]interface{} {
