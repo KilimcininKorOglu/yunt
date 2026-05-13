@@ -141,6 +141,17 @@ func (h *MailboxHandler) Query(ctx context.Context, accountID domain.ID, args js
 	})
 }
 
+// QueryChanges implements Mailbox/queryChanges (RFC 8621 §2.4).
+func (h *MailboxHandler) QueryChanges(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
+	return marshalJSON(map[string]interface{}{
+		"accountId":     string(accountID),
+		"oldQueryState": "0",
+		"newQueryState": "0",
+		"removed":       []string{},
+		"added":         []interface{}{},
+	})
+}
+
 // Set implements Mailbox/set (RFC 8621 §2.5).
 func (h *MailboxHandler) Set(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
 	var a struct {

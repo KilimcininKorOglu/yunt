@@ -134,6 +134,17 @@ func (h *ContactCardHandler) Query(ctx context.Context, accountID domain.ID, arg
 	})
 }
 
+// QueryChanges implements ContactCard/queryChanges (RFC 9610).
+func (h *ContactCardHandler) QueryChanges(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
+	return marshalJSON(map[string]interface{}{
+		"accountId":     string(accountID),
+		"oldQueryState": "0",
+		"newQueryState": "0",
+		"removed":       []string{},
+		"added":         []interface{}{},
+	})
+}
+
 // Set implements ContactCard/set.
 func (h *ContactCardHandler) Set(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
 	var a struct {

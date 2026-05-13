@@ -66,11 +66,18 @@ func NewHandler(cfg HandlerConfig) *Handler {
 	h.dispatcher.Register("Email/query", emailHandler.Query)
 	h.dispatcher.Register("Email/changes", emailHandler.Changes)
 	h.dispatcher.Register("Email/set", emailHandler.Set)
+	h.dispatcher.Register("Email/queryChanges", emailHandler.QueryChanges)
+	h.dispatcher.Register("Email/import", emailHandler.Import)
+	h.dispatcher.Register("Email/parse", emailHandler.Parse)
+
+	snippetHandler := mail.NewSnippetHandler(cfg.MessageService, cfg.Repo)
+	h.dispatcher.Register("SearchSnippet/get", snippetHandler.Get)
 
 	mailboxHandler := mail.NewMailboxHandler(cfg.MailboxService, cfg.StateManager)
 	h.dispatcher.Register("Mailbox/get", mailboxHandler.Get)
 	h.dispatcher.Register("Mailbox/changes", mailboxHandler.Changes)
 	h.dispatcher.Register("Mailbox/query", mailboxHandler.Query)
+	h.dispatcher.Register("Mailbox/queryChanges", mailboxHandler.QueryChanges)
 	h.dispatcher.Register("Mailbox/set", mailboxHandler.Set)
 
 	threadHandler := mail.NewThreadHandler(cfg.Repo, cfg.StateManager)
@@ -108,6 +115,7 @@ func NewHandler(cfg HandlerConfig) *Handler {
 	h.dispatcher.Register("ContactCard/get", contactCardHandler.Get)
 	h.dispatcher.Register("ContactCard/changes", contactCardHandler.Changes)
 	h.dispatcher.Register("ContactCard/query", contactCardHandler.Query)
+	h.dispatcher.Register("ContactCard/queryChanges", contactCardHandler.QueryChanges)
 	h.dispatcher.Register("ContactCard/set", contactCardHandler.Set)
 
 	return h

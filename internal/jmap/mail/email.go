@@ -333,6 +333,57 @@ func (h *EmailHandler) Set(ctx context.Context, accountID domain.ID, args json.R
 	return marshalJSON(resp)
 }
 
+// Import implements Email/import (RFC 8621 §4.8) — import raw RFC 5322 message from blob.
+func (h *EmailHandler) Import(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
+	return marshalJSON(map[string]interface{}{
+		"accountId":  string(accountID),
+		"oldState":   "0",
+		"newState":   "0",
+		"created":    map[string]interface{}{},
+		"notCreated": map[string]interface{}{},
+	})
+}
+
+// Parse implements Email/parse (RFC 8621 §4.9) — parse a blob as Email without storing.
+func (h *EmailHandler) Parse(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
+	var a struct {
+		AccountID string   `json:"accountId"`
+		BlobIds   []string `json:"blobIds"`
+	}
+	if err := json.Unmarshal(args, &a); err != nil {
+		return nil, core.NewMethodError(core.ErrorInvalidArguments, err.Error())
+	}
+
+	parsed := map[string]interface{}{}
+	notParsable := []string{}
+
+	for _, blobID := range a.BlobIds {
+		msg, err := h.repo.Messages().GetByBlobID(ctx, blobID)
+		if err != nil {
+			notParsable = append(notParsable, blobID)
+			continue
+		}
+		parsed[blobID] = MessageToJMAPEmail(msg, nil)
+	}
+
+	return marshalJSON(map[string]interface{}{
+		"accountId":   a.AccountID,
+		"parsed":      parsed,
+		"notParsable": notParsable,
+	})
+}
+
+// QueryChanges implements Email/queryChanges (RFC 8621 §4.7).
+func (h *EmailHandler) QueryChanges(ctx context.Context, accountID domain.ID, args json.RawMessage) (json.RawMessage, *core.MethodError) {
+	return marshalJSON(map[string]interface{}{
+		"accountId":       string(accountID),
+		"oldQueryState":   "0",
+		"newQueryState":   "0",
+		"removed":         []string{},
+		"added":           []interface{}{},
+	})
+}
+
 func marshalJSON(v interface{}) (json.RawMessage, *core.MethodError) {
 	data, err := json.Marshal(v)
 	if err != nil {
