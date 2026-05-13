@@ -25,6 +25,7 @@ type Repository struct {
 	attachments *AttachmentRepository
 	webhooks    *WebhookRepository
 	settings    *SettingsRepository
+	jmap        *JMAPRepo
 
 	// For transaction support
 	tx   *sqlx.Tx
@@ -64,6 +65,7 @@ func NewWithOptions(pool *ConnectionPool, autoMigrate, autoSeed bool) (*Reposito
 	repo.attachments = NewAttachmentRepository(repo)
 	repo.webhooks = NewWebhookRepository(repo)
 	repo.settings = NewSettingsRepository(repo)
+	repo.jmap = NewJMAPRepo(repo)
 
 	// Create seeder
 	repo.seeder = NewSeeder(repo)
@@ -113,6 +115,11 @@ func (r *Repository) Webhooks() repository.WebhookRepository {
 // Settings returns the settings repository.
 func (r *Repository) Settings() repository.SettingsRepository {
 	return r.settings
+}
+
+// JMAP returns the JMAP-specific repository sub-aggregate.
+func (r *Repository) JMAP() repository.JMAPRepository {
+	return r.jmap
 }
 
 // Transaction executes the given function within a database transaction.

@@ -226,6 +226,18 @@ type MessageRepository interface {
 	// GetByIMAPUID retrieves a message by its IMAP UID within a mailbox.
 	// Returns domain.ErrNotFound if not found.
 	GetByIMAPUID(ctx context.Context, mailboxID domain.ID, uid uint32) (*domain.Message, error)
+
+	// GetByMessageIDs retrieves messages matching any of the given Message-ID header values.
+	GetByMessageIDs(ctx context.Context, messageIDs []string) ([]*domain.Message, error)
+
+	// GetByThreadID retrieves all messages in a thread, sorted by receivedAt oldest-first.
+	GetByThreadID(ctx context.Context, threadID domain.ID, opts *ListOptions) (*ListResult[*domain.Message], error)
+
+	// UpdateThreadID updates all messages with oldThreadID to newThreadID (thread merge).
+	UpdateThreadID(ctx context.Context, oldThreadID, newThreadID domain.ID) error
+
+	// GetByBlobID retrieves a message by its blob ID (SHA-256 hash).
+	GetByBlobID(ctx context.Context, blobID string) (*domain.Message, error)
 }
 
 // MessageFilter provides filtering options for message queries.

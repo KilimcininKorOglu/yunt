@@ -44,6 +44,15 @@ const (
 	DefaultAPIRateLimit     = 100
 	DefaultAPIEnableSwagger = true
 
+	// JMAP defaults (RFC 8620).
+	DefaultJMAPEnabled             = true
+	DefaultJMAPMaxCallsPerRequest  = 64
+	DefaultJMAPMaxObjectsInGet     = 1000
+	DefaultJMAPMaxObjectsInSet     = 1000
+	DefaultJMAPMaxSizeUpload       = int64(50 * 1024 * 1024) // 50MB
+	DefaultJMAPMaxConcurrentUpload = 4
+	DefaultJMAPMaxSizeRequest      = int64(10 * 1024 * 1024) // 10MB
+
 	// Database defaults.
 	DefaultDatabaseDriver         = "sqlite"
 	DefaultDatabaseDSN            = "yunt.db"
@@ -143,6 +152,15 @@ func Default() *Config {
 			TLS: TLSConfig{
 				Enabled: false,
 			},
+		},
+		JMAP: JMAPConfig{
+			Enabled:             DefaultJMAPEnabled,
+			MaxCallsPerRequest:  DefaultJMAPMaxCallsPerRequest,
+			MaxObjectsInGet:     DefaultJMAPMaxObjectsInGet,
+			MaxObjectsInSet:     DefaultJMAPMaxObjectsInSet,
+			MaxSizeUpload:       DefaultJMAPMaxSizeUpload,
+			MaxConcurrentUpload: DefaultJMAPMaxConcurrentUpload,
+			MaxSizeRequest:      DefaultJMAPMaxSizeRequest,
 		},
 		Database: DatabaseConfig{
 			Driver:          DefaultDatabaseDriver,

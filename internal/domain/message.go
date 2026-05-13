@@ -93,6 +93,16 @@ type Message struct {
 	// SentAt is the timestamp from the Date header (when the message was sent).
 	SentAt *Timestamp `json:"sentAt,omitempty"`
 
+	// ThreadID is the persistent conversation thread identifier for JMAP.
+	ThreadID ID `json:"threadId,omitempty"`
+
+	// BlobID is the SHA-256 hash of the raw message body for JMAP blob addressing.
+	BlobID string `json:"blobId,omitempty"`
+
+	// AllHeaders preserves all header values including duplicates (e.g. multiple Received headers).
+	// Used by JMAP header:*:all property access. The flat Headers map is kept for backward compat.
+	AllHeaders map[string][]string `json:"-"`
+
 	// CreatedAt is the timestamp when the message was created in the database.
 	CreatedAt Timestamp `json:"createdAt"`
 

@@ -55,6 +55,8 @@ type messageDocument struct {
 	References      []string               `bson:"references,omitempty"`
 	ReceivedAt      time.Time              `bson:"receivedAt"`
 	SentAt          *time.Time             `bson:"sentAt,omitempty"`
+	ThreadID        string                 `bson:"threadId,omitempty"`
+	BlobID          string                 `bson:"blobId,omitempty"`
 	CreatedAt       time.Time              `bson:"createdAt"`
 	UpdatedAt       time.Time              `bson:"updatedAt"`
 }
@@ -94,6 +96,8 @@ func (m *MessageRepository) toDocument(msg *domain.Message) *messageDocument {
 		InReplyTo:       msg.InReplyTo,
 		References:      msg.References,
 		ReceivedAt:      msg.ReceivedAt.Time,
+		ThreadID:        string(msg.ThreadID),
+		BlobID:          msg.BlobID,
 		CreatedAt:       msg.CreatedAt.Time,
 		UpdatedAt:       msg.UpdatedAt.Time,
 	}
@@ -158,6 +162,8 @@ func (m *MessageRepository) toDomain(doc *messageDocument) *domain.Message {
 		InReplyTo:       doc.InReplyTo,
 		References:      doc.References,
 		ReceivedAt:      domain.Timestamp{Time: doc.ReceivedAt},
+		ThreadID:        domain.ID(doc.ThreadID),
+		BlobID:          doc.BlobID,
 		CreatedAt:       domain.Timestamp{Time: doc.CreatedAt},
 		UpdatedAt:       domain.Timestamp{Time: doc.UpdatedAt},
 	}
@@ -1782,6 +1788,79 @@ func (m *MessageRepository) GetByIMAPUID(ctx context.Context, mailboxID domain.I
 		return nil, fmt.Errorf("failed to get message by IMAP UID: %w", err)
 	}
 
+	return m.toDomain(&doc), nil
+}
+
+// GetByMessageIDs retrieves messages matching any of the given Message-ID header values.
+func (m *MessageRepository) GetByMessageIDs(ctx context.Context, messageIDs []string) ([]*domain.Message, error) {
+	if len(messageIDs) == 0 {
+		return nil, nil
+	}
+	ctx = m.repo.getSessionContext(ctx)
+	filter := bson.M{"messageId": bson.M{"$in": messageIDs}}
+	cursor, err := m.collection().Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages by message IDs: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var docs []messageDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, fmt.Errorf("failed to decode messages: %w", err)
+	}
+	messages := make([]*domain.Message, len(docs))
+	for i := range docs {
+		messages[i] = m.toDomain(&docs[i])
+	}
+	return messages, nil
+}
+
+// GetByThreadID retrieves all messages in a thread, sorted by receivedAt oldest-first.
+func (m *MessageRepository) GetByThreadID(ctx context.Context, threadID domain.ID, opts *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
+	ctx = m.repo.getSessionContext(ctx)
+	filter := bson.M{"threadId": string(threadID)}
+	findOpts := options.Find().SetSort(bson.D{{Key: "receivedAt", Value: 1}, {Key: "_id", Value: 1}})
+
+	cursor, err := m.collection().Find(ctx, filter, findOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages by thread ID: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var docs []messageDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, fmt.Errorf("failed to decode messages: %w", err)
+	}
+	messages := make([]*domain.Message, len(docs))
+	for i := range docs {
+		messages[i] = m.toDomain(&docs[i])
+	}
+	return &repository.ListResult[*domain.Message]{Items: messages, Total: int64(len(messages))}, nil
+}
+
+// UpdateThreadID updates all messages with oldThreadID to newThreadID (thread merge).
+func (m *MessageRepository) UpdateThreadID(ctx context.Context, oldThreadID, newThreadID domain.ID) error {
+	ctx = m.repo.getSessionContext(ctx)
+	_, err := m.collection().UpdateMany(ctx,
+		bson.M{"threadId": string(oldThreadID)},
+		bson.M{"$set": bson.M{"threadId": string(newThreadID), "updatedAt": time.Now().UTC()}})
+	if err != nil {
+		return fmt.Errorf("failed to update thread ID: %w", err)
+	}
+	return nil
+}
+
+// GetByBlobID retrieves a message by its blob ID (SHA-256 hash).
+func (m *MessageRepository) GetByBlobID(ctx context.Context, blobID string) (*domain.Message, error) {
+	ctx = m.repo.getSessionContext(ctx)
+	var doc messageDocument
+	err := m.collection().FindOne(ctx, bson.M{"blobId": blobID}).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, domain.NewNotFoundError("message", blobID)
+		}
+		return nil, fmt.Errorf("failed to get message by blob ID: %w", err)
+	}
 	return m.toDomain(&doc), nil
 }
 

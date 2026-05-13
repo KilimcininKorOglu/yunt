@@ -32,6 +32,8 @@ type mailboxRow struct {
 	TotalSize     int64          `db:"total_size"`
 	RetentionDays int            `db:"retention_days"`
 	UIDNext       uint32         `db:"uid_next"`
+	JMAPRole      string         `db:"jmap_role"`
+	SortOrder     int            `db:"sort_order"`
 	CreatedAt     time.Time      `db:"created_at"`
 	UpdatedAt     time.Time      `db:"updated_at"`
 }
@@ -56,6 +58,8 @@ func (r *mailboxRow) toMailbox() *domain.Mailbox {
 		TotalSize:     r.TotalSize,
 		RetentionDays: r.RetentionDays,
 		UIDNext:       r.UIDNext,
+		Role:          r.JMAPRole,
+		SortOrder:     r.SortOrder,
 		CreatedAt:     domain.Timestamp{Time: r.CreatedAt},
 		UpdatedAt:     domain.Timestamp{Time: r.UpdatedAt},
 	}
@@ -70,7 +74,7 @@ func (r *mailboxRow) toMailbox() *domain.Mailbox {
 // GetByID retrieves a mailbox by its unique identifier.
 func (m *MailboxRepository) GetByID(ctx context.Context, id domain.ID) (*domain.Mailbox, error) {
 	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at
+		message_count, unread_count, total_size, retention_days, uid_next, jmap_role, sort_order, created_at, updated_at
 		FROM mailboxes WHERE id = ?`
 
 	var row mailboxRow
@@ -87,7 +91,7 @@ func (m *MailboxRepository) GetByID(ctx context.Context, id domain.ID) (*domain.
 // GetByAddress retrieves a mailbox by its email address.
 func (m *MailboxRepository) GetByAddress(ctx context.Context, address string) (*domain.Mailbox, error) {
 	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at
+		message_count, unread_count, total_size, retention_days, uid_next, jmap_role, sort_order, created_at, updated_at
 		FROM mailboxes WHERE address = ? COLLATE NOCASE`
 
 	var row mailboxRow
@@ -104,7 +108,7 @@ func (m *MailboxRepository) GetByAddress(ctx context.Context, address string) (*
 // GetCatchAll retrieves the catch-all mailbox for a domain.
 func (m *MailboxRepository) GetCatchAll(ctx context.Context, domainName string) (*domain.Mailbox, error) {
 	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at
+		message_count, unread_count, total_size, retention_days, uid_next, jmap_role, sort_order, created_at, updated_at
 		FROM mailboxes WHERE is_catch_all = 1 AND address LIKE ? COLLATE NOCASE`
 
 	pattern := "%@" + domainName
@@ -122,7 +126,7 @@ func (m *MailboxRepository) GetCatchAll(ctx context.Context, domainName string) 
 // GetDefault retrieves the default mailbox for a user.
 func (m *MailboxRepository) GetDefault(ctx context.Context, userID domain.ID) (*domain.Mailbox, error) {
 	query := `SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at
+		message_count, unread_count, total_size, retention_days, uid_next, jmap_role, sort_order, created_at, updated_at
 		FROM mailboxes WHERE user_id = ? AND is_default = 1`
 
 	var row mailboxRow
@@ -182,7 +186,7 @@ func (m *MailboxRepository) buildListQuery(filter *repository.MailboxFilter, opt
 		sb.WriteString("SELECT COUNT(*) FROM mailboxes WHERE 1=1")
 	} else {
 		sb.WriteString(`SELECT id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-			message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at FROM mailboxes WHERE 1=1`)
+			message_count, unread_count, total_size, retention_days, uid_next, jmap_role, sort_order, created_at, updated_at FROM mailboxes WHERE 1=1`)
 	}
 
 	if filter != nil {
@@ -360,8 +364,8 @@ func (m *MailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox)
 	}
 
 	query := `INSERT INTO mailboxes (id, user_id, name, address, description, is_catch_all, is_default, mailbox_type,
-		message_count, unread_count, total_size, retention_days, uid_next, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		message_count, unread_count, total_size, retention_days, uid_next, jmap_role, sort_order, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var description sql.NullString
 	if mailbox.Description != "" {
@@ -382,6 +386,8 @@ func (m *MailboxRepository) Create(ctx context.Context, mailbox *domain.Mailbox)
 		mailbox.TotalSize,
 		mailbox.RetentionDays,
 		mailbox.UIDNext,
+		mailbox.Role,
+		mailbox.SortOrder,
 		mailbox.CreatedAt.Time,
 		mailbox.UpdatedAt.Time,
 	)

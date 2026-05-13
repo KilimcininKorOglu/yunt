@@ -36,6 +36,8 @@ type mailboxDocument struct {
 	TotalSize     int64     `bson:"totalSize"`
 	RetentionDays int       `bson:"retentionDays"`
 	UIDNext       uint32    `bson:"uidNext"`
+	JMAPRole      string    `bson:"jmapRole,omitempty"`
+	SortOrder     int       `bson:"sortOrder"`
 	CreatedAt     time.Time `bson:"createdAt"`
 	UpdatedAt     time.Time `bson:"updatedAt"`
 }
@@ -66,6 +68,8 @@ func (m *MailboxRepository) toDocument(mailbox *domain.Mailbox) *mailboxDocument
 		TotalSize:     mailbox.TotalSize,
 		RetentionDays: mailbox.RetentionDays,
 		UIDNext:       mailbox.UIDNext,
+		JMAPRole:      mailbox.Role,
+		SortOrder:     mailbox.SortOrder,
 		CreatedAt:     mailbox.CreatedAt.Time,
 		UpdatedAt:     mailbox.UpdatedAt.Time,
 	}
@@ -87,6 +91,8 @@ func (m *MailboxRepository) toDomain(doc *mailboxDocument) *domain.Mailbox {
 		TotalSize:     doc.TotalSize,
 		RetentionDays: doc.RetentionDays,
 		UIDNext:       doc.UIDNext,
+		Role:          doc.JMAPRole,
+		SortOrder:     doc.SortOrder,
 		CreatedAt:     domain.Timestamp{Time: doc.CreatedAt},
 		UpdatedAt:     domain.Timestamp{Time: doc.UpdatedAt},
 	}

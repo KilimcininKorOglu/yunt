@@ -44,6 +44,8 @@ type messageRow struct {
 	ReferencesList  sql.NullString `db:"references_list"`
 	ReceivedAt      time.Time      `db:"received_at"`
 	SentAt          sql.NullTime   `db:"sent_at"`
+	ThreadID        string         `db:"thread_id"`
+	BlobID          string         `db:"blob_id"`
 	CreatedAt       time.Time      `db:"created_at"`
 	UpdatedAt       time.Time      `db:"updated_at"`
 }
@@ -117,6 +119,10 @@ func (r *messageRow) toMessage() *domain.Message {
 		ts := domain.Timestamp{Time: r.SentAt.Time}
 		msg.SentAt = &ts
 	}
+	if r.ThreadID != "" {
+		msg.ThreadID = domain.ID(r.ThreadID)
+	}
+	msg.BlobID = r.BlobID
 
 	return msg
 }
@@ -126,7 +132,7 @@ func (m *MessageRepository) GetByID(ctx context.Context, id domain.ID) (*domain.
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
 		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid, in_reply_to, references_list,
-		received_at, sent_at, created_at, updated_at 
+		received_at, sent_at, thread_id, blob_id, created_at, updated_at 
 		FROM messages WHERE id = ?`
 
 	var row messageRow
@@ -183,7 +189,7 @@ func (m *MessageRepository) GetByMessageID(ctx context.Context, messageID string
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
 		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid, in_reply_to, references_list,
-		received_at, sent_at, created_at, updated_at 
+		received_at, sent_at, thread_id, blob_id, created_at, updated_at 
 		FROM messages WHERE message_id = ?`
 
 	var row messageRow
@@ -269,7 +275,7 @@ func (m *MessageRepository) buildListQuery(filter *repository.MessageFilter, opt
 		sb.WriteString(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 			text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
 			status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid, in_reply_to, references_list,
-			received_at, sent_at, created_at, updated_at FROM messages WHERE 1=1`)
+			received_at, sent_at, thread_id, blob_id, created_at, updated_at FROM messages WHERE 1=1`)
 	}
 
 	if filter != nil {
@@ -498,7 +504,7 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 	query := `INSERT INTO messages (id, mailbox_id, message_id, from_name, from_address,
 		subject, text_body, html_body, raw_body, headers, content_type, size,
 		attachment_count, status, is_starred, is_spam, is_deleted, is_draft, is_answered,
-		imap_uid, in_reply_to, references_list, received_at, sent_at, created_at, updated_at)
+		imap_uid, in_reply_to, references_list, received_at, sent_at, thread_id, blob_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo sql.NullString
@@ -561,6 +567,8 @@ func (m *MessageRepository) Create(ctx context.Context, msg *domain.Message) err
 		refsList,
 		msg.ReceivedAt.Time,
 		sentAt,
+		string(msg.ThreadID),
+		msg.BlobID,
 		msg.CreatedAt.Time,
 		msg.UpdatedAt.Time,
 	)
@@ -637,7 +645,7 @@ func (m *MessageRepository) Update(ctx context.Context, msg *domain.Message) err
 		from_address = ?, subject = ?, text_body = ?, html_body = ?, headers = ?,
 		content_type = ?, size = ?, attachment_count = ?, status = ?, is_starred = ?,
 		is_spam = ?, is_deleted = ?, is_draft = ?, is_answered = ?, in_reply_to = ?, references_list = ?, received_at = ?, sent_at = ?,
-		updated_at = ? WHERE id = ?`
+		thread_id = ?, blob_id = ?, updated_at = ? WHERE id = ?`
 
 	var messageID, fromName, subject, textBody, htmlBody, inReplyTo sql.NullString
 	var refsList, headersJSON sql.NullString
@@ -696,6 +704,8 @@ func (m *MessageRepository) Update(ctx context.Context, msg *domain.Message) err
 		refsList,
 		msg.ReceivedAt.Time,
 		sentAt,
+		string(msg.ThreadID),
+		msg.BlobID,
 		time.Now().UTC(),
 		string(msg.ID),
 	)
@@ -1143,7 +1153,7 @@ func (m *MessageRepository) GetThread(ctx context.Context, id domain.ID) ([]*dom
 	query := fmt.Sprintf(`SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
 		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid, in_reply_to, references_list,
-		received_at, sent_at, created_at, updated_at 
+		received_at, sent_at, thread_id, blob_id, created_at, updated_at 
 		FROM messages WHERE message_id IN (%s) OR in_reply_to IN (%s)
 		ORDER BY received_at ASC`,
 		strings.Join(placeholders, ","),
@@ -1181,7 +1191,7 @@ func (m *MessageRepository) GetReplies(ctx context.Context, id domain.ID) ([]*do
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject, 
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count, 
 		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid, in_reply_to, references_list,
-		received_at, sent_at, created_at, updated_at 
+		received_at, sent_at, thread_id, blob_id, created_at, updated_at 
 		FROM messages WHERE in_reply_to = ? ORDER BY received_at ASC`
 
 	var rows []messageRow
@@ -1587,7 +1597,7 @@ func (m *MessageRepository) GetByIMAPUID(ctx context.Context, mailboxID domain.I
 	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject,
 		text_body, html_body, raw_body, headers, content_type, size, attachment_count,
 		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid, in_reply_to, references_list,
-		received_at, sent_at, created_at, updated_at
+		received_at, sent_at, thread_id, blob_id, created_at, updated_at
 		FROM messages WHERE mailbox_id = ? AND imap_uid = ?`
 
 	var row messageRow
@@ -1603,6 +1613,84 @@ func (m *MessageRepository) GetByIMAPUID(ctx context.Context, mailboxID domain.I
 		return nil, err
 	}
 
+	return msg, nil
+}
+
+// GetByMessageIDs retrieves messages matching any of the given Message-ID header values.
+func (m *MessageRepository) GetByMessageIDs(ctx context.Context, messageIDs []string) ([]*domain.Message, error) {
+	if len(messageIDs) == 0 {
+		return nil, nil
+	}
+	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject,
+		text_body, html_body, raw_body, headers, content_type, size, attachment_count,
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+		in_reply_to, references_list, received_at, sent_at, thread_id, blob_id, created_at, updated_at
+		FROM messages WHERE message_id IN (?` + strings.Repeat(",?", len(messageIDs)-1) + `)`
+
+	args := make([]interface{}, len(messageIDs))
+	for i, mid := range messageIDs {
+		args[i] = mid
+	}
+	var rows []messageRow
+	if err := m.repo.db().SelectContext(ctx, &rows, query, args...); err != nil {
+		return nil, fmt.Errorf("failed to get messages by message IDs: %w", err)
+	}
+	messages := make([]*domain.Message, len(rows))
+	for i := range rows {
+		messages[i] = rows[i].toMessage()
+	}
+	return messages, nil
+}
+
+// GetByThreadID retrieves all messages in a thread, sorted by receivedAt oldest-first.
+func (m *MessageRepository) GetByThreadID(ctx context.Context, threadID domain.ID, opts *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
+	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject,
+		text_body, html_body, raw_body, headers, content_type, size, attachment_count,
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+		in_reply_to, references_list, received_at, sent_at, thread_id, blob_id, created_at, updated_at
+		FROM messages WHERE thread_id = ? ORDER BY received_at ASC, id ASC`
+
+	var rows []messageRow
+	if err := m.repo.db().SelectContext(ctx, &rows, query, string(threadID)); err != nil {
+		return nil, fmt.Errorf("failed to get messages by thread ID: %w", err)
+	}
+	messages := make([]*domain.Message, len(rows))
+	for i := range rows {
+		messages[i] = rows[i].toMessage()
+	}
+	return &repository.ListResult[*domain.Message]{Items: messages, Total: int64(len(messages))}, nil
+}
+
+// UpdateThreadID updates all messages with oldThreadID to newThreadID (thread merge).
+func (m *MessageRepository) UpdateThreadID(ctx context.Context, oldThreadID, newThreadID domain.ID) error {
+	_, err := m.repo.db().ExecContext(ctx,
+		`UPDATE messages SET thread_id = ?, updated_at = NOW() WHERE thread_id = ?`,
+		string(newThreadID), string(oldThreadID))
+	if err != nil {
+		return fmt.Errorf("failed to update thread ID: %w", err)
+	}
+	return nil
+}
+
+// GetByBlobID retrieves a message by its blob ID (SHA-256 hash).
+func (m *MessageRepository) GetByBlobID(ctx context.Context, blobID string) (*domain.Message, error) {
+	query := `SELECT id, mailbox_id, message_id, from_name, from_address, subject,
+		text_body, html_body, raw_body, headers, content_type, size, attachment_count,
+		status, is_starred, is_spam, is_deleted, is_draft, is_answered, imap_uid,
+		in_reply_to, references_list, received_at, sent_at, thread_id, blob_id, created_at, updated_at
+		FROM messages WHERE blob_id = ? LIMIT 1`
+
+	var row messageRow
+	if err := m.repo.db().GetContext(ctx, &row, query, blobID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.NewNotFoundError("message", blobID)
+		}
+		return nil, fmt.Errorf("failed to get message by blob ID: %w", err)
+	}
+	msg := row.toMessage()
+	if err := m.loadRecipients(ctx, msg); err != nil {
+		return nil, err
+	}
 	return msg, nil
 }
 

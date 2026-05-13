@@ -483,6 +483,7 @@ func (r *webhookMockRepo) Messages() repository.MessageRepository        { retur
 func (r *webhookMockRepo) Attachments() repository.AttachmentRepository  { return nil }
 func (r *webhookMockRepo) Webhooks() repository.WebhookRepository        { return r.webhooks }
 func (r *webhookMockRepo) Settings() repository.SettingsRepository       { return nil }
+func (r *webhookMockRepo) JMAP() repository.JMAPRepository              { return nil }
 func (r *webhookMockRepo) Health(_ context.Context) error                { return nil }
 func (r *webhookMockRepo) Close() error                                  { return nil }
 

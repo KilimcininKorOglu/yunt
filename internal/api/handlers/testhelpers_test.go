@@ -48,6 +48,7 @@ func (r *mockFullRepo) Mailboxes() repository.MailboxRepository    { return r.mb
 func (r *mockFullRepo) Webhooks() repository.WebhookRepository     { return r.webhooks }
 func (r *mockFullRepo) Attachments() repository.AttachmentRepository { return r.attachs }
 func (r *mockFullRepo) Settings() repository.SettingsRepository     { return r.settings }
+func (r *mockFullRepo) JMAP() repository.JMAPRepository             { return nil }
 func (r *mockFullRepo) Health(_ context.Context) error              { return nil }
 func (r *mockFullRepo) Close() error                                { return nil }
 func (r *mockFullRepo) Transaction(_ context.Context, fn func(tx repository.Repository) error) error {
@@ -557,6 +558,16 @@ func (r *mockMsgRepo) GetRawBody(_ context.Context, id domain.ID) ([]byte, error
 }
 func (r *mockMsgRepo) GetByIMAPUID(_ context.Context, _ domain.ID, _ uint32) (*domain.Message, error) {
 	return nil, domain.NewNotFoundError("message", "imap_uid")
+}
+func (r *mockMsgRepo) GetByMessageIDs(_ context.Context, _ []string) ([]*domain.Message, error) {
+	return nil, nil
+}
+func (r *mockMsgRepo) GetByThreadID(_ context.Context, _ domain.ID, _ *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
+	return &repository.ListResult[*domain.Message]{}, nil
+}
+func (r *mockMsgRepo) UpdateThreadID(_ context.Context, _, _ domain.ID) error { return nil }
+func (r *mockMsgRepo) GetByBlobID(_ context.Context, _ string) (*domain.Message, error) {
+	return nil, domain.NewNotFoundError("message", "blob")
 }
 
 // --- mockMbxRepo: implements repository.MailboxRepository ---

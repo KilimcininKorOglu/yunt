@@ -344,6 +344,16 @@ func (m *mockMessageRepository) GetRawBody(ctx context.Context, id domain.ID) ([
 func (m *mockMessageRepository) GetByIMAPUID(_ context.Context, _ domain.ID, _ uint32) (*domain.Message, error) {
 	return nil, domain.NewNotFoundError("message", "imap_uid")
 }
+func (m *mockMessageRepository) GetByMessageIDs(_ context.Context, _ []string) ([]*domain.Message, error) {
+	return nil, nil
+}
+func (m *mockMessageRepository) GetByThreadID(_ context.Context, _ domain.ID, _ *repository.ListOptions) (*repository.ListResult[*domain.Message], error) {
+	return &repository.ListResult[*domain.Message]{}, nil
+}
+func (m *mockMessageRepository) UpdateThreadID(_ context.Context, _, _ domain.ID) error { return nil }
+func (m *mockMessageRepository) GetByBlobID(_ context.Context, _ string) (*domain.Message, error) {
+	return nil, domain.NewNotFoundError("message", "blob")
+}
 
 func createTestServer(t *testing.T, opts ...ServerOption) *Server {
 	t.Helper()

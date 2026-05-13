@@ -22,6 +22,12 @@ import (
 	"yunt/internal/repository/mysql"
 	"yunt/internal/repository/postgres"
 	"yunt/internal/repository/sqlite"
+	"github.com/google/uuid"
+
+	jmapserver "yunt/internal/jmap"
+	"yunt/internal/domain"
+	"yunt/internal/jmap/state"
+	"yunt/internal/jmap/thread"
 	"yunt/internal/service"
 	smtpserver "yunt/internal/smtp"
 	"yunt/webui"
@@ -294,6 +300,29 @@ func runServe(cmd *cobra.Command, args []string) error {
 			RelayEnabled:   relayService != nil && relayService.IsEnabled(),
 		})
 		systemHandler.RegisterRoutes(authed)
+
+		if cfg.JMAP.Enabled {
+			stateManager := state.NewManager(repo.JMAP().State())
+			idGen := func() domain.ID { return domain.ID(uuid.New().String()) }
+			threadResolver := thread.NewResolver(repo, stateManager, log.Logger, idGen)
+			_ = threadResolver // will be used in Phase 7+
+
+			jmapHandler := jmapserver.NewHandler(jmapserver.HandlerConfig{
+				Repo:           repo,
+				AuthService:    authService,
+				MessageService: messageService,
+				MailboxService: mailboxService,
+				UserService:    userService,
+				RelayService:   relayService,
+				NotifyService:  notifyService,
+				StateManager:   stateManager,
+				ThreadResolver: threadResolver,
+				JMAPConfig:     cfg.JMAP,
+				ServerConfig:   &cfg.Server,
+			})
+			jmapHandler.RegisterRoutes(apiSrv.Echo(), authMiddleware)
+			log.Info().Msg("JMAP server enabled")
+		}
 
 		if webui.IsAvailable() {
 			apiSrv.Echo().GET("/*", webui.Handler())

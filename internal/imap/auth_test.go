@@ -142,6 +142,7 @@ func (m *mockRepository) Messages() repository.MessageRepository      { return n
 func (m *mockRepository) Attachments() repository.AttachmentRepository { return nil }
 func (m *mockRepository) Webhooks() repository.WebhookRepository     { return nil }
 func (m *mockRepository) Settings() repository.SettingsRepository    { return nil }
+func (m *mockRepository) JMAP() repository.JMAPRepository            { return nil }
 func (m *mockRepository) Transaction(ctx context.Context, fn func(tx repository.Repository) error) error {
 	return fn(m)
 }

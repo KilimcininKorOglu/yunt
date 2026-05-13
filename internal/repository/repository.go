@@ -27,6 +27,9 @@ type Repository interface {
 	// Settings returns the settings repository.
 	Settings() SettingsRepository
 
+	// JMAP returns the JMAP-specific repository sub-aggregate.
+	JMAP() JMAPRepository
+
 	// Transaction executes the given function within a database transaction.
 	// If the function returns an error, the transaction is rolled back.
 	// If the function returns nil, the transaction is committed.

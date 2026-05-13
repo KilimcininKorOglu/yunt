@@ -25,6 +25,7 @@ func (r *mockHealthRepo) Messages() repository.MessageRepository                
 func (r *mockHealthRepo) Attachments() repository.AttachmentRepository                           { return nil }
 func (r *mockHealthRepo) Webhooks() repository.WebhookRepository                                 { return nil }
 func (r *mockHealthRepo) Settings() repository.SettingsRepository                                { return nil }
+func (r *mockHealthRepo) JMAP() repository.JMAPRepository                                       { return nil }
 func (r *mockHealthRepo) Transaction(_ context.Context, _ func(tx repository.Repository) error) error { return nil }
 func (r *mockHealthRepo) TransactionWithOptions(_ context.Context, _ repository.TransactionOptions, _ func(tx repository.Repository) error) error { return nil }
 

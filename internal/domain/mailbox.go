@@ -58,6 +58,12 @@ type Mailbox struct {
 	// RetentionDays is the number of days to retain messages (0 = forever).
 	RetentionDays int `json:"retentionDays"`
 
+	// Role is the JMAP mailbox role (inbox, sent, drafts, trash, junk, archive).
+	Role string `json:"role,omitempty"`
+
+	// SortOrder is the JMAP display sort order for the mailbox.
+	SortOrder int `json:"sortOrder"`
+
 	// CreatedAt is the timestamp when the mailbox was created.
 	CreatedAt Timestamp `json:"createdAt"`
 

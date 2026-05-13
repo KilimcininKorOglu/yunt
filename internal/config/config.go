@@ -21,6 +21,9 @@ type Config struct {
 	// API contains REST API and Web UI configuration.
 	API APIConfig `yaml:"api" envPrefix:"YUNT_API_"`
 
+	// JMAP contains JMAP protocol configuration.
+	JMAP JMAPConfig `yaml:"jmap" envPrefix:"YUNT_JMAP_"`
+
 	// Database contains database connection settings.
 	Database DatabaseConfig `yaml:"database" envPrefix:"YUNT_DATABASE_"`
 
@@ -367,4 +370,15 @@ type TLSConfig struct {
 
 	// StartTLS determines if STARTTLS is supported (for SMTP/IMAP).
 	StartTLS bool `yaml:"startTLS" env:"START_TLS"`
+}
+
+// JMAPConfig contains JMAP protocol configuration (RFC 8620).
+type JMAPConfig struct {
+	Enabled             bool  `yaml:"enabled" env:"YUNT_JMAP_ENABLED"`
+	MaxCallsPerRequest  int   `yaml:"maxCallsPerRequest" env:"YUNT_JMAP_MAX_CALLS"`
+	MaxObjectsInGet     int   `yaml:"maxObjectsInGet" env:"YUNT_JMAP_MAX_OBJECTS_GET"`
+	MaxObjectsInSet     int   `yaml:"maxObjectsInSet" env:"YUNT_JMAP_MAX_OBJECTS_SET"`
+	MaxSizeUpload       int64 `yaml:"maxSizeUpload" env:"YUNT_JMAP_MAX_SIZE_UPLOAD"`
+	MaxConcurrentUpload int   `yaml:"maxConcurrentUpload" env:"YUNT_JMAP_MAX_CONCURRENT_UPLOAD"`
+	MaxSizeRequest      int64 `yaml:"maxSizeRequest" env:"YUNT_JMAP_MAX_SIZE_REQUEST"`
 }
