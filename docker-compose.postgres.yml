@@ -4,6 +4,8 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 # =============================================================================
 
+name: yunt-postgres
+
 services:
   yunt:
     container_name: yunt-mail-server-postgres

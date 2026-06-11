@@ -4,6 +4,8 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.mongodb.yml up -d
 # =============================================================================
 
+name: yunt-mongodb
+
 services:
   yunt:
     container_name: yunt-mail-server-mongodb
