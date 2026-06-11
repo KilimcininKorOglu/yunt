@@ -27,7 +27,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-yunt_secret}
       MONGO_INITDB_DATABASE: yunt
     ports:
-      - "27017:27017"
+      - "8133:27017"   # MongoDB (host 8133 -> container 27017)
     volumes:
       - ./docker-data/mongodb:/data/db
       - ./scripts/mongodb-init.js:/docker-entrypoint-initdb.d/init.js:ro

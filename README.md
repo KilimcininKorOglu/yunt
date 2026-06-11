@@ -30,14 +30,14 @@ Point your application's SMTP settings to `localhost:1025` and every outgoing em
 
 ```bash
 docker run -d \
-  -p 1025:1025 \
-  -p 1143:1143 \
-  -p 8025:8025 \
+  -p 8130:1025 \
+  -p 8131:1143 \
+  -p 8132:8025 \
   -v yunt-data:/var/lib/yunt \
   ghcr.io/kilimcininkorglu/yunt:latest
 ```
 
-Open `http://localhost:8025` in your browser. Default credentials: `admin` / `admin123`.
+Open `http://localhost:8132` in your browser. Default credentials: `admin` / `admin123`.
 
 ### Using Docker Compose
 
@@ -54,6 +54,8 @@ docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d
 # MongoDB
 docker compose -f docker-compose.yml -f docker-compose.mongodb.yml up -d
 ```
+
+The container listens on its standard ports (SMTP 1025, IMAP 1143, HTTP 8025) internally; the Compose files publish them on the host as **8130 (SMTP), 8131 (IMAP), 8132 (HTTP/JMAP)**, with MongoDB on **8133**. A local source build (`./bin/yunt serve`) binds 1025/1143/8025 directly.
 
 ### Building from Source
 

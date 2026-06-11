@@ -21,9 +21,9 @@ services:
     container_name: yunt-mail-server
     restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "1143:1143"
-      - "8025:8025"
+      - "8130:1025"   # SMTP   (host 8130 -> container 1025)
+      - "8131:1143"   # IMAP   (host 8131 -> container 1143)
+      - "8132:8025"   # API/Web UI/JMAP (host 8132 -> container 8025)
     volumes:
       - ./configs/yunt.example.yaml:/etc/yunt/yunt.yaml:ro
       - ./docker-data/sqlite:/var/lib/yunt
